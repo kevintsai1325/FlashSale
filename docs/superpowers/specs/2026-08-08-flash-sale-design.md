@@ -2,7 +2,7 @@
 
 ## 1. 目標
 
-建立一個可放入後端工程師履歷作品集的限量商品搶購系統。系統需透過可操作的 React 網頁呈現完整流程，並展示 Spring Boot、交易一致性、高併發削峰、非同步訊息、冪等、測試、自動化部署與可觀測性。
+建立一個可放入後端工程師履歷作品集的限量商品搶購系統。系統需透過可操作的 React 網頁呈現完整流程，並展示 Spring Boot、交易一致性、高併發削峰、非同步訊息、冪等、測試、CI/CD 自動化建置與測試、可觀測性。
 
 預計以每週 5–10 小時、5–6 週完成第一個可公開展示的版本。專案優先採用成熟套件，不自行實作 JWT、API 文件、郵件傳輸、圖表或其他已有標準解法的基礎功能。
 
@@ -89,9 +89,9 @@ flash-sale/
 └─ README.md
 ```
 
-`compose.yaml` 啟動 frontend、backend、PostgreSQL、Redis、RabbitMQ；本機開發另提供 Mailpit 攔截測試郵件。正式 Gmail SMTP 密碼只從環境變數或部署平台 secret 注入，不寫入設定檔或 Git。
+`compose.yaml` 啟動 frontend、backend、PostgreSQL、Redis、RabbitMQ；本機開發另提供 Mailpit 攔截測試郵件。Gmail SMTP 密碼只從環境變數注入，不寫入設定檔或 Git。
 
-正式環境部署於使用者自有 VPS，以相同的 Docker Compose 設定啟動整套服務，前方由 Nginx 反向代理處理 TLS 與 `/api/auth/register` 的流量限制。
+展示形式為本機 `docker compose up --build`，不提供對外公開網址；README 需讓面試官能自行 clone 並在數分鐘內啟動完整環境。
 
 ## 5. 架構與模組邊界
 
@@ -122,7 +122,7 @@ flash-sale/
 - `payment_records`：付款請求、結果與模擬交易編號
 - `outbox_events`：待發布的 domain/integration event
 - `consumed_messages`：consumer 去重紀錄
-- `notification_deliveries`：管道、模板、收件人、狀態、嘗試次數與錯誤
+- `notification_deliveries`：管道、模板、收件人、狀態、嘗試次數、錯誤與管理者已讀狀態
 - `api_audit_logs`：API metadata，不保存敏感 request body
 - `order_status_history`：訂單狀態變更軌跡
 
@@ -156,8 +156,7 @@ Producer 使用 transactional outbox 避免資料已提交但訊息未發布。C
 - API 使用 OAuth2 Resource Server 驗證 JWT。
 - 角色分為 `USER` 與 `ADMIN`。
 - 後台路由及 API 同時做前端導頁保護與後端 method/request authorization；前端限制不視為安全邊界。
-- 公開 demo 環境的 `/api/auth/register` 由 Nginx 做 IP 流量限制，前端另加入 CAPTCHA（如 hCaptcha），防止自動化灌註冊並避免耗盡 Gmail 寄信額度。
-- JWT signing key、Gmail App Password 等秘密只透過環境變數或 secret 注入。
+- JWT signing key、Gmail App Password 等秘密只透過環境變數注入。
 
 MVP 使用短效 access token；refresh token rotation 不列入首版，避免擴張認證範圍。
 
@@ -183,12 +182,18 @@ POST /api/orders/{orderId}/cancel
 ### Admin API
 
 ```text
-GET  /api/admin/dashboard/summary
-GET  /api/admin/dashboard/trends
-GET  /api/admin/api-logs
-GET  /api/admin/orders
-GET  /api/admin/orders/{id}
+GET   /api/admin/dashboard/summary
+GET   /api/admin/dashboard/trends
+GET   /api/admin/api-logs
+GET   /api/admin/orders
+GET   /api/admin/orders/{id}
+GET   /api/admin/notifications
+GET   /api/admin/notifications/{id}
+PATCH /api/admin/notifications/read-status
+POST  /api/admin/notifications/{id}/retry
 ```
+
+通知中心 API 支援依已讀／未讀、管道與狀態篩選；`PATCH /api/admin/notifications/read-status` 接受一組通知 ID 進行批次已讀／未讀切換。
 
 第二階段增加活動管理與庫存對帳 API。
 
@@ -212,7 +217,7 @@ API 契約由 springdoc-openapi 產生並透過 Swagger UI 展示。錯誤採 Sp
 - 趨勢圖：最近一小時及 24 小時的請求／訂單趨勢
 - API 紀錄：依時間、path、status、user ID、trace ID 篩選
 - 訂單查詢：訂單、purchase request、狀態歷程與 trace 關聯
-- 通知查詢：依使用者、管道與狀態查詢，並可重新排程失敗通知
+- 通知中心：頂列小鈴鐺顯示未讀數；清單可依使用者、管道、狀態與已讀／未讀篩選，支援多選批次標記已讀／未讀；點選單筆進入詳情頁查看完整資料，並可重新排程失敗通知
 
 前端倒數只供顯示；活動有效性一律由後端判斷。前端使用 TanStack Query 管理 server state、輪詢與 cache，不自行建立資料快取框架。
 
@@ -236,6 +241,8 @@ NotificationSender
 ```
 
 MVP 以 Spring Mail 寄送 Thymeleaf HTML 註冊成功信。開發環境使用 Mailpit；demo 環境以 Gmail SMTP 寄送。SMTP 失敗不得回滾已完成的使用者註冊。發送採有限次數、指數退避重試，最後進入失敗狀態或 dead-letter queue；後台可重新排程。
+
+README 需說明：面試官本機執行預設以 Mailpit 攔截郵件，Gmail 實際寄信為作者另行驗證過，並附上截圖或影片佐證。
 
 環境變數至少包含：
 
@@ -303,7 +310,8 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 
 ### Week 4：後台與驗證
 
-- 後台 dashboard、API audit、訂單及通知查詢
+- 後台 dashboard、API audit、訂單查詢
+- 通知中心（小鈴鐺未讀數、已讀／未讀批次操作、詳情頁）
 - Testcontainers、ArchUnit 與 k6（先不設定量化目標，實測後再記錄於 README）
 
 ### Week 5：可觀測性與 CI
@@ -311,11 +319,9 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 - Actuator、metrics、tracing 與結構化日誌
 - GitHub Actions
 
-### Week 6：公開部署與作品集包裝
+### Week 6：作品集包裝
 
-- 部署到自有 VPS：Docker Compose、Nginx 反向代理、TLS
-- 註冊 API 流量限制、CAPTCHA，及 demo 資料定期重置
-- README、架構圖、API 範例與 demo 帳號
+- README、架構圖、API 範例與 demo 帳號建立方式
 - 同步與非同步版本的效能比較（依實測結果撰寫）
 - 設計取捨、已知限制與後續改進
 
@@ -326,7 +332,6 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 - `docker compose up --build` 可啟動本機完整環境。
 - 使用者可透過網頁註冊、登入、搶購、查詢結果及模擬付款。
 - Gmail 收得到註冊成功信，寄信失敗不影響註冊交易。
-- 公開 demo 環境具備註冊流量限制與 CAPTCHA，並定期重置資料。
 - 管理者可查看簡易統計、API audit、訂單與通知結果。
 - 併發測試證明不超賣、不重複建單。
 - 核心規則、整合流程與架構邊界皆有自動化測試。
@@ -342,4 +347,4 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 - API audit 只保存必要 metadata：兼顧除錯能力、效能、隱私與儲存成本。
 - 套件優先但不濫用抽象：使用成熟安全、文件、郵件與監控元件，業務規則仍保持明確且可測試。
 - 付款逾時以資料庫排程掃描偵測，而非 RabbitMQ 延遲訊息／插件：避免額外插件安裝與部署複雜度，掃描間隔造成的些微延遲可接受。
-- 公開 demo 以反向代理限流、CAPTCHA 與定期資料重置降低濫用風險，而非建置完整防刷體系：在有限時間內用低成本方式控制風險。
+- 展示形式選擇本機 `docker compose` 而非公開部署：省去伺服器成本、TLS 與防濫用機制的維運心力，把時間留給系統正確性與功能完整度；面試官可自行 clone 執行。
