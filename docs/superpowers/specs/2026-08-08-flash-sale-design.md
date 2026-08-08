@@ -41,6 +41,7 @@
 ### Backend
 
 - Java 21、Spring Boot 3
+- Gradle Wrapper、Gradle Kotlin DSL
 - Spring Web MVC、Spring Data JPA、PostgreSQL
 - Spring Security、OAuth2 Resource Server、`JwtEncoder`
 - Spring Data Redis、Redis Lua Script
@@ -71,7 +72,11 @@
 flash-sale/
 ├─ backend/
 │  ├─ src/
-│  ├─ pom.xml
+│  ├─ build.gradle.kts
+│  ├─ settings.gradle.kts
+│  ├─ gradlew
+│  ├─ gradlew.bat
+│  ├─ gradle/wrapper/
 │  └─ Dockerfile
 ├─ frontend/
 │  ├─ src/
