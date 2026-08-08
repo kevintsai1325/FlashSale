@@ -4,7 +4,7 @@
 
 建立一個可放入後端工程師履歷作品集的限量商品搶購系統。系統需透過可操作的 React 網頁呈現完整流程，並展示 Spring Boot、交易一致性、高併發削峰、非同步訊息、冪等、測試、自動化部署與可觀測性。
 
-預計以每週 5–10 小時、3–4 週完成第一個可公開展示的版本。專案優先採用成熟套件，不自行實作 JWT、API 文件、郵件傳輸、圖表或其他已有標準解法的基礎功能。
+預計以每週 5–10 小時、5–6 週完成第一個可公開展示的版本。專案優先採用成熟套件，不自行實作 JWT、API 文件、郵件傳輸、圖表或其他已有標準解法的基礎功能。
 
 ## 2. 範圍
 
@@ -91,6 +91,8 @@ flash-sale/
 
 `compose.yaml` 啟動 frontend、backend、PostgreSQL、Redis、RabbitMQ；本機開發另提供 Mailpit 攔截測試郵件。正式 Gmail SMTP 密碼只從環境變數或部署平台 secret 注入，不寫入設定檔或 Git。
 
+正式環境部署於使用者自有 VPS，以相同的 Docker Compose 設定啟動整套服務，前方由 Nginx 反向代理處理 TLS 與 `/api/auth/register` 的流量限制。
+
 ## 5. 架構與模組邊界
 
 第一版採模組化單體，保留未來拆分服務的清楚邊界：
@@ -100,7 +102,7 @@ flash-sale/
 - Flash Sale：活動規則、活動時間與購買資格
 - Inventory：庫存預留、確認、釋放與對帳
 - Order：訂單建立及狀態流轉
-- Payment：模擬付款與付款結果
+- Payment：模擬付款與付款結果（付款頁可選擇模擬成功或失敗）
 - Notification：通知排程、管道選擇與發送紀錄
 - Admin：統計、API audit log 與營運查詢
 
@@ -140,8 +142,8 @@ PENDING_PAYMENT → PAID
 3. Redis Lua Script 原子檢查並預扣庫存。
 4. 接受請求後回傳 `202 Accepted` 與 `requestId`，再透過 RabbitMQ 排隊。
 5. Consumer 去重後，在 PostgreSQL transaction 中建立訂單並寫入 outbox event。
-6. 前端每秒輪詢 purchase request，直到 `SUCCEEDED`、`SOLD_OUT`、`REJECTED` 或 `FAILED`。
-7. 付款成功確認銷售；取消或付款逾時則發布補償事件並回補庫存。
+6. 前端每秒輪詢 purchase request，直到 `SUCCEEDED`、`SOLD_OUT`、`REJECTED` 或 `FAILED`；狀態為 `SUCCEEDED` 時回應包含 `orderId`，供前端導向訂單頁。
+7. 使用者於付款頁可選擇模擬付款成功或失敗，用於展示不同流程；系統另以排程定期掃描超過付款期限的 `PENDING_PAYMENT` 訂單觸發逾時。付款成功確認銷售；付款失敗、取消或付款逾時皆發布補償事件並回補庫存。
 8. PostgreSQL 是最終資料來源；Redis 是高併發入口的暫時狀態，系統提供定期對帳。
 
 Producer 使用 transactional outbox 避免資料已提交但訊息未發布。Consumer 使用唯一鍵及 `consumed_messages` 保證重送不會重複建單。重試必須有上限與退避；超過上限的訊息進入 dead-letter queue，供後台查詢與人工處理。
@@ -154,6 +156,7 @@ Producer 使用 transactional outbox 避免資料已提交但訊息未發布。C
 - API 使用 OAuth2 Resource Server 驗證 JWT。
 - 角色分為 `USER` 與 `ADMIN`。
 - 後台路由及 API 同時做前端導頁保護與後端 method/request authorization；前端限制不視為安全邊界。
+- 公開 demo 環境的 `/api/auth/register` 由 Nginx 做 IP 流量限制，前端另加入 CAPTCHA（如 hCaptcha），防止自動化灌註冊並避免耗盡 Gmail 寄信額度。
 - JWT signing key、Gmail App Password 等秘密只透過環境變數或 secret 注入。
 
 MVP 使用短效 access token；refresh token rotation 不列入首版，避免擴張認證範圍。
@@ -174,6 +177,8 @@ GET  /api/orders/{orderId}
 POST /api/orders/{orderId}/payments
 POST /api/orders/{orderId}/cancel
 ```
+
+模擬付款 `POST /api/orders/{orderId}/payments` 由前端傳入欲模擬的結果（成功或失敗），用於展示付款成功與付款失敗補償兩種流程。`GET /api/purchase-requests/{requestId}` 於狀態為 `SUCCEEDED` 時回應包含 `orderId`。
 
 ### Admin API
 
@@ -286,20 +291,32 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 - Redis Lua 預扣
 - RabbitMQ 非同步建單
 - Idempotency、outbox、consumer 去重
-- 付款逾時、補償、有限重試及 dead-letter queue
+- 模擬付款（前端可選成功／失敗）
+- 排程掃描付款逾時、補償、有限重試及 dead-letter queue
 
-### Week 3：Web、後台與驗證
+### Week 3：使用者操作頁面
 
-- 使用者操作頁面
+- 註冊登入、活動列表與詳情
+- 搶購排隊結果輪詢
+- 我的訂單：詳情、模擬付款與取消
+- 對應的前端測試
+
+### Week 4：後台與驗證
+
 - 後台 dashboard、API audit、訂單及通知查詢
-- Testcontainers、ArchUnit 與 k6
+- Testcontainers、ArchUnit 與 k6（先不設定量化目標，實測後再記錄於 README）
 
-### Week 4：作品集包裝
+### Week 5：可觀測性與 CI
 
 - Actuator、metrics、tracing 與結構化日誌
-- GitHub Actions 及公開部署
+- GitHub Actions
+
+### Week 6：公開部署與作品集包裝
+
+- 部署到自有 VPS：Docker Compose、Nginx 反向代理、TLS
+- 註冊 API 流量限制、CAPTCHA，及 demo 資料定期重置
 - README、架構圖、API 範例與 demo 帳號
-- 同步與非同步版本的效能比較
+- 同步與非同步版本的效能比較（依實測結果撰寫）
 - 設計取捨、已知限制與後續改進
 
 若時間不足，優先保留正確性、測試、可操作流程與 README；Prometheus/Grafana、活動管理及手動對帳延後。
@@ -309,6 +326,7 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 - `docker compose up --build` 可啟動本機完整環境。
 - 使用者可透過網頁註冊、登入、搶購、查詢結果及模擬付款。
 - Gmail 收得到註冊成功信，寄信失敗不影響註冊交易。
+- 公開 demo 環境具備註冊流量限制與 CAPTCHA，並定期重置資料。
 - 管理者可查看簡易統計、API audit、訂單與通知結果。
 - 併發測試證明不超賣、不重複建單。
 - 核心規則、整合流程與架構邊界皆有自動化測試。
@@ -323,3 +341,5 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 - 非同步郵件不參與註冊 transaction：優先保障核心業務可用性。
 - API audit 只保存必要 metadata：兼顧除錯能力、效能、隱私與儲存成本。
 - 套件優先但不濫用抽象：使用成熟安全、文件、郵件與監控元件，業務規則仍保持明確且可測試。
+- 付款逾時以資料庫排程掃描偵測，而非 RabbitMQ 延遲訊息／插件：避免額外插件安裝與部署複雜度，掃描間隔造成的些微延遲可接受。
+- 公開 demo 以反向代理限流、CAPTCHA 與定期資料重置降低濫用風險，而非建置完整防刷體系：在有限時間內用低成本方式控制風險。
