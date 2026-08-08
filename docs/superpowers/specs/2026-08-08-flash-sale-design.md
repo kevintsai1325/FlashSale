@@ -116,6 +116,30 @@ Nginx 作為唯一對外入口：終結本機自簽 HTTPS、附加安全 headers
 
 只在有真實替換或測試邊界時建立 interface，例如 repository、message publisher、inventory reservation 與 notification sender。ArchUnit 負責驗證 domain 不依賴 infrastructure 等架構規則，以具體方式落實 SOLID，避免為每個類別建立沒有價值的抽象。
 
+Package 先依模組（feature）分包，模組內再依 domain／application／adapter 分層：
+
+```text
+com.flashsale
+├─ identity/
+│  ├─ domain/
+│  ├─ application/
+│  └─ adapter/{web,persistence,security}
+├─ catalog/
+├─ flashsale/
+├─ inventory/
+├─ order/
+├─ payment/
+├─ notification/
+├─ admin/
+└─ common/
+   ├─ config/      // SecurityConfig、RabbitConfig、OpenApiConfig
+   ├─ exception/   // GlobalExceptionHandler（ProblemDetail）、自訂例外
+   ├─ messaging/   // outbox publisher、consumed_messages 去重
+   └─ web/         // API audit filter、trace id filter
+```
+
+`common` 收納跨模組共用的技術基礎設施；各模組只依賴 `common` 提供的 interface，不互相依賴彼此的 `adapter`。
+
 ## 6. 核心資料模型
 
 - `users`：帳號、密碼雜湊、Email、角色與狀態
