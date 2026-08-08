@@ -65,6 +65,7 @@
 - Spring Boot Test、MockMvc、Testcontainers
 - ArchUnit、k6
 - Docker、Docker Compose、GitHub Actions
+- Nginx（反向代理、本機自簽 TLS、安全 headers、限流）
 
 ## 4. Repository 結構
 
@@ -83,15 +84,20 @@ flash-sale/
 │  ├─ package.json
 │  └─ Dockerfile
 ├─ load-tests/
+├─ nginx/
+│  ├─ nginx.conf
+│  └─ certs/
 ├─ docs/
 ├─ compose.yaml
 ├─ .env.example
 └─ README.md
 ```
 
-`compose.yaml` 啟動 frontend、backend、PostgreSQL、Redis、RabbitMQ；本機開發另提供 Mailpit 攔截測試郵件。Gmail SMTP 密碼只從環境變數注入，不寫入設定檔或 Git。
+`compose.yaml` 啟動 Nginx、frontend、backend、PostgreSQL、Redis、RabbitMQ；本機開發另提供 Mailpit 攔截測試郵件。Gmail SMTP 密碼只從環境變數注入，不寫入設定檔或 Git。
 
-展示形式為本機 `docker compose up --build`，不提供對外公開網址；README 需讓面試官能自行 clone 並在數分鐘內啟動完整環境。
+Nginx 作為唯一對外入口：終結本機自簽 HTTPS、附加安全 headers（CSP、X-Frame-Options、X-Content-Type-Options、Referrer-Policy）、轉發 frontend 靜態檔與 backend API，並對 `/api/auth/login`、`/api/auth/register` 與搶購請求端點做流量限制；backend、frontend container port 不直接對外暴露。
+
+展示形式為本機 `docker compose up --build`，不提供對外公開網址；README 需讓面試官能自行 clone 並在數分鐘內啟動完整環境，並說明自簽憑證會觸發瀏覽器警告、需手動信任。
 
 ## 5. 架構與模組邊界
 
@@ -157,6 +163,7 @@ Producer 使用 transactional outbox 避免資料已提交但訊息未發布。C
 - API 使用 OAuth2 Resource Server 驗證 JWT。
 - 角色分為 `USER` 與 `ADMIN`。
 - 後台路由及 API 同時做前端導頁保護與後端 method/request authorization；前端限制不視為安全邊界。
+- 登入、註冊與搶購請求端點的流量限制、安全 headers 與 TLS 終止皆由 Nginx 反向代理處理，不在應用層重複實作。
 - JWT signing key、Gmail App Password 等秘密只透過環境變數注入。
 
 MVP 採簡化版 refresh token：有效期內可重複用來換發新 access token，不做 rotation 與重用偵測。登出或密碼變更時撤銷對應的 `refresh_tokens` 紀錄。
@@ -289,8 +296,9 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 
 ### Week 1：同步 MVP
 
-- Repository、Compose、前後端骨架
+- Repository、Compose（含 Nginx 反向代理、自簽 TLS 與安全 headers）、前後端骨架
 - JWT 註冊登入、refresh token 及註冊成功 Email
+- Nginx 對登入／註冊端點限流
 - 商品與活動查詢
 - Flyway schema
 - 同步訂單及庫存 transaction
@@ -303,6 +311,7 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 - Idempotency、outbox、consumer 去重
 - 模擬付款（前端可選成功／失敗）
 - 排程掃描付款逾時、補償、有限重試及 dead-letter queue
+- Nginx 對搶購請求端點限流
 
 ### Week 3：使用者操作頁面
 
@@ -332,7 +341,7 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 
 ## 16. 完成條件
 
-- `docker compose up --build` 可啟動本機完整環境。
+- `docker compose up --build` 可啟動本機完整環境，所有流量經由 Nginx（HTTPS、安全 headers、限流）存取，backend／frontend port 不對外暴露。
 - 使用者可透過網頁註冊、登入、搶購、查詢結果及模擬付款。
 - Gmail 收得到註冊成功信，寄信失敗不影響註冊交易。
 - 管理者可查看簡易統計、API audit、訂單與通知結果。
@@ -350,4 +359,4 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 - API audit 只保存必要 metadata：兼顧除錯能力、效能、隱私與儲存成本。
 - 套件優先但不濫用抽象：使用成熟安全、文件、郵件與監控元件，業務規則仍保持明確且可測試。
 - 付款逾時以資料庫排程掃描偵測，而非 RabbitMQ 延遲訊息／插件：避免額外插件安裝與部署複雜度，掃描間隔造成的些微延遲可接受。
-- 展示形式選擇本機 `docker compose` 而非公開部署：省去伺服器成本、TLS 與防濫用機制的維運心力，把時間留給系統正確性與功能完整度；面試官可自行 clone 執行。
+- 展示形式選擇本機 `docker compose` 而非公開部署：省去長期營運伺服器與對外攻擊面的風險，改由本機 Nginx 反向代理示範 TLS、安全 headers 與限流等能力；面試官可自行 clone 執行。
