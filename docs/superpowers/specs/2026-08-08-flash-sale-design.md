@@ -113,6 +113,7 @@ flash-sale/
 ## 6. 核心資料模型
 
 - `users`：帳號、密碼雜湊、Email、角色與狀態
+- `refresh_tokens`：使用者、token 雜湊、簽發時間、到期時間與撤銷時間
 - `products`：商品名稱、描述與基本資料
 - `flash_sales`：商品、活動價格、開始／結束時間、限購數與狀態
 - `inventory`：總庫存、可用量、保留量、已售量與版本號
@@ -152,13 +153,13 @@ Producer 使用 transactional outbox 避免資料已提交但訊息未發布。C
 
 - 使用 Spring Security 驗證帳密及授權。
 - 密碼使用 `PasswordEncoder`，不自行實作雜湊。
-- 登入後以 Spring Security `JwtEncoder` 簽發 access token。
+- 登入後以 Spring Security `JwtEncoder` 簽發短效 access token，同時簽發長效 refresh token（雜湊後存入 `refresh_tokens`），以 httpOnly、Secure cookie 回傳。
 - API 使用 OAuth2 Resource Server 驗證 JWT。
 - 角色分為 `USER` 與 `ADMIN`。
 - 後台路由及 API 同時做前端導頁保護與後端 method/request authorization；前端限制不視為安全邊界。
 - JWT signing key、Gmail App Password 等秘密只透過環境變數注入。
 
-MVP 使用短效 access token；refresh token rotation 不列入首版，避免擴張認證範圍。
+MVP 採簡化版 refresh token：有效期內可重複用來換發新 access token，不做 rotation 與重用偵測。登出或密碼變更時撤銷對應的 `refresh_tokens` 紀錄。
 
 ## 9. API 與錯誤格式
 
@@ -167,6 +168,8 @@ MVP 使用短效 access token；refresh token rotation 不列入首版，避免�
 ```text
 POST /api/auth/register
 POST /api/auth/login
+POST /api/auth/refresh
+POST /api/auth/logout
 GET  /api/flash-sales
 GET  /api/flash-sales/{id}
 POST /api/flash-sales/{id}/purchase-requests
@@ -287,7 +290,7 @@ Readiness 反映 PostgreSQL、Redis、RabbitMQ 等必要依賴；liveness 只反
 ### Week 1：同步 MVP
 
 - Repository、Compose、前後端骨架
-- JWT 註冊登入及註冊成功 Email
+- JWT 註冊登入、refresh token 及註冊成功 Email
 - 商品與活動查詢
 - Flyway schema
 - 同步訂單及庫存 transaction
