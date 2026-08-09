@@ -1,3 +1,22 @@
+import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { listFlashSales } from '../../api/flashSaleApi'
+
 export function FlashSaleListPage() {
-  return <div>Loading flash sales…</div>
+  const { data, isLoading, isError } = useQuery({ queryKey: ['flash-sales'], queryFn: listFlashSales })
+
+  if (isLoading) return <div>Loading flash sales…</div>
+  if (isError) return <div role="alert">Failed to load flash sales.</div>
+
+  return (
+    <ul>
+      {data!.map((sale) => (
+        <li key={sale.id}>
+          <Link to={`/flash-sales/${sale.id}`}>{sale.productName}</Link>
+          <span> ${sale.salePrice.toFixed(2)}</span>
+          <span> {sale.status}</span>
+        </li>
+      ))}
+    </ul>
+  )
 }
