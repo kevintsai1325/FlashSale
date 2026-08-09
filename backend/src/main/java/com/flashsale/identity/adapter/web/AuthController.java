@@ -1,6 +1,8 @@
 package com.flashsale.identity.adapter.web;
 
 import com.flashsale.identity.application.LoginService;
+import com.flashsale.identity.application.LogoutService;
+import com.flashsale.identity.application.RefreshTokenService;
 import com.flashsale.identity.application.RegisterUserService;
 import com.flashsale.identity.adapter.web.dto.LoginRequest;
 import com.flashsale.identity.adapter.web.dto.RegisterRequest;
@@ -18,10 +20,15 @@ public class AuthController {
 
     private final RegisterUserService registerUserService;
     private final LoginService loginService;
+    private final RefreshTokenService refreshTokenService;
+    private final LogoutService logoutService;
 
-    public AuthController(RegisterUserService registerUserService, LoginService loginService) {
+    public AuthController(RegisterUserService registerUserService, LoginService loginService,
+                           RefreshTokenService refreshTokenService, LogoutService logoutService) {
         this.registerUserService = registerUserService;
         this.loginService = loginService;
+        this.refreshTokenService = refreshTokenService;
+        this.logoutService = logoutService;
     }
 
     @PostMapping("/register")
@@ -44,5 +51,26 @@ public class AuthController {
         response.addCookie(refreshCookie);
 
         return ResponseEntity.ok(Map.of("accessToken", result.accessToken()));
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<Map<String, Object>> refresh(@CookieValue("refresh_token") String refreshToken) {
+        String accessToken = refreshTokenService.refresh(refreshToken);
+        return ResponseEntity.ok(Map.of("accessToken", accessToken));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@CookieValue(value = "refresh_token", required = false) String refreshToken,
+                                        jakarta.servlet.http.HttpServletResponse response) {
+        if (refreshToken != null) {
+            logoutService.logout(refreshToken);
+        }
+        jakarta.servlet.http.Cookie expired = new jakarta.servlet.http.Cookie("refresh_token", "");
+        expired.setHttpOnly(true);
+        expired.setSecure(true);
+        expired.setPath("/api/auth");
+        expired.setMaxAge(0);
+        response.addCookie(expired);
+        return ResponseEntity.noContent().build();
     }
 }
