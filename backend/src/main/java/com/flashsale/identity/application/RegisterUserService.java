@@ -3,8 +3,7 @@ package com.flashsale.identity.application;
 import com.flashsale.common.exception.ConflictException;
 import com.flashsale.identity.domain.Role;
 import com.flashsale.identity.domain.User;
-import com.flashsale.notification.application.NotificationSender;
-import com.flashsale.notification.domain.NotificationDelivery;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,13 +13,13 @@ public class RegisterUserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final NotificationSender notificationSender;
+    private final ApplicationEventPublisher eventPublisher;
 
     public RegisterUserService(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                                NotificationSender notificationSender) {
+                                ApplicationEventPublisher eventPublisher) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.notificationSender = notificationSender;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -32,8 +31,12 @@ public class RegisterUserService {
         User user = User.register(email, passwordEncoder.encode(rawPassword), Role.USER);
         User saved = userRepository.save(user);
 
-        notificationSender.send(
-            NotificationDelivery.pendingEmail(saved.getId(), "registration-success", saved.getEmail()));
+        // Published now, but only delivered to @TransactionalEventListener(AFTER_COMMIT)
+        // listeners once this transaction commits - see UserRegisteredNotificationListener.
+        // This avoids the notification side effect racing the parent transaction's commit
+        // (the async email send would otherwise run on a separate connection before the
+        // new user row is visible, causing an FK violation on notification_deliveries).
+        eventPublisher.publishEvent(new UserRegisteredEvent(saved.getId(), saved.getEmail()));
 
         return saved;
     }
