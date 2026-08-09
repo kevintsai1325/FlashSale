@@ -4,3 +4,49 @@ spring:
       ddl-auto: validate
   flyway:
     enabled: true
+
+# Shared test-only RSA key pair for JwtKeyConfig, used by every IT that boots the full Spring
+# context but doesn't care about JWT specifics (e.g. FlashSaleApplicationTests, FlywayMigrationIT,
+# SecurityFilterChainSingletonIT, AuthControllerRegisterIT). Tests that DO care about JWT/login
+# behavior (e.g. AuthControllerLoginIT) override these via @DynamicPropertySource with their own
+# key pair. Never used outside tests — real deployments supply JWT_PRIVATE_KEY/JWT_PUBLIC_KEY via
+# environment variables (see .env.example / compose.yaml).
+JWT_PRIVATE_KEY: |
+  -----BEGIN PRIVATE KEY-----
+  MIIEuwIBADANBgkqhkiG9w0BAQEFAASCBKUwggShAgEAAoIBAQD2VMvZA6Y49aXz
+  3yFWu/nLRdcemypoqxovTPFuEL2p7A4kt4rW//6MpdXmEOeil8rBbvmFk5/q1d8z
+  lfHfUpiqBR1RfnAtmnAlpA6mBC9kBDta3Czyp+oZxvdHkQwBhoqrhRmCh7OWWZPJ
+  bG845yt+EmZ9IwV1KZVeiR2cKjiq6Gd6AqXU1P+FlyiNQDBxrZc9lpG6oFTmHHnj
+  nBO2fy8aBViaTDSpo1OAlNoxgYMKl++7rKdSNQNAKhDj21oZwcgvLhqGzt+Tf8jQ
+  NkFq34/tqrGwxC8DnVRHwpPzl9zDVB9IGAuByuw/IBnl5cTJZ5gmK8qj4sgQMEUW
+  ISoa+CT9AgMBAAECgf8cFg8I1myb4yfoDw2T7YabxGKbuGm03/9ijduI21Au7uVv
+  f160cvvGk9cSxqvUe8H7dLz1MYbZ6emUDHOGAXxQxy6oAYjYchMPlUwchaVxQGGv
+  1ob4SWILsLUaHgDUu07lgSniwxY7kwR3ICkXrNOO65OIp7i0deJL0NA2f6ZjsI5n
+  YAsYeVCC3bCCBccn8ofUKVHHrbla3DToNWKlBcT3oVJ7JDDE5GqYZ2VqAb/7PG6q
+  ZkbwzXqKHg6AJkIaCdsXYbXi1cdPT+A3wRMVwsi3/ad3x4OeST2oF+VaSVa4JfxJ
+  BDOj1595eakIRxPLGEZH4my1Tmqi06eR4ABItfkCgYEA/H1DHSi2xG2LfMz8GWrO
+  mFnHLWA1KeCasaeXwnOdk+BLoSxDduzS62FzBMvDk4OfPIErljQ+XH/wYIjl2sfc
+  V+uDvQ4QMyp5agVsOxy5oLaQoY+QTuMbLaz2pFq0fihntj7qA+veT/tbJ2Ja/XkM
+  anGZ/WH5yXmbmhFGe8gpn0kCgYEA+cGdSkCVNMEBMaS8lSqLHAUnj6ZSNjmofrYM
+  jjsUTxuyJot/1ICRLEgRfZQMm4JjZb7JcZpnIOOIsDrGoHdZYJRd3Ve5OABE3L09
+  3IFThe9vx8LqVxq4VFmClaOWqSgBPDcZ0o3IuEouZoxt2QjKPuSkbbwPlLnGQq5H
+  9NtZdBUCgYEAqotFiO2WPimsHTksU1LEhz2k/q5MWqP+eV81b7++QUMwcoY+b5bZ
+  hOoG0cd8rCgsp6asNUHGmZ5FVD9D2rpCyBQpoMpeAOGAry9IgskNTVPjb21UUSSv
+  l/OLiUpHPiu2me/3C30HZcjnMjwKL8nSrBddpzvFh+QfSTq//B4glxkCgYBfpYAh
+  EX6Sh193rYjy7yn6/xZZcu6FCau3auyAA6wRZ5/gFwhLTzlJZggcuXfijhqWumvW
+  77SS6dBM/RVYGpzF2cvgmlm6UpAMoQRxz602261JKSIpXXg+BVF3EQD/ouxmLQvc
+  kKPPv8jpSNpAhZc+Yr19sMmewU5l9uxjnyUwyQKBgDfvqWnnwuorsbfJxqq0S4GS
+  MRLSUZOmKWMSXKx1EKiN4MOvek+r6M0WIeTMOOYdrK5H5hD4faMEks+ptNUy2PQ6
+  +rURIkMcmfyXOQ9XARgdsEmDXih/adVbX2rzaqnZFUAF4DsgDYamvLt1ErSX+sSn
+  nDPSZ1X2I1BItW1NRu1h
+  -----END PRIVATE KEY-----
+JWT_PUBLIC_KEY: |
+  -----BEGIN PUBLIC KEY-----
+  MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA9lTL2QOmOPWl898hVrv5
+  y0XXHpsqaKsaL0zxbhC9qewOJLeK1v/+jKXV5hDnopfKwW75hZOf6tXfM5Xx31KY
+  qgUdUX5wLZpwJaQOpgQvZAQ7Wtws8qfqGcb3R5EMAYaKq4UZgoezllmTyWxvOOcr
+  fhJmfSMFdSmVXokdnCo4quhnegKl1NT/hZcojUAwca2XPZaRuqBU5hx545wTtn8v
+  GgVYmkw0qaNTgJTaMYGDCpfvu6ynUjUDQCoQ49taGcHILy4ahs7fk3/I0DZBat+P
+  7aqxsMQvA51UR8KT85fcw1QfSBgLgcrsPyAZ5eXEyWeYJivKo+LIEDBFFiEqGvgk
+  /QIDAQAB
+  -----END PUBLIC KEY-----
