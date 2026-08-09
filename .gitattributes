@@ -1,0 +1,9 @@
+# Force LF for shell scripts regardless of a Windows checkout's core.autocrlf setting.
+# CRLF breaks the shebang line (#!/bin/sh\r) when the file runs inside a Linux container
+# (e.g. backend/Dockerfile's `RUN ./gradlew ...`), even though it runs fine under Git Bash.
+*.sh text eol=lf
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+
+# Wrapper jar is binary; never let line-ending or text normalization touch it.
+gradle-wrapper.jar binary
