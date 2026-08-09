@@ -23,10 +23,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * End-to-end coverage of the synchronous, inventory-backed purchase flow: real HTTP requests
- * through Spring Security (real JWTs from register+login), a real Postgres-backed pessimistic
- * lock on the inventory row, and real idempotency-key persistence in {@code purchase_requests}.
- * No mocks — this is the proof that {@code CreatePurchaseRequestService}'s pessimistic-lock,
- * idempotent-replay, and sold-out paths actually work end to end against the schema.
+ * through Spring Security (real JWTs from register+login) and real idempotency-key persistence
+ * in {@code purchase_requests}. No mocks for the sequential branches — this proves the happy
+ * path, idempotent-replay, sold-out, and ownership/IDOR checks all work end to end against the
+ * real schema.
+ *
+ * <p>This class is {@code @Transactional}, so every {@code MockMvc} call in a given test method
+ * runs on the same connection/transaction — it can prove the {@code SELECT ... FOR UPDATE} query
+ * itself is well-formed and that the sequential sold-out/replay logic is correct, but it CANNOT
+ * prove the pessimistic lock actually serializes concurrent buyers, since nothing here ever
+ * contends for the row. That property — "N concurrent buyers, only as many succeed as there is
+ * stock" — is proven separately by {@link PurchaseConcurrencyIT}, which deliberately omits
+ * {@code @Transactional} so its requests run as genuinely concurrent, independently-committing
+ * transactions.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
