@@ -1,5 +1,7 @@
 .env
 nginx/certs/*.pem
+nginx/certs/*.crt
+nginx/certs/*.key
 backend/build/
 backend/.gradle/
 frontend/node_modules/
