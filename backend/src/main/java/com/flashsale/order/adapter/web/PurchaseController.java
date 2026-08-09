@@ -36,8 +36,10 @@ public class PurchaseController {
     }
 
     @GetMapping("/api/purchase-requests/{requestId}")
-    public PurchaseRequestView getStatus(@PathVariable UUID requestId) {
+    public PurchaseRequestView getStatus(@PathVariable UUID requestId, @AuthenticationPrincipal Jwt jwt) {
+        Long userId = jwt.getClaim("userId");
         PurchaseRequest request = purchaseRequestRepository.findByRequestId(requestId)
+            .filter(r -> r.getUserId().equals(userId))
             .orElseThrow(() -> new NotFoundException("PURCHASE_REQUEST_NOT_FOUND", "Purchase request " + requestId + " does not exist"));
         return new PurchaseRequestView(request.getRequestId(), request.getStatus().name(), request.getOrderId());
     }

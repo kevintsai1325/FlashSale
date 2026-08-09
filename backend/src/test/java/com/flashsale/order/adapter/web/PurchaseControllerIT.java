@@ -121,7 +121,7 @@ class PurchaseControllerIT {
     }
 
     @Test
-    void purchaseFlowCoversLockedInventoryIdempotentReplayAndSoldOut() throws Exception {
+    void purchaseFlowCoversLockedInventoryIdempotentReplaySoldOutAndOwnershipCheck() throws Exception {
         String firstUserToken = registerAndLogin("ivy@example.com", "secret123");
 
         MvcResult firstPurchase = mockMvc.perform(post("/api/flash-sales/1/purchase-requests")
@@ -162,6 +162,14 @@ class PurchaseControllerIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("SUCCEEDED"))
             .andExpect(jsonPath("$.orderId").value(firstOrderId));
+
+        // A different authenticated user must not be able to read another user's purchase
+        // request by guessing/obtaining its requestId (IDOR check) — the API must respond as
+        // if the resource simply doesn't exist for them, not leak its existence via a 403.
+        mockMvc.perform(get("/api/purchase-requests/" + firstRequestId)
+                .header("Authorization", "Bearer " + secondUserToken))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("PURCHASE_REQUEST_NOT_FOUND"));
 
         mockMvc.perform(get("/api/orders/me")
                 .header("Authorization", "Bearer " + firstUserToken))
