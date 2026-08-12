@@ -7,8 +7,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
-import java.util.UUID;
-
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -37,11 +35,6 @@ public class GlobalExceptionHandler {
     }
 
     private ProblemDetail build(HttpStatus status, String code, String detail, HttpServletRequest request) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, detail);
-        problemDetail.setTitle(status.getReasonPhrase());
-        problemDetail.setInstance(java.net.URI.create(request.getRequestURI()));
-        problemDetail.setProperty("code", code);
-        problemDetail.setProperty("traceId", UUID.randomUUID().toString());
-        return problemDetail;
+        return ProblemDetails.of(status, code, detail, request.getRequestURI());
     }
 }
