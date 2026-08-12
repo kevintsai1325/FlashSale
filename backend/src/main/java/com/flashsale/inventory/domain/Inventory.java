@@ -38,16 +38,16 @@ public class Inventory {
         return inventory;
     }
 
-    public boolean hasStock() {
-        return availableQuantity > 0;
+    public boolean hasStock(int quantity) {
+        return availableQuantity >= quantity;
     }
 
-    public void sell() {
-        if (!hasStock()) {
-            throw new IllegalStateException("No stock available for flash sale " + flashSaleId);
+    public void sell(int quantity) {
+        if (!hasStock(quantity)) {
+            throw new IllegalStateException("Not enough stock available for flash sale " + flashSaleId);
         }
-        availableQuantity--;
-        soldQuantity++;
+        availableQuantity -= quantity;
+        soldQuantity += quantity;
     }
 
     public Long getId() { return id; }

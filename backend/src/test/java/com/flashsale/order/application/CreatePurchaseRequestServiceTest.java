@@ -32,8 +32,12 @@ class CreatePurchaseRequestServiceTest {
     CreatePurchaseRequestService service;
 
     private FlashSale activeSale() {
+        return activeSaleWithLimit(1);
+    }
+
+    private FlashSale activeSaleWithLimit(int purchaseLimitPerUser) {
         return FlashSale.schedule(1L, new BigDecimal("9.99"),
-            Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), 1);
+            Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), purchaseLimitPerUser);
     }
 
     @Test
@@ -102,6 +106,50 @@ class CreatePurchaseRequestServiceTest {
         PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-4");
 
         assertThat(result.getStatus()).isEqualTo(PurchaseRequestStatus.REJECTED);
+    }
+
+    @Test
+    void ordersQuantityMatchingConfiguredPurchaseLimitPerUser() {
+        service = new CreatePurchaseRequestService(flashSaleRepository, inventoryRepository, orderRepository, purchaseRequestRepository);
+        when(purchaseRequestRepository.findByUserIdAndFlashSaleIdAndIdempotencyKey(1L, 10L, "idem-6"))
+            .thenReturn(Optional.empty());
+        when(flashSaleRepository.findById(10L)).thenReturn(Optional.of(activeSaleWithLimit(3)));
+        when(purchaseRequestRepository.existsSucceededForUserAndFlashSale(1L, 10L)).thenReturn(false);
+        when(inventoryRepository.findByFlashSaleIdForUpdate(10L))
+            .thenReturn(Optional.of(Inventory.initialize(10L, 10)));
+        when(orderRepository.save(any())).thenAnswer(inv -> {
+            var order = inv.getArgument(0, com.flashsale.order.domain.Order.class);
+            ReflectionTestUtils.setField(order, "id", 999L);
+            return order;
+        });
+        when(purchaseRequestRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var orderCaptor = org.mockito.ArgumentCaptor.forClass(com.flashsale.order.domain.Order.class);
+
+        PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-6");
+
+        assertThat(result.getStatus()).isEqualTo(PurchaseRequestStatus.SUCCEEDED);
+        verify(orderRepository).save(orderCaptor.capture());
+        assertThat(orderCaptor.getValue().getItems()).singleElement()
+            .satisfies(item -> assertThat(item.getQuantity()).isEqualTo(3));
+        verify(inventoryRepository).save(argThat(inv -> inv.getAvailableQuantity() == 7));
+    }
+
+    @Test
+    void marksSoldOutWhenAvailableStockIsBelowConfiguredPurchaseLimitPerUser() {
+        service = new CreatePurchaseRequestService(flashSaleRepository, inventoryRepository, orderRepository, purchaseRequestRepository);
+        when(purchaseRequestRepository.findByUserIdAndFlashSaleIdAndIdempotencyKey(1L, 10L, "idem-7"))
+            .thenReturn(Optional.empty());
+        when(flashSaleRepository.findById(10L)).thenReturn(Optional.of(activeSaleWithLimit(3)));
+        when(purchaseRequestRepository.existsSucceededForUserAndFlashSale(1L, 10L)).thenReturn(false);
+        when(inventoryRepository.findByFlashSaleIdForUpdate(10L))
+            .thenReturn(Optional.of(Inventory.initialize(10L, 2)));
+        when(purchaseRequestRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-7");
+
+        assertThat(result.getStatus()).isEqualTo(PurchaseRequestStatus.SOLD_OUT);
+        verify(orderRepository, never()).save(any());
     }
 
     @Test

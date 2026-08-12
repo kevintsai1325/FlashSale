@@ -51,14 +51,15 @@ public class CreatePurchaseRequestService {
         Inventory inventory = inventoryRepository.findByFlashSaleIdForUpdate(flashSaleId)
             .orElseThrow(() -> new NotFoundException("INVENTORY_NOT_FOUND", "Inventory for flash sale " + flashSaleId + " does not exist"));
 
-        if (!inventory.hasStock()) {
+        int quantity = flashSale.getPurchaseLimitPerUser();
+        if (!inventory.hasStock(quantity)) {
             return purchaseRequestRepository.save(PurchaseRequest.soldOut(userId, flashSaleId, idempotencyKey));
         }
 
-        inventory.sell();
+        inventory.sell(quantity);
         inventoryRepository.save(inventory);
 
-        Order order = Order.createPendingPayment(userId, flashSale.getProductId(), 1, flashSale.getSalePrice());
+        Order order = Order.createPendingPayment(userId, flashSale.getProductId(), quantity, flashSale.getSalePrice());
         Order savedOrder = orderRepository.save(order);
 
         return purchaseRequestRepository.save(
