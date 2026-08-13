@@ -5,6 +5,7 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -49,6 +50,8 @@ class OutboxPublisherIT {
 
     @Autowired OutboxWriter outboxWriter;
     @Autowired RabbitTemplate rabbitTemplate;
+    @Autowired JdbcTemplate jdbcTemplate;
+    @Autowired OutboxEventJpaRepository outboxEventJpaRepository;
 
     record Dummy(String note) {}
 
@@ -62,5 +65,42 @@ class OutboxPublisherIT {
             assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).contains("hello");
             assertThat(message.getMessageProperties().getHeaders()).containsKey("outboxEventId");
         });
+    }
+
+    @Test
+    void validEventPublishedDespiteInvalidEventInBatch() {
+        // Insert invalid event (unknown event type) directly via JDBC to simulate corruption scenario
+        jdbcTemplate.update(
+            "INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at) " +
+            "VALUES (?, ?, ?, ?::jsonb, now())",
+            "Test", "bad", "UnknownEventType", "{\"error\": \"bad event\"}"
+        );
+
+        // Insert valid event via normal writer
+        outboxWriter.write("Test", "2", EventTypes.STOCK_RELEASE_REQUESTED, new Dummy("valid"));
+
+        // Verify that valid event was published despite the invalid one in the batch
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            Message message = rabbitTemplate.receive(com.flashsale.common.config.RabbitConfig.STOCK_RELEASE_QUEUE);
+            assertThat(message).isNotNull();
+            assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).contains("valid");
+            assertThat(message.getMessageProperties().getHeaders()).containsKey("outboxEventId");
+        });
+
+        // Verify invalid event remains unpublished (null published_at)
+        Long unpublishedCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND published_at IS NULL",
+            Long.class,
+            "UnknownEventType"
+        );
+        assertThat(unpublishedCount).isEqualTo(1L);
+
+        // Verify valid event was marked published
+        Long publishedCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND published_at IS NOT NULL",
+            Long.class,
+            EventTypes.STOCK_RELEASE_REQUESTED
+        );
+        assertThat(publishedCount).isEqualTo(1L);
     }
 }
