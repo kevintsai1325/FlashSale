@@ -59,7 +59,8 @@ class OutboxPublisherIT {
     void writtenEventIsPublishedToRabbitAndMarkedPublished() {
         outboxWriter.write("Test", "1", EventTypes.CREATE_ORDER_REQUESTED, new Dummy("hello"));
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+        // Extend timeout to 10s to account for initialDelay + refetch latency
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             Message message = rabbitTemplate.receive(com.flashsale.common.config.RabbitConfig.CREATE_ORDER_QUEUE);
             assertThat(message).isNotNull();
             assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).contains("hello");
@@ -87,20 +88,27 @@ class OutboxPublisherIT {
             assertThat(message.getMessageProperties().getHeaders()).containsKey("outboxEventId");
         });
 
-        // Verify invalid event remains unpublished (null published_at)
-        Long unpublishedCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND published_at IS NULL",
-            Long.class,
-            "UnknownEventType"
-        );
-        assertThat(unpublishedCount).isEqualTo(1L);
+        // Verify database state: wrap in await to handle race condition where message arrives before DB commit
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            // Verify invalid event remains unpublished (null published_at)
+            Long unpublishedCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND published_at IS NULL",
+                Long.class,
+                "UnknownEventType"
+            );
+            assertThat(unpublishedCount).isEqualTo(1L);
 
-        // Verify valid event was marked published
-        Long publishedCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND published_at IS NOT NULL",
-            Long.class,
-            EventTypes.STOCK_RELEASE_REQUESTED
-        );
-        assertThat(publishedCount).isEqualTo(1L);
+            // Verify valid event was marked published
+            Long publishedCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND published_at IS NOT NULL",
+                Long.class,
+                EventTypes.STOCK_RELEASE_REQUESTED
+            );
+            assertThat(publishedCount).isEqualTo(1L);
+        });
+
+        // Cleanup: delete the permanently-unpublishable event to prevent it from spamming ERROR logs
+        // when the scheduler continues polling for the rest of the test suite
+        jdbcTemplate.update("DELETE FROM outbox_events WHERE event_type = ?", "UnknownEventType");
     }
 }

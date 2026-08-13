@@ -30,7 +30,7 @@ public class OutboxPublisher {
         this.applicationContext = applicationContext;
     }
 
-    @Scheduled(fixedDelay = 500, initialDelay = 500)
+    @Scheduled(fixedDelay = 500, initialDelay = 100)
     @Transactional
     public void publishPending() {
         List<OutboxEvent> batch = repository.findUnpublishedBatchForUpdate(BATCH_SIZE);
@@ -51,7 +51,11 @@ public class OutboxPublisher {
         props.setHeader("outboxEventId", event.getId());
         Message message = new Message(event.getPayload().getBytes(StandardCharsets.UTF_8), props);
         rabbitTemplate.send(RabbitConfig.ORDER_EXCHANGE, routingKeyFor(event.getEventType()), message);
-        event.markPublished();
+
+        // Refetch the event in this transaction's persistence context and mark it published
+        OutboxEvent managedEvent = repository.findById(event.getId()).orElseThrow();
+        managedEvent.markPublished();
+        repository.saveAndFlush(managedEvent);
     }
 
     private String routingKeyFor(String eventType) {
