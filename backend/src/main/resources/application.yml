@@ -16,6 +16,24 @@ spring:
     port: ${MAIL_PORT:1025}
     username: ${GMAIL_USERNAME:}
     password: ${GMAIL_APP_PASSWORD:}
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000
+          multiplier: 2.0
+          max-interval: 10000
+        default-requeue-rejected: false
 
 server:
   port: 8080

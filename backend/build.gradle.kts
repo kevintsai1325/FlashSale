@@ -26,6 +26,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.boot:spring-boot-starter-thymeleaf")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-amqp")
     implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.postgresql:postgresql:42.7.4")
@@ -35,6 +37,7 @@ dependencies {
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.testcontainers:junit-jupiter:1.20.1")
     testImplementation("org.testcontainers:postgresql:1.20.1")
+    testImplementation("org.testcontainers:rabbitmq:1.20.1")
 }
 
 tasks.withType<Test> {
