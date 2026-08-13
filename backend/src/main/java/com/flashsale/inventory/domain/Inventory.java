@@ -50,6 +50,11 @@ public class Inventory {
         soldQuantity += quantity;
     }
 
+    public void release(int quantity) {
+        availableQuantity += quantity;
+        soldQuantity -= quantity;
+    }
+
     public Long getId() { return id; }
     public Long getFlashSaleId() { return flashSaleId; }
     public int getAvailableQuantity() { return availableQuantity; }

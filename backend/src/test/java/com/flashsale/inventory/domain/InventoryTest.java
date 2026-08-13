@@ -34,4 +34,26 @@ class InventoryTest {
         assertThat(inventory.hasStock(3)).isFalse();
         assertThat(inventory.hasStock(2)).isTrue();
     }
+
+    @Test
+    void releaseAddsQuantityBackToAvailableAndRemovesFromSold() {
+        Inventory inventory = Inventory.initialize(1L, 10);
+        inventory.sell(3);
+
+        inventory.release(3);
+
+        assertThat(inventory.getAvailableQuantity()).isEqualTo(10);
+        assertThat(inventory.getSoldQuantity()).isEqualTo(0);
+    }
+
+    @Test
+    void releaseIsTheExactInverseOfSell() {
+        Inventory inventory = Inventory.initialize(1L, 5);
+        inventory.sell(5);
+
+        inventory.release(2);
+
+        assertThat(inventory.getAvailableQuantity()).isEqualTo(2);
+        assertThat(inventory.getSoldQuantity()).isEqualTo(3);
+    }
 }

@@ -5,5 +5,6 @@ import java.util.Optional;
 
 public interface InventoryRepository {
     Optional<Inventory> findByFlashSaleIdForUpdate(Long flashSaleId);
+    Optional<Inventory> findByFlashSaleId(Long flashSaleId);
     Inventory save(Inventory inventory);
 }

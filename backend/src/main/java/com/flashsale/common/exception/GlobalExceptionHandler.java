@@ -25,6 +25,11 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, ex.getCode(), ex.getMessage(), request);
     }
 
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ProblemDetail handleServiceUnavailable(ServiceUnavailableException ex, HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getCode(), ex.getMessage(), request);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
         String detail = ex.getBindingResult().getFieldErrors().stream()

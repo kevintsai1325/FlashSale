@@ -12,4 +12,6 @@ public interface InventoryJpaRepository extends JpaRepository<Inventory, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select i from Inventory i where i.flashSaleId = :flashSaleId")
     Optional<Inventory> findByFlashSaleIdForUpdate(Long flashSaleId);
+
+    Optional<Inventory> findByFlashSaleId(Long flashSaleId);
 }
