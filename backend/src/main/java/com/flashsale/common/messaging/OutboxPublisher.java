@@ -31,10 +31,9 @@ public class OutboxPublisher {
     }
 
     @Scheduled(fixedDelay = 500, initialDelay = 100)
-    @Transactional
     public void publishPending() {
-        List<OutboxEvent> batch = repository.findUnpublishedBatchForUpdate(BATCH_SIZE);
         OutboxPublisher proxy = applicationContext.getBean(OutboxPublisher.class);
+        List<OutboxEvent> batch = proxy.fetchBatch();
         for (OutboxEvent event : batch) {
             try {
                 proxy.publishEvent(event);
@@ -42,6 +41,14 @@ public class OutboxPublisher {
                 logger.error("Failed to publish event {}: {}", event.getId(), e.getMessage(), e);
             }
         }
+    }
+
+    // Own transaction so the FOR UPDATE row locks are released (commit) before publishEvent()'s
+    // REQUIRES_NEW tries to UPDATE the same rows — otherwise it deadlocks against itself: this
+    // thread would hold the lock while synchronously waiting on the nested transaction that needs it.
+    @Transactional
+    public List<OutboxEvent> fetchBatch() {
+        return repository.findUnpublishedBatchForUpdate(BATCH_SIZE);
     }
 
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)

@@ -1,5 +1,6 @@
 package com.flashsale.common.messaging;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -54,6 +55,21 @@ class OutboxPublisherIT {
     @Autowired OutboxEventJpaRepository outboxEventJpaRepository;
 
     record Dummy(String note) {}
+
+    @BeforeEach
+    void cleanSlate() {
+        // Each test's assertions scan the whole outbox_events table / whole queue, so a row or
+        // message left over from the other test (run order is unspecified) would corrupt them.
+        jdbcTemplate.update("DELETE FROM outbox_events");
+        drainQueue(com.flashsale.common.config.RabbitConfig.CREATE_ORDER_QUEUE);
+        drainQueue(com.flashsale.common.config.RabbitConfig.STOCK_RELEASE_QUEUE);
+    }
+
+    private void drainQueue(String queue) {
+        while (rabbitTemplate.receive(queue) != null) {
+            // discard
+        }
+    }
 
     @Test
     void writtenEventIsPublishedToRabbitAndMarkedPublished() {
