@@ -1,0 +1,89 @@
+.admin-order-detail {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 900px;
+}
+
+.order-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.order-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+}
+
+.order-info-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.order-info-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.order-info-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.order-item-list,
+.related-logs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.related-logs-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--line);
+  padding: 6px 0;
+}
+
+.related-logs-note {
+  font-size: 0.8rem;
+  margin-top: -4px;
+}
+
+.status-history-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.status-history-timeline li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-left: 2px solid var(--line);
+  padding: 2px 0 2px 12px;
+  font-size: 0.85rem;
+}
+
+.muted {
+  color: var(--muted);
+}

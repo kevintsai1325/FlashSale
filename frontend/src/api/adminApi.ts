@@ -53,3 +53,119 @@ export async function getDashboardTrends(): Promise<DashboardTrends> {
   const response = await apiFetch('/api/admin/dashboard/trends')
   return response.json()
 }
+
+/** Mirrors the backend's `ApiAuditLogView` record. `occurredAt` is an ISO-8601 string, not parsed here. */
+export interface ApiAuditLogView {
+  id: number
+  occurredAt: string
+  method: string
+  pathTemplate: string
+  status: number
+  userId: number | null
+  requestId: string | null
+  traceId: string | null
+  durationMs: number
+  clientIp: string | null
+  userAgent: string | null
+  errorCode: string | null
+}
+
+/** Query params accepted by `GET /api/admin/api-logs` (`AdminApiLogController`). */
+export interface ApiLogFilters {
+  method?: string
+  pathTemplate?: string
+  status?: number
+  userId?: number
+  traceId?: string
+  page?: number
+  size?: number
+}
+
+export async function listApiLogs(filters: ApiLogFilters = {}): Promise<PagedResult<ApiAuditLogView>> {
+  const params = new URLSearchParams()
+  if (filters.method) params.set('method', filters.method)
+  if (filters.pathTemplate) params.set('pathTemplate', filters.pathTemplate)
+  if (filters.status !== undefined) params.set('status', String(filters.status))
+  if (filters.userId !== undefined) params.set('userId', String(filters.userId))
+  if (filters.traceId) params.set('traceId', filters.traceId)
+  params.set('page', String(filters.page ?? 0))
+  params.set('size', String(filters.size ?? 20))
+
+  const response = await apiFetch(`/api/admin/api-logs?${params.toString()}`)
+  return response.json()
+}
+
+/** Mirrors the backend's `AdminOrderSummary` record. `createdAt` is an ISO-8601 string. */
+export interface AdminOrderSummary {
+  id: number
+  orderNo: string
+  userId: number
+  totalAmount: number
+  status: string
+  createdAt: string
+}
+
+/** Query params accepted by `GET /api/admin/orders` (`AdminOrderController`) — page/size only, no filters. */
+export interface AdminOrderListFilters {
+  page?: number
+  size?: number
+}
+
+export async function listAdminOrders(
+  filters: AdminOrderListFilters = {}
+): Promise<PagedResult<AdminOrderSummary>> {
+  const params = new URLSearchParams()
+  params.set('page', String(filters.page ?? 0))
+  params.set('size', String(filters.size ?? 20))
+
+  const response = await apiFetch(`/api/admin/orders?${params.toString()}`)
+  return response.json()
+}
+
+/** Mirrors the backend's `AdminOrderItemView` record. */
+export interface AdminOrderItemView {
+  productId: number
+  quantity: number
+  unitPrice: number
+}
+
+/** Mirrors the backend's `PurchaseRequestView` record. `requestId` is a UUID serialized as a string. */
+export interface PurchaseRequestView {
+  requestId: string
+  status: string
+  orderId: number | null
+}
+
+/** Mirrors the backend's `OrderStatusHistoryView` record. `fromStatus` is null for the initial transition. */
+export interface OrderStatusHistoryView {
+  fromStatus: string | null
+  toStatus: string
+  changedAt: string
+}
+
+/**
+ * Mirrors the backend's `AdminOrderDetail` record.
+ *
+ * `relatedApiLogs` is a deliberately approximate, non-exact cross-reference: the backend has no
+ * `trace_id` column on `orders`, so it looks up `api_audit_logs` rows for this order's `userId`
+ * that fall within a +/-5-minute window around the order's creation time. Render it as a "logs
+ * around this time" hint, never as "the request that created this order."
+ */
+export interface AdminOrderDetail {
+  id: number
+  orderNo: string
+  userId: number
+  totalAmount: number
+  status: string
+  paymentDueAt: string | null
+  createdAt: string
+  items: AdminOrderItemView[]
+  purchaseRequest: PurchaseRequestView | null
+  statusHistory: OrderStatusHistoryView[]
+  relatedApiLogs: ApiAuditLogView[]
+}
+
+export async function getAdminOrderDetail(orderId: number): Promise<AdminOrderDetail> {
+  const response = await apiFetch(`/api/admin/orders/${orderId}`)
+  return response.json()
+}
