@@ -9,13 +9,13 @@ import { MyOrdersPage } from './features/orders/MyOrdersPage'
 import { OrderDetailPage } from './features/orders/OrderDetailPage'
 
 export const router = createBrowserRouter([
-  { path: '/', element: <FlashSaleListPage /> },
   { path: '/flash-sales/:id', element: <FlashSaleDetailPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/login', element: <LoginPage /> },
   {
     element: <RequireAuth />,
     children: [
+      { path: '/', element: <FlashSaleListPage /> },
       { path: '/purchase-requests/:requestId', element: <PurchaseStatusPage /> },
       { path: '/orders', element: <MyOrdersPage /> },
       { path: '/orders/:orderId', element: <OrderDetailPage /> },
