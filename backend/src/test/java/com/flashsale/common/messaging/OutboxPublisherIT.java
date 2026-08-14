@@ -47,6 +47,12 @@ class OutboxPublisherIT {
         registry.add("spring.rabbitmq.port", rabbitmq::getAmqpPort);
         registry.add("spring.rabbitmq.username", rabbitmq::getAdminUsername);
         registry.add("spring.rabbitmq.password", rabbitmq::getAdminPassword);
+        // This test asserts on messages by manually receive()-ing them off CREATE_ORDER_QUEUE /
+        // STOCK_RELEASE_QUEUE. Since Task 6 added a real @RabbitListener on CREATE_ORDER_QUEUE
+        // (OrderPurchaseConsumer), it would race this test's manual poll for the same message.
+        // Keep listener containers from auto-starting so this test's outbox-mechanics assertions
+        // stay isolated from consumer behavior, which has its own IT coverage.
+        registry.add("spring.rabbitmq.listener.simple.auto-startup", () -> "false");
     }
 
     @Autowired OutboxWriter outboxWriter;
