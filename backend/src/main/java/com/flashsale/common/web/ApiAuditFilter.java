@@ -60,13 +60,18 @@ public class ApiAuditFilter extends OncePerRequestFilter {
                 pathTemplate = request.getRequestURI();
             }
 
+            // Design spec 3.3: request_id and trace_id store the same value this round — they're
+            // only meant to diverge once Week 5 adds real distributed-tracing spans. Both columns
+            // come from TraceIdFilter's request attribute, not the servlet container's own id.
+            String traceId = (String) request.getAttribute(TraceIdFilter.TRACE_ID_ATTRIBUTE);
+
             ApiAuditLog log = new ApiAuditLog(
                 request.getMethod(),
                 pathTemplate,
                 response.getStatus(),
                 resolveUserId(),
-                request.getRequestId(),
-                (String) request.getAttribute(TraceIdFilter.TRACE_ID_ATTRIBUTE),
+                traceId,
+                traceId,
                 (int) durationMs,
                 request.getRemoteAddr(),
                 truncate(request.getHeader("User-Agent"), MAX_USER_AGENT_LENGTH),

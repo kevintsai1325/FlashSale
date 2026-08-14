@@ -110,6 +110,9 @@ class ApiAuditFilterIT {
                 "select * from api_audit_logs where path_template = '/api/flash-sales' " +
                     "and method = 'GET' and status = 200 order by id desc limit 1");
             assertThat(row.get("user_id")).isNull();
+            // Design spec 3.3: request_id and trace_id store the same value this round — they
+            // only diverge once Week 5 adds real distributed-tracing spans.
+            assertThat(row.get("request_id")).isEqualTo(row.get("trace_id"));
         });
     }
 
@@ -133,6 +136,7 @@ class ApiAuditFilterIT {
                 "select * from api_audit_logs where path_template = '/api/orders/me' " +
                     "and method = 'GET' and status = 200 order by id desc limit 1");
             assertThat(row.get("user_id")).isNotNull();
+            assertThat(row.get("request_id")).isEqualTo(row.get("trace_id"));
         });
     }
 
