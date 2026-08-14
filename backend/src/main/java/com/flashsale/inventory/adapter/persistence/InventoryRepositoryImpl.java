@@ -3,6 +3,7 @@ package com.flashsale.inventory.adapter.persistence;
 import com.flashsale.inventory.application.InventoryRepository;
 import com.flashsale.inventory.domain.Inventory;
 import org.springframework.stereotype.Repository;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -26,4 +27,7 @@ public class InventoryRepositoryImpl implements InventoryRepository {
 
     @Override
     public Inventory save(Inventory inventory) { return jpaRepository.save(inventory); }
+
+    @Override
+    public List<Inventory> findAll() { return jpaRepository.findAll(); }
 }

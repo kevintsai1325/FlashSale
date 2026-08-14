@@ -32,6 +32,9 @@ public class Order {
     @Column(name = "payment_due_at")
     private Instant paymentDueAt;
 
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt = Instant.now();
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
 
@@ -82,5 +85,6 @@ public class Order {
     public BigDecimal getTotalAmount() { return totalAmount; }
     public OrderStatus getStatus() { return status; }
     public Instant getPaymentDueAt() { return paymentDueAt; }
+    public Instant getCreatedAt() { return createdAt; }
     public List<OrderItem> getItems() { return items; }
 }

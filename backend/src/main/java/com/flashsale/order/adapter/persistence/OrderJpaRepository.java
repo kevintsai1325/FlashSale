@@ -5,6 +5,7 @@ import com.flashsale.order.domain.OrderStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -15,4 +16,12 @@ public interface OrderJpaRepository extends JpaRepository<Order, Long> {
     // reads order.totalQuantity() in a different transaction than this query runs in.
     @Query("select distinct o from Order o join fetch o.items where o.status = :status and o.paymentDueAt < :instant")
     List<Order> findByStatusAndPaymentDueAtBefore(@Param("status") OrderStatus status, @Param("instant") Instant instant);
+
+    // Admin dashboard aggregates (com.flashsale.admin).
+    long countByStatus(OrderStatus status);
+
+    @Query("select coalesce(sum(o.totalAmount), 0) from Order o where o.status = :status")
+    BigDecimal sumTotalAmountByStatus(@Param("status") OrderStatus status);
+
+    List<Order> findByCreatedAtAfter(Instant since);
 }

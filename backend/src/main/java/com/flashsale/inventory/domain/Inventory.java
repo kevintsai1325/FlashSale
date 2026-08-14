@@ -59,5 +59,6 @@ public class Inventory {
     public Long getFlashSaleId() { return flashSaleId; }
     public int getTotalQuantity() { return totalQuantity; }
     public int getAvailableQuantity() { return availableQuantity; }
+    public int getReservedQuantity() { return reservedQuantity; }
     public int getSoldQuantity() { return soldQuantity; }
 }
