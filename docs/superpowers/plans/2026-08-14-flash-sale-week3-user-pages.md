@@ -10,8 +10,8 @@
 
 ## Global Constraints
 
-- No new npm dependencies — everything needed is already in `frontend/package.json`.
-- No CSS/UI framework, no optimistic updates, no WebSocket/SSE — see design spec §10 for why. Plain semantic HTML matching the existing pages' style.
+- No new npm dependencies — everything needed is already in `frontend/package.json`, including for Tasks 6-8's visual design system (hand-rolled CSS custom properties, no Tailwind/component library — see design spec §10/§11 for why).
+- No optimistic updates, no WebSocket/SSE — see design spec §10 for why.
 - Testing convention (matches `FlashSaleListPage.test.tsx`/`RegisterPage.test.tsx` exactly): `vi.spyOn` the relevant `api/*.ts` module, render with `QueryClientProvider` + `MemoryRouter`(+`Routes` when asserting navigation), assert via `screen`/`waitFor`. No MSW, no real backend, no fake timers for polling cadence — trust TanStack Query's `refetchInterval`, only assert on rendered states.
 - Test runner: no `test` script exists in `package.json` yet — run via `npx vitest run <path>` from `frontend/`. Don't add a `test` script unless asked; out of scope.
 - `apiFetch` (existing `api/httpClient.ts`) already throws on non-2xx and already attaches the bearer token — new API functions just call it, no new error-handling wrapper.
@@ -944,4 +944,272 @@ Expected: PASS — every test from Tasks 1–5 green together with Week 1's unto
 cd frontend
 git add src/features/orders/OrderDetailPage.tsx src/features/orders/OrderDetailPage.test.tsx src/router.tsx
 git commit -m "feat: add order detail page with simulated payment and cancel"
+```
+
+---
+
+## Addendum: Ticket-Stub Design System + RWD + Register→Login Prefill
+
+Tasks 1-5 above shipped the *functional* Week 3 pages with zero styling — `frontend/src/index.css` is still Vite's unmodified scaffold CSS (purple `#aa3bff` accent, fixed 1126px `#root`), never actually designed for FlashSale. Design spec §11 (added after a visual-direction review) specifies a "ticket stub" design system: warm paper tones, a ticket-notch logo mark, red-orange accent, a 3-color semantic status system (go/wait/stop), and mobile-first RWD. Read design spec §11 in full before starting — it has the complete rationale and the design-token table. Tasks 6-8 below implement it, plus one small unrelated UX fix (register→login email prefill) folded into Task 7 since it touches the same two files.
+
+**Global note for Tasks 6-8:** No new npm dependency — everything is hand-rolled CSS custom properties + plain CSS classes (design spec §11.0 explains why Tailwind/a component library was rejected: the token system is already fully specified, adding a build-tool dependency for it would be pure overhead). Every color, in every component, must come from a `var(--token)` in `frontend/src/styles/tokens.css` — never a literal hex value in a component file. Both light and dark mode must resolve correctly (`@media (prefers-color-scheme: dark)` guarded as `:root:not([data-theme="light"])`, `:root[data-theme="dark"]` too, even though this app has no theme-toggle UI yet — the token structure should be ready for one).
+
+**One deviation from the approved visual mockup, decided up front — don't rediscover this mid-task:** the mockup's flash-sale detail screen showed a "剩餘庫存 1/3" stock meter. `GET /api/flash-sales/{id}` (`FlashSaleDetail` DTO) does not expose remaining/total quantity — only `productDescription` and `purchaseLimitPerUser`. Adding that field would be a backend DTO change, out of scope for this frontend-only round (design spec §0). **Drop the stock meter entirely** from the real `FlashSaleDetailPage` — keep the countdown-to-`endsAt` strip (real data, already returned) and the "每人限購 N 件" note (from `purchaseLimitPerUser`, already returned).
+
+- [ ] **Step 0: Read the design spec**
+
+Read `docs/superpowers/specs/2026-08-14-flash-sale-week3-user-pages-design.md` §10-11 in full (token list, status-color mapping table, RWD breakpoints, shared-component list, font strategy) before writing any code in Tasks 6-8.
+
+---
+
+## Task 6: Design Tokens + Shared Components + Flash Sale Pages
+
+**Files:**
+- Create: `frontend/src/styles/tokens.css`
+- Modify: `frontend/src/index.css` (strip the Vite boilerplate, keep only a body reset), `frontend/src/main.tsx` (import order: tokens.css before index.css)
+- Create: `frontend/src/components/AppNav.tsx`, `frontend/src/components/StatusPill.tsx`
+- Modify: `frontend/src/features/flash-sales/FlashSaleListPage.tsx`, `frontend/src/features/flash-sales/FlashSaleDetailPage.tsx`
+
+**Interfaces:**
+- Consumes: nothing new from the backend.
+- Produces: `<AppNav />` (reads `useAuth()` itself for the conditional 登出 button, no props needed) — used by Task 6 (List) and Task 8 (MyOrders); `FlashSaleDetailPage` also gets it per spec §11.5. `<StatusPill status="ACTIVE" />` (or `SCHEDULED`/`ENDED`/`PENDING`/`SUCCEEDED`/`SOLD_OUT`/`REJECTED`/`FAILED`/`PENDING_PAYMENT`/`PAID`/`CANCELLED`/`EXPIRED`) — maps 1:1 via the table in spec §11.2, used by every task from here on. Unknown status strings should render as-is in a neutral pill rather than throwing — defensive, not a scope excuse to over-engineer: one `default` branch, nothing more.
+
+- [ ] **Step 1: Design tokens**
+
+`frontend/src/styles/tokens.css` — the complete light palette on bare `:root`, redefined for dark:
+
+```css
+:root {
+  --ink: #1b1710;
+  --paper: #f4f0e6;
+  --paper-raised: #fffdf8;
+  --line: #d8d0bd;
+  --line-strong: #c2b89e;
+  --muted: #8a8066;
+  --stub: #d8391e;
+  --stub-hover: #b62f18;
+  --stub-ink: #fff8ed;
+  --go: #2e7d4f;
+  --go-tint: rgba(46, 125, 79, .12);
+  --wait: #96650f;
+  --wait-tint: rgba(184, 134, 46, .16);
+  --stop: #a32f1f;
+  --stop-tint: rgba(163, 47, 31, .12);
+  --shadow: 0 1px 2px rgba(27, 23, 16, .06), 0 8px 20px -12px rgba(27, 23, 16, .18);
+  --font-display: "Archivo Black Sub", "Arial Black", sans-serif;
+  --font-ui: -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #f3ede0; --paper: #171310; --paper-raised: #211c16;
+    --line: #3a3226; --line-strong: #4a4030; --muted: #a79c82;
+    --stub: #ff5b37; --stub-hover: #ff7455; --stub-ink: #171310;
+    --go: #57c98a; --go-tint: rgba(87, 201, 138, .16);
+    --wait: #e0ac4e; --wait-tint: rgba(224, 172, 78, .18);
+    --stop: #ff6b52; --stop-tint: rgba(255, 107, 82, .16);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  /* identical property list to the media-query block above — copy it verbatim so an explicit
+     future theme toggle wins over the OS setting in both directions */
+}
+
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-ui); }
+```
+
+Do **not** embed the Archivo Black webfont this round — it was a nice-to-have in the mockup for headline flavor, not load-bearing for the design (every screen still reads correctly in the fallback `"Arial Black", sans-serif`), and embedding a font file correctly (subsetting, base64, `@font-face`) is meaningfully more work for a purely decorative upgrade. `ponytail: skipped webfont embedding, --font-display falls back to system Arial Black — add the real subsetted woff2 (already produced once during the mockup, ask the controller session if it still has it) if the fallback reads too plain once it's live.`
+
+- [ ] **Step 2: Strip the Vite boilerplate**
+
+`frontend/src/index.css` currently has the unused Vite scaffold (`--accent: #aa3bff`, fixed-width `#root`, etc. — read it first). Delete all of it; the only thing `index.css` should still own after this step is whatever generic host-level reset isn't already in `tokens.css`'s `body` rule (there may be nothing left to keep — an empty or near-empty file is the expected outcome, don't invent rules to fill it). Import `./styles/tokens.css` before `./index.css` in `main.tsx`.
+
+- [ ] **Step 3: AppNav**
+
+`frontend/src/components/AppNav.tsx` — the ticket-notch wordmark badge + `我的訂單` link + conditional `登出` button (reuses the exact markup/behavior already proven in `FlashSaleListPage.tsx` from the earlier UX-gap fix — move it here, don't rewrite the logic):
+
+```tsx
+import { Link } from 'react-router-dom'
+import { useAuth } from '../features/auth/useAuth'
+
+export function AppNav() {
+  const { isAuthenticated, logout } = useAuth()
+  return (
+    <nav className="app-nav">
+      <span className="wordmark">FLASH SALE</span>
+      <div className="nav-links">
+        <Link className="nav-link" to="/orders">我的訂單</Link>
+        {isAuthenticated && <button className="nav-logout" onClick={() => logout()}>登出</button>}
+      </div>
+    </nav>
+  )
+}
+```
+Wordmark notch CSS (the two "punched circle" pseudo-elements — this exact technique, don't reinvent):
+```css
+.wordmark {
+  position: relative; display: inline-flex; align-items: center;
+  padding: 5px 12px 5px 14px; background: var(--stub); color: var(--stub-ink);
+  font-family: var(--font-display); font-weight: 900; font-size: .78rem;
+  letter-spacing: .04em; border-radius: 3px;
+}
+.wordmark::before, .wordmark::after {
+  content: ""; position: absolute; top: 50%; width: 9px; height: 9px;
+  background: var(--paper-raised); border-radius: 50%; transform: translateY(-50%);
+}
+.wordmark::before { left: -4.5px; } .wordmark::after { right: -4.5px; }
+```
+This notch trick assumes `.wordmark` always sits directly on a `var(--paper-raised)`-colored surface (true for every current usage — the nav bar background is `var(--paper-raised)` everywhere `AppNav` appears). If a future page ever puts `AppNav` on a different background, the notch fill color needs to change with it — don't build that flexibility now, nothing needs it.
+
+- [ ] **Step 4: StatusPill**
+
+`frontend/src/components/StatusPill.tsx`:
+```tsx
+const STATUS_MAP: Record<string, { tone: 'go' | 'wait' | 'stop'; label: string }> = {
+  ACTIVE: { tone: 'go', label: '搶購中' },
+  SCHEDULED: { tone: 'wait', label: '即將開賣' },
+  ENDED: { tone: 'stop', label: '已結束' },
+  PENDING: { tone: 'wait', label: '搶購處理中' },
+  SUCCEEDED: { tone: 'go', label: '搶購成功' },
+  SOLD_OUT: { tone: 'stop', label: '已售完' },
+  REJECTED: { tone: 'stop', label: '已購買過' },
+  FAILED: { tone: 'stop', label: '建單失敗' },
+  PENDING_PAYMENT: { tone: 'wait', label: '待付款' },
+  PAID: { tone: 'go', label: '已付款' },
+  CANCELLED: { tone: 'stop', label: '已取消' },
+  EXPIRED: { tone: 'stop', label: '已逾期' },
+}
+
+export function StatusPill({ status }: { status: string }) {
+  const entry = STATUS_MAP[status] ?? { tone: 'stop' as const, label: status }
+  return <span className={`pill ${entry.tone}`}>{entry.label}</span>
+}
+```
+Pill CSS:
+```css
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: .68rem; font-weight: 700;
+  letter-spacing: .03em; padding: 3px 9px 3px 7px; border-radius: 20px; text-transform: uppercase; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.go { background: var(--go-tint); color: var(--go); }
+.pill.wait { background: var(--wait-tint); color: var(--wait); }
+.pill.stop { background: var(--stop-tint); color: var(--stop); }
+```
+
+- [ ] **Step 5: Restyle FlashSaleListPage — RWD grid**
+
+Read the current file first (it already has the nav/logout markup from the earlier UX fix — replace that inline markup with `<AppNav />`). Card list becomes a responsive grid: single column under 900px, `repeat(auto-fill, minmax(280px, 1fr))` at ≥900px (spec §11.4). Each list item uses `<StatusPill status={sale.status} />` instead of printing `{sale.status}` raw. Ticket-card visual: main content + a dashed-border right edge (`border-left: 1px dashed var(--line-strong)`) — see the approved mockup's `.sale-card`/`.stub-edge` classes for the exact look, port them into a stylesheet colocated with the component (e.g. `FlashSaleListPage.css`, plain CSS import — no CSS-in-JS library, none is installed).
+
+- [ ] **Step 6: Restyle FlashSaleDetailPage — no stock meter (see Addendum note above)**
+
+Hero product name (`.detail-hero h2`, `var(--font-display)`), price tag in tabular mono, a live countdown-to-`endsAt` strip (plain `useEffect` + `setInterval(1000)` computing `endsAt - now`, cleared on unmount — no library), `每人限購 N 件` note from `purchaseLimitPerUser`, the 搶購 button restyled as `.btn.btn-primary.btn-block`. Wrap with `<AppNav />` at the top. Detail content gets a `max-width` (spec §11.4) and stays centered on wide viewports rather than stretching full-width.
+
+- [ ] **Step 7: Run the existing test suites, fix any DOM-query breakage**
+
+Run: `cd frontend && npx vitest run`
+`FlashSaleListPage.test.tsx` and `FlashSaleDetailPage.test.tsx` assert by text/role, not by class, so they should keep passing — but `AppNav`/`StatusPill` change the DOM structure around that text (e.g. status text is no longer a bare text node, it's inside a `<span class="pill">`), so re-check each assertion actually still matches (`getByText` on a status string still works whether or not it's wrapped in a span, but double-check literals like raw `'ACTIVE'` in test mocks/assertions against the new Chinese pill labels — the test data can keep sending `'ACTIVE'` as the API value, just confirm the assertion checks for the *rendered* label now, not the raw enum, if it was asserting on status text at all).
+Expected: PASS, full suite still 100% green.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd frontend
+git add src/styles src/index.css src/main.tsx src/components/AppNav.tsx src/components/StatusPill.tsx src/features/flash-sales
+git commit -m "feat: add ticket-stub design system, apply to flash sale list/detail"
+```
+
+---
+
+## Task 7: Auth Pages Redesign + Register→Login Email Prefill
+
+**Files:**
+- Modify: `frontend/src/features/auth/LoginPage.tsx`, `frontend/src/features/auth/RegisterPage.tsx`
+- Modify (tests): `frontend/src/features/auth/RegisterPage.test.tsx` (extend), new `frontend/src/features/auth/LoginPage.test.tsx` (none existed before)
+
+**Interfaces:**
+- Consumes: nothing new.
+- Produces: nothing consumed elsewhere.
+
+- [ ] **Step 1: Register passes email forward, Login pre-fills it**
+
+In `RegisterPage.tsx`, change the mutation's `onSuccess`:
+```tsx
+onSuccess: (_, values) => navigate('/login', { state: { email: values.email } }),
+```
+(`useMutation`'s `onSuccess` receives `(data, variables)` — `variables` is the `values` passed to `mutate`, no need to thread the email through some other way.)
+
+In `LoginPage.tsx`, read the prefill and pass it as the form's default value — don't just set the input's `value` imperatively, use react-hook-form's own `defaultValues` so it stays an uncontrolled field consistent with how the rest of the form works:
+```tsx
+const location = useLocation()
+const prefillEmail = (location.state as { email?: string } | null)?.email ?? ''
+const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
+  resolver: zodResolver(schema),
+  defaultValues: { email: prefillEmail },
+})
+```
+`location.state` already carries `from` (Task 1) — this adds `email` alongside it, both optional, independent of each other (arriving via a register-redirect always has `email` and never `from`; arriving via a RequireAuth-redirect always has `from` and never `email`; both are handled with independent `?.` fallbacks, neither assumes the other is present).
+
+- [ ] **Step 2: Restyle both pages — centered ticket card**
+
+Both forms become a centered `.auth-card` (see mockup: `.auth-body` flex-centers it, `max-width` keeps it a readable card width on desktop, full-width with page padding on mobile — this is the one RWD rule these two pages need, no grid/multi-column concern since it's a single form). `<AppNav />` is **not** used here (spec §11.5 — auth screens stay standalone, no nav chrome before you're logged in). Reuse the `.field`/`.btn` classes from Task 6's stylesheet rather than inventing new ones — forms need the same input/label/button look everywhere.
+
+- [ ] **Step 3: Tests**
+
+Extend `RegisterPage.test.tsx`'s existing test (or add a case) asserting `navigate` was called with `('/login', { state: { email: 'a@example.com' } })` — the existing test already mocks `authApi.register`; you need to also check the navigation target, which means mocking `react-router-dom`'s `useNavigate` (the codebase hasn't needed this yet — check how Task 3's `FlashSaleDetailPage.test.tsx` verified navigation: it rendered real destination routes and asserted on rendered content rather than mocking `useNavigate` directly. Prefer that established pattern here too — render `RegisterPage` inside a `MemoryRouter`/`Routes` with a stub `/login` route that reads and displays `location.state?.email`, then assert the stub shows the right email, instead of introducing a `vi.mock('react-router-dom')` pattern this codebase doesn't otherwise use).
+
+New `LoginPage.test.tsx`: render with `initialEntries={[{ pathname: '/login', state: { email: 'prefill@example.com' } }]}`, assert the email input's value is pre-filled (`screen.getByLabelText(/email/i)` should have `value === 'prefill@example.com'`). Second case: no `state` → email input starts empty.
+
+Run: `cd frontend && npx vitest run src/features/auth`
+Expected: PASS.
+
+- [ ] **Step 4: Run full suite, commit**
+
+Run: `cd frontend && npx vitest run`
+Expected: PASS, 100% green.
+
+```bash
+cd frontend
+git add src/features/auth
+git commit -m "feat: restyle auth pages, prefill login email after registration"
+```
+
+---
+
+## Task 8: Purchase Status + Orders Pages Redesign
+
+**Files:**
+- Modify: `frontend/src/features/purchase/PurchaseStatusPage.tsx`, `frontend/src/features/orders/MyOrdersPage.tsx`, `frontend/src/features/orders/OrderDetailPage.tsx`
+
+**Interfaces:**
+- Consumes: `StatusPill`, `AppNav` (Task 6).
+- Produces: nothing new consumed elsewhere — last task in the plan.
+
+- [ ] **Step 1: PurchaseStatusPage — stamp treatment**
+
+Terminal states get the rotated stamp look (`.stamp.go` for `SUCCEEDED`, `.stamp.stop` for `SOLD_OUT`/`REJECTED`/`FAILED`); `PENDING` gets the spinning ring (`.ring.spin`, `@keyframes spin`, guarded by `@media (prefers-reduced-motion: no-preference)` — the ring must render as a plain static ring with no motion at all when the visitor has reduced-motion set, not a slower spin). No `<AppNav />` here (spec §11.5, same reasoning as the auth pages — this is a focused single-purpose screen). Centered, `max-width` capped same as the detail pages.
+
+- [ ] **Step 2: MyOrdersPage — ticket cards + AppNav + empty state**
+
+Add `<AppNav />`. Order list becomes `.order-card`s (mono order number, `<StatusPill>`, tabular amount) in the same responsive grid rule as Task 6's flash-sale list (spec §11.4 — reuse the same breakpoint, don't invent a second grid rule). Empty state (`尚無訂單`) gets the dashed-ticket-icon treatment from the mockup, not just bare text.
+
+- [ ] **Step 3: OrderDetailPage — countdown strip + button row**
+
+`<AppNav />` **not** included (matches the approved mockup's order-detail frames, which show only a `‹ 我的訂單` back-link, no nav bar — consistent with Task 5's already-shipped back-link fix). Total amount in a bordered strip (dashed top/bottom, tabular mono, larger size). `PENDING_PAYMENT`'s three actions become `.btn-outline-go`/`.btn-outline-stop`/`.btn-ghost` per the mockup instead of three identical plain `<button>`s. `PAID`/other terminal states show the `.paid-note` treatment (small dot + confirmation line) instead of just silently showing no buttons.
+
+- [ ] **Step 4: Run full suite**
+
+Run: `cd frontend && npx vitest run`
+Expected: PASS — every test from Tasks 1-8 green together (re-check `OrderDetailPage.test.tsx`'s status-text assertions against the new `StatusPill` Chinese labels, same caveat as Task 6 Step 7).
+
+- [ ] **Step 5: Manual RWD check**
+
+`npm run dev` (no need for the full `docker compose` backend stack just to eyeball layout — component structure and CSS don't need real API data; use the browser devtools responsive mode, or if a quick visual sanity check against real data is wanted, the Task 5 manual-walkthrough stack from earlier still works). Check at minimum: 375px (mobile), 768px (tablet), 1280px (desktop) — list/grid pages reflow, auth/detail cards don't stretch full-width absurdly on desktop, nothing overflows horizontally.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd frontend
+git add src/features/purchase src/features/orders
+git commit -m "feat: restyle purchase status and order pages, complete design system rollout"
 ```

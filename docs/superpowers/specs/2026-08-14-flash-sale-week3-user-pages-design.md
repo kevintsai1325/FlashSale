@@ -129,12 +129,79 @@ submitPayment(orderId: number, result: 'SUCCESS' | 'FAILURE'): Promise<OrderDeta
 - `router.tsx`:加 3 條新路由,`/orders`、`/orders/:orderId`、`/purchase-requests/:requestId` 包 `RequireAuth`。
 - `useAuth.ts`:內部改用 Context,對外簽章不變。
 - `App.tsx`:加 `AuthProvider` 包裹,`refresh()` 成功時更新 context。
-- `LoginPage.tsx`:登入成功後導頁邏輯從固定 `navigate('/')` 改成看 `location.state?.from`。
+- `LoginPage.tsx`:登入成功後導頁邏輯從固定 `navigate('/')` 改成看 `location.state?.from`;另外讀取 `location.state?.email` 帶入 email 欄位預設值(見 §11.4)。
+- `RegisterPage.tsx`:註冊成功後 `navigate('/login', { state: { email: values.email } })`,取代原本不帶 state 的 `navigate('/login')`。
 - `FlashSaleDetailPage.tsx`:加搶購按鈕與送出邏輯。
-- 均為既有檔案的增量修改,不重寫既有已通過測試的行為(`RegisterPage`、`FlashSaleListPage` 不動)。
+- 均為既有檔案的增量修改,不重寫既有已通過測試的行為(`FlashSaleListPage` 版面內容不變,只套新樣式)。
 
 ## 10. 樣式與其他刻意不做的事
 
-- **不引入 UI/CSS 框架**。既有頁面全是無樣式的語意化 HTML(`<article>`、`<label>`、`role="alert"`),Week 3 維持同樣風格,只用瀏覽器預設樣式——面試作品集的重點是架構與正確性,不是視覺,加框架是本輪範圍外的裝飾性工作。
 - **不做樂觀更新(optimistic update)**。付款/取消都是「使用者主動觸發、後端立即同步回應」的操作(不像搶購結果需要輪詢等非同步 consumer),直接等 mutation 回應更新畫面即可,不需要 TanStack Query 的 optimistic update 複雜度。
 - **不做 WebSocket/SSE**。輪詢間隔 1 秒對展示用途已經足夠即時,主規格全文没有要求即時推送,加雙向連線是規格外的複雜度。
+- **不裝 Tailwind/元件庫**。§11 的視覺方向已經用一組完整的 CSS design token 定案(顏色、字型、間距全部有規則可循),用純 CSS + class 就能一致地套用到每個頁面,不需要為此裝建置工具鏈或執行期依賴——這點取代並修正了本文件初版「不引入 UI/CSS 框架」的決定,原因見 §11.0。
+
+## 11. 視覺設計系統(票根 Design System)
+
+### 11.0 背景
+
+初版本文件曾決定「不引入 UI/CSS 框架,維持瀏覽器預設樣式」,理由是「面試作品集重點是架構正確性,不是視覺」。實際做完 Task 1-5 後,使用者反饋介面「太陽春」——`frontend/src/index.css` 其實從頭到尾都是 Vite 專案樣板的預設樣式(紫色 `--accent: #aa3bff`、`#root` 固定寬度 1126px),從未真正客製過,不是「刻意極簡」而是「沒設計過」。這裡修正決定:加一套視覺設計系統,但不裝任何新的 npm 依賴(見下方 11.1 的取捨)。
+
+### 11.1 設計方向:入場票根(ticket stub)
+
+以「限量搶購 = 排隊領票」的體驗做視覺隱喻——票根紙質底色、剪票口造型的 logo、卡片用虛線分隔像撕票線、搶購結果用「已核可/已售完」風格的印章呈現。方向已透過一份涵蓋全部 10 個畫面狀態的靜態 HTML 提案確認,實作以此為準。
+
+### 11.2 Design tokens
+
+CSS custom properties,定義在新檔案 `frontend/src/styles/tokens.css`(全站唯一色彩/字型/間距來源,元件樣式一律吃 token,不允許寫死色碼):
+
+```css
+--ink / --paper / --paper-raised / --line / --line-strong / --muted   /* 中性色階 */
+--stub / --stub-hover / --stub-ink                                    /* 主色:入場章紅橙 */
+--go / --go-tint    /* 語意色:進行中/成功/已完成 */
+--wait / --wait-tint /* 語意色:等待中/即將開始 */
+--stop / --stop-tint /* 語意色:已結束/失敗/取消 */
+--font-display  /* Archivo Black(webfont,見 11.3) */
+--font-ui       /* system-ui 疊字型,中文用 */
+--font-mono     /* 訂單編號/金額/倒數計時等 tabular 數字用 */
+```
+
+深色模式:`@media (prefers-color-scheme: dark)`(guard `:root:not([data-theme="light"])`)+ 使用者若之後加主題切換,`:root[data-theme="dark"]` 同步覆寫——本輪沒有主題切換 UI,先把 token 結構準備好。
+
+狀態色彩對應(貫穿全站,取代目前直接印 enum 原文的作法):
+
+| 後端 enum | 語意色 | 顯示文字 |
+|---|---|---|
+| `FlashSale.status = ACTIVE` | go | 搶購中 |
+| `= SCHEDULED` | wait | 即將開賣 |
+| `= ENDED` | stop | 已結束 |
+| `PurchaseRequest.status = SUCCEEDED` | go | 搶購成功 |
+| `= PENDING` | wait | 搶購處理中 |
+| `= SOLD_OUT` / `REJECTED` / `FAILED` | stop | 依 §5 原文案 |
+| `Order.status = PAID` | go | 已付款 |
+| `= PENDING_PAYMENT` | wait | 待付款 |
+| `= CANCELLED` / `EXPIRED` | stop | 已取消 / 已逾期 |
+
+### 11.3 字型
+
+顯示用字重(logo、活動名稱、搶購結果印章文字)內嵌一支開源字型 Archivo Black,僅取 Latin 基本字元(不含中文,中文一律走系統字),用 `fonttools` 裁到 ~9KB 後轉 woff2、`@font-face` base64 內嵌(不連外部字型 CDN——Artifact 環境本來就會擋外部請求,實際部屬到 Nginx 後也沒有連外部落點的理由)。內文與所有中文一律用系統字疊字型(`-apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", system-ui`),金額/訂單編號/倒數計時用等寬字(`ui-monospace` 疊字型)+ `font-variant-numeric: tabular-nums`。
+
+### 11.4 響應式(RWD)
+
+Mobile-first,單欄流式版面為基礎(這是購物類 app,手機是主要情境),斷點用 `min-width` 往上疊加:
+
+- **< 640px(預設)**:所有頁面單欄,寬度 100% 減 page padding。
+- **≥ 640px**:表單類頁面(登入/註冊)維持置中卡片、限制 `max-width`,不要求全寬拉伸到滿版難看。
+- **≥ 900px**:列表類頁面(活動列表、我的訂單)從單欄卡片改多欄 grid(`repeat(auto-fill, minmax(...))`),善用桌面空間;詳情類頁面(活動詳情、訂單詳情)維持單欄但置中,設 `max-width` 避免內文行寬超過易讀範圍。
+
+不做斷點特化的元件邏輯(例如手機版/桌面版切換不同元件樹)——純 CSS 排版差異即可涵蓋所有頁面,沒有需要 JS 判斷視窗寬度的情境。
+
+### 11.5 共用元件
+
+從既有各自為政的 markup 抽出 2 個共用元件,放 `frontend/src/components/`:
+
+- `AppNav`:目前只有 `FlashSaleListPage` 有 logo/我的訂單/登出這排,`MyOrdersPage`、`FlashSaleDetailPage` 應該也要有(訂單詳情、搶購結果頁維持極簡不放,呼應 §11.1 提案的版型)。抽成元件後三個頁面共用,不各自複製一份。
+- `StatusPill`:輸入 enum 字串,輸出對應語意色 + 中文文字的 pill(表 11.2)。取代目前 `FlashSaleListPage`/`OrderDetailPage` 直接印 `{sale.status}`/`{data.status}` 原始 enum 文字的作法。
+
+### 11.6 註冊後自動帶入登入帳號
+
+`RegisterPage` 成功後導向 `/login` 時,把剛註冊的 email 透過 `navigate('/login', { state: { email } })` 帶過去;`LoginPage` 用 `location.state?.email` 當 email 欄位的 `defaultValue`(react-hook-form 的 `useForm({ defaultValues: { email: prefillEmail } })`),使用者不用重打一次剛輸入過的帳號。若沒有 `state.email`(直接訪問 `/login`)則維持空白,不影響現有行為。
