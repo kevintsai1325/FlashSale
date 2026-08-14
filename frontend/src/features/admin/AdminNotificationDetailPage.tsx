@@ -17,10 +17,11 @@ export function AdminNotificationDetailPage() {
 
   const retryMutation = useMutation({
     mutationFn: () => retryNotification(notificationId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'notifications', notificationId] })
-      queryClient.invalidateQueries({ queryKey: ['admin', 'notifications', 'unread-count'] })
-    },
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'notifications', notificationId] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'notifications', 'unread-count'] }),
+      ]),
   })
 
   return (
@@ -93,6 +94,8 @@ export function AdminNotificationDetailPage() {
                 {retryMutation.isPending ? '排程中…' : '重新排程'}
               </button>
             )}
+
+            {retryMutation.isError && <div role="alert">Failed to retry notification.</div>}
           </>
         )}
       </div>

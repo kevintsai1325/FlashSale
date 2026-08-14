@@ -53,7 +53,7 @@ export function AdminNotificationsPage() {
     mutationFn: (read: boolean) => updateNotificationReadStatus(selectedIds, read),
     onSuccess: () => {
       setSelectedIds([])
-      queryClient.invalidateQueries({ queryKey: ['admin', 'notifications'] })
+      return queryClient.invalidateQueries({ queryKey: ['admin', 'notifications'] })
     },
   })
 
@@ -163,6 +163,8 @@ export function AdminNotificationsPage() {
             </button>
           </div>
         )}
+
+        {readStatusMutation.isError && <div role="alert">Failed to update read status.</div>}
 
         {isLoading ? (
           <div>Loading…</div>

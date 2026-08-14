@@ -83,4 +83,16 @@ describe('AdminNotificationsPage', () => {
 
     await waitFor(() => expect(readStatusSpy).toHaveBeenCalledWith([1], true))
   })
+
+  it('shows an error message when the batch read-status update fails', async () => {
+    vi.spyOn(adminApi, 'listNotifications').mockResolvedValue(page1)
+    vi.spyOn(adminApi, 'updateNotificationReadStatus').mockRejectedValue(new Error('boom'))
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText('ORDER_CONFIRMED')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('select notification 1'))
+    fireEvent.click(await screen.findByRole('button', { name: '標記已讀' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Failed to update read status.'))
+  })
 })

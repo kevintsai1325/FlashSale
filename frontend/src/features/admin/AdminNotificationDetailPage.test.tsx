@@ -18,6 +18,16 @@ function renderPage(initialEntries: string[] = ['/admin/notifications/7']) {
   )
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 const failedNotification: adminApi.NotificationView = {
   id: 7,
   userId: 42,
@@ -67,5 +77,42 @@ describe('AdminNotificationDetailPage', () => {
 
     await waitFor(() => expect(screen.getByText('user42@example.com')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: '重新排程' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the retry button pending through the follow-up refetch, not just the POST', async () => {
+    const refetchDeferred = createDeferred<adminApi.NotificationView>()
+    const detailSpy = vi
+      .spyOn(adminApi, 'getNotificationDetail')
+      .mockResolvedValueOnce(failedNotification)
+      .mockReturnValueOnce(refetchDeferred.promise)
+    vi.spyOn(adminApi, 'retryNotification').mockResolvedValue(undefined)
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText('user42@example.com')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '重新排程' }))
+
+    // the refetch has been triggered (2nd getNotificationDetail call) — the retry POST already
+    // resolved by this point, but the button must stay disabled/pending until the refetch settles.
+    await waitFor(() => expect(detailSpy).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('button', { name: '排程中…' })).toBeDisabled()
+
+    refetchDeferred.resolve({ ...failedNotification, status: 'SENT', lastError: null })
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /排程中…|重新排程/ })).not.toBeInTheDocument()
+    )
+  })
+
+  it('shows an error message when the retry request fails', async () => {
+    vi.spyOn(adminApi, 'getNotificationDetail').mockResolvedValue(failedNotification)
+    vi.spyOn(adminApi, 'retryNotification').mockRejectedValue(new Error('boom'))
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText('user42@example.com')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '重新排程' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Failed to retry notification.'))
   })
 })

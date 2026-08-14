@@ -22,7 +22,7 @@ export function AppNav() {
         {role === 'ADMIN' && (
           <Link to="/admin/notifications" className="nav-bell" aria-label="通知中心">
             🔔
-            {!!unreadCount && unreadCount > 0 && (
+            {(unreadCount ?? 0) > 0 && (
               <span className="badge" data-testid="nav-bell-badge">{unreadCount}</span>
             )}
           </Link>
