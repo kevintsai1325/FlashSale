@@ -2,7 +2,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation } from '@tanstack/react-query'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './useAuth'
 import './AuthPages.css'
 
@@ -31,7 +31,9 @@ export function LoginPage() {
   return (
     <div className="auth-body">
       <div className="auth-card">
-        <h2>Login</h2>
+        <div className="kicker"><span className="wordmark">FLASH SALE</span></div>
+        <h2>登入以搶購</h2>
+        <p className="sub">回到搶購佇列繼續完成</p>
         <form onSubmit={handleSubmit((values) => mutation.mutate(values))}>
           <div className="field">
             <label htmlFor="email">Email</label>
@@ -48,6 +50,7 @@ export function LoginPage() {
           <button type="submit" className="btn btn-primary btn-block">Login</button>
           {mutation.isError && <p role="alert">{(mutation.error as Error).message}</p>}
         </form>
+        <p className="auth-foot">還沒有帳號？<Link to="/register">前往註冊</Link></p>
       </div>
     </div>
   )
