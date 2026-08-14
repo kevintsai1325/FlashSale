@@ -2,7 +2,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './useAuth'
 
 const schema = z.object({
@@ -14,11 +14,13 @@ type FormValues = z.infer<typeof schema>
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({ resolver: zodResolver(schema) })
+  const from = (location.state as { from?: string } | null)?.from ?? '/'
   const mutation = useMutation({
     mutationFn: (values: FormValues) => login(values.email, values.password),
-    onSuccess: () => navigate('/'),
+    onSuccess: () => navigate(from),
   })
 
   return (
