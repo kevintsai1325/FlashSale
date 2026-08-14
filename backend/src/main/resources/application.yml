@@ -35,6 +35,10 @@ spring:
           max-interval: 10000
         default-requeue-rejected: false
 
+app:
+  audit:
+    retention-days: 30
+
 server:
   port: 8080
 

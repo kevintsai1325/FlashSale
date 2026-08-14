@@ -3,6 +3,7 @@ package com.flashsale.common.exception;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +17,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc(addFilters = false)
 @Import({GlobalExceptionHandler.class, GlobalExceptionHandlerTest.TestController.class})
 class GlobalExceptionHandlerTest {
+
+    // @WebMvcTest auto-detects Filter beans app-wide (not just for the sliced controller), so
+    // ApiAuditFilter's constructor dependency on ApiAuditWriter must be satisfiable even though
+    // addFilters=false means the filter is never actually invoked in this test.
+    @MockBean
+    com.flashsale.common.web.ApiAuditWriter apiAuditWriter;
 
     @Autowired
     MockMvc mockMvc;

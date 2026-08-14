@@ -40,6 +40,7 @@ public class GlobalExceptionHandler {
     }
 
     private ProblemDetail build(HttpStatus status, String code, String detail, HttpServletRequest request) {
+        request.setAttribute("apiAuditErrorCode", code);
         return ProblemDetails.of(status, code, detail, request.getRequestURI());
     }
 }
