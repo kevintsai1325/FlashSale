@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { FlashSaleListPage } from './FlashSaleListPage'
 import * as flashSaleApi from '../../api/flashSaleApi'
+import { AuthProvider } from '../auth/useAuth'
 
 describe('FlashSaleListPage', () => {
   it('renders fetched flash sales', async () => {
@@ -13,11 +14,13 @@ describe('FlashSaleListPage', () => {
     const queryClient = new QueryClient()
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <FlashSaleListPage />
-        </MemoryRouter>
-      </QueryClientProvider>
+      <AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <FlashSaleListPage />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </AuthProvider>
     )
 
     await waitFor(() => expect(screen.getByText('Limited Sneakers')).toBeInTheDocument())

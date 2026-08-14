@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getPurchaseRequest } from '../../api/purchaseApi'
 
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'SOLD_OUT', 'REJECTED', 'FAILED'])
+const NON_SUCCESS_TERMINAL_STATUSES = new Set(['SOLD_OUT', 'REJECTED', 'FAILED'])
 
 const STATUS_MESSAGES: Record<string, string> = {
   PENDING: '搶購處理中，請稍候…',
@@ -33,6 +34,7 @@ export function PurchaseStatusPage() {
       {data.status === 'SUCCEEDED' && data.orderId != null && (
         <Link to={`/orders/${data.orderId}`}>查看訂單</Link>
       )}
+      {NON_SUCCESS_TERMINAL_STATUSES.has(data.status) && <Link to="/">回活動列表</Link>}
     </article>
   )
 }

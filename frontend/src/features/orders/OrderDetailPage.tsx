@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getOrder, cancelOrder, submitPayment } from '../../api/orderApi'
 import type { OrderDetail } from '../../api/orderApi'
@@ -31,6 +31,7 @@ export function OrderDetailPage() {
 
   return (
     <article>
+      <p><Link to="/orders">← 我的訂單</Link></p>
       <h2>{data.orderNo}</h2>
       <p>Status: {data.status}</p>
       <p>Total: ${data.totalAmount.toFixed(2)}</p>
