@@ -32,7 +32,7 @@ class ArchitectureTest {
             ArchRule rule = noClasses().that().resideInAPackage(BASE_PACKAGE + "." + module + "..")
                 .and().resideOutsideOfPackage(BASE_PACKAGE + "." + module + ".adapter..")
                 .should().dependOnClassesThat().resideInAnyPackage(otherModulesAdapterPackages(module))
-                .allowEmptyShould(true);
+                .allowEmptyShould(module.equals("admin"));
             rule.check(CLASSES);
         }
     }
