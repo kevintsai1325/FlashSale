@@ -16,5 +16,32 @@
 
 .auth-card h2 {
   font-family: var(--font-display);
+  margin: 0 0 6px;
+  text-align: center;
+}
+
+.auth-card .kicker {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.auth-card .sub {
+  text-align: center;
+  color: var(--muted);
+  font-size: .8rem;
   margin: 0 0 20px;
+}
+
+.auth-foot {
+  text-align: center;
+  font-size: .78rem;
+  color: var(--muted);
+  margin: 16px 0 0;
+}
+
+.auth-foot a {
+  color: var(--stub);
+  font-weight: 600;
+  text-decoration: none;
 }
