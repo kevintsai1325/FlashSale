@@ -7,6 +7,7 @@ import { RequireAuth } from './features/auth/RequireAuth'
 import { PurchaseStatusPage } from './features/purchase/PurchaseStatusPage'
 import { MyOrdersPage } from './features/orders/MyOrdersPage'
 import { OrderDetailPage } from './features/orders/OrderDetailPage'
+import { RequireAdmin } from './features/admin/RequireAdmin'
 
 export const router = createBrowserRouter([
   { path: '/flash-sales/:id', element: <FlashSaleDetailPage /> },
@@ -20,5 +21,9 @@ export const router = createBrowserRouter([
       { path: '/orders', element: <MyOrdersPage /> },
       { path: '/orders/:orderId', element: <OrderDetailPage /> },
     ],
+  },
+  {
+    element: <RequireAdmin />,
+    children: [],
   },
 ])

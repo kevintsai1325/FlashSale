@@ -8,7 +8,7 @@ import { AuthContext } from './useAuth'
 function renderPage(initialEntries: Array<{ pathname: string; state?: unknown }>) {
   const queryClient = new QueryClient()
   return render(
-    <AuthContext.Provider value={{ isAuthenticated: false, login: vi.fn(), logout: vi.fn(), markAuthenticated: vi.fn() }}>
+    <AuthContext.Provider value={{ isAuthenticated: false, role: null, login: vi.fn(), logout: vi.fn(), markAuthenticated: vi.fn() }}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={initialEntries}>
           <LoginPage />

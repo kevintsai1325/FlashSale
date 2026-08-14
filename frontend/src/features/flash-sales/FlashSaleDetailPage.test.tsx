@@ -23,7 +23,7 @@ const activeSale = {
 function renderPage(isAuthenticated: boolean) {
   const queryClient = new QueryClient()
   return render(
-    <AuthContext.Provider value={{ isAuthenticated, login: vi.fn(), logout: vi.fn(), markAuthenticated: vi.fn() }}>
+    <AuthContext.Provider value={{ isAuthenticated, role: null, login: vi.fn(), logout: vi.fn(), markAuthenticated: vi.fn() }}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={['/flash-sales/1']}>
           <Routes>
