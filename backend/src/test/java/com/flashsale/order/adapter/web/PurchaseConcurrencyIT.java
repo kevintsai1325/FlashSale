@@ -13,7 +13,9 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -32,6 +34,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
@@ -107,11 +110,23 @@ class PurchaseConcurrencyIT {
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
+    @Container
+    static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+
+    @Container
+    static RabbitMQContainer rabbitmq = new RabbitMQContainer("rabbitmq:3.13-management-alpine");
+
     @DynamicPropertySource
     static void props(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.data.redis.host", redis::getHost);
+        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        registry.add("spring.rabbitmq.host", rabbitmq::getHost);
+        registry.add("spring.rabbitmq.port", rabbitmq::getAmqpPort);
+        registry.add("spring.rabbitmq.username", rabbitmq::getAdminUsername);
+        registry.add("spring.rabbitmq.password", rabbitmq::getAdminPassword);
         registry.add("spring.mail.host", () -> "localhost");
         registry.add("spring.mail.port", () -> "2525");
         registry.add("JWT_PRIVATE_KEY", () -> TEST_PRIVATE_KEY);
@@ -173,7 +188,15 @@ class PurchaseConcurrencyIT {
                     .as("purchase-requests must always return 202, never a raw 5xx, even under contention")
                     .isEqualTo(202);
                 JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-                return body.get("status").asText();
+                String requestId = body.get("requestId").asText();
+                String initialStatus = body.get("status").asText();
+                // SOLD_OUT is already terminal — only PENDING requests need polling for the
+                // consumer to resolve them to SUCCEEDED (or leave them stuck, which the test
+                // below will catch via the await timeout).
+                if (!"PENDING".equals(initialStatus)) {
+                    return initialStatus;
+                }
+                return pollUntilTerminal(token, requestId);
             });
         }
 
@@ -201,5 +224,20 @@ class PurchaseConcurrencyIT {
 
         Integer orderCount = jdbcTemplate.queryForObject("select count(*) from orders", Integer.class);
         assertThat(orderCount).as("exactly one order must exist, matching the single unit of stock").isEqualTo(STOCK);
+    }
+
+    private String pollUntilTerminal(String token, String requestId) throws Exception {
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (System.currentTimeMillis() < deadline) {
+            MvcResult poll = mockMvc.perform(get("/api/purchase-requests/" + requestId)
+                    .header("Authorization", "Bearer " + token))
+                .andReturn();
+            String status = objectMapper.readTree(poll.getResponse().getContentAsString()).get("status").asText();
+            if (!"PENDING".equals(status)) {
+                return status;
+            }
+            Thread.sleep(200);
+        }
+        throw new AssertionError("Purchase request " + requestId + " never left PENDING within 10s");
     }
 }
