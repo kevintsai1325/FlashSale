@@ -1,0 +1,45 @@
+:root {
+  --ink: #1b1710;
+  --paper: #f4f0e6;
+  --paper-raised: #fffdf8;
+  --line: #d8d0bd;
+  --line-strong: #c2b89e;
+  --muted: #8a8066;
+  --stub: #d8391e;
+  --stub-hover: #b62f18;
+  --stub-ink: #fff8ed;
+  --go: #2e7d4f;
+  --go-tint: rgba(46, 125, 79, .12);
+  --wait: #96650f;
+  --wait-tint: rgba(184, 134, 46, .16);
+  --stop: #a32f1f;
+  --stop-tint: rgba(163, 47, 31, .12);
+  --shadow: 0 1px 2px rgba(27, 23, 16, .06), 0 8px 20px -12px rgba(27, 23, 16, .18);
+  /* ponytail: skipped webfont embedding, --font-display falls back to system Arial Black — add the real subsetted woff2 (already produced once during the mockup, ask the controller session if it still has it) if the fallback reads too plain once it's live. */
+  --font-display: "Archivo Black Sub", "Arial Black", sans-serif;
+  --font-ui: -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #f3ede0; --paper: #171310; --paper-raised: #211c16;
+    --line: #3a3226; --line-strong: #4a4030; --muted: #a79c82;
+    --stub: #ff5b37; --stub-hover: #ff7455; --stub-ink: #171310;
+    --go: #57c98a; --go-tint: rgba(87, 201, 138, .16);
+    --wait: #e0ac4e; --wait-tint: rgba(224, 172, 78, .18);
+    --stop: #ff6b52; --stop-tint: rgba(255, 107, 82, .16);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  --ink: #f3ede0; --paper: #171310; --paper-raised: #211c16;
+  --line: #3a3226; --line-strong: #4a4030; --muted: #a79c82;
+  --stub: #ff5b37; --stub-hover: #ff7455; --stub-ink: #171310;
+  --go: #57c98a; --go-tint: rgba(87, 201, 138, .16);
+  --wait: #e0ac4e; --wait-tint: rgba(224, 172, 78, .18);
+  --stop: #ff6b52; --stop-tint: rgba(255, 107, 82, .16);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
+}
+
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-ui); }

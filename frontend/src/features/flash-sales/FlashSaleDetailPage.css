@@ -1,0 +1,42 @@
+.detail-hero {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.detail-hero h2 {
+  font-family: var(--font-display);
+  margin: 0;
+}
+
+.detail-description {
+  color: var(--muted);
+}
+
+.detail-price {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.countdown-strip {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  border-top: 1px dashed var(--line-strong);
+  border-bottom: 1px dashed var(--line-strong);
+  padding: 8px 0;
+  width: 100%;
+  margin: 0;
+}
+
+.detail-limit {
+  color: var(--muted);
+  font-size: .9rem;
+  margin: 0;
+}

@@ -1,0 +1,6 @@
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: .68rem; font-weight: 700;
+  letter-spacing: .03em; padding: 3px 9px 3px 7px; border-radius: 20px; text-transform: uppercase; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.go { background: var(--go-tint); color: var(--go); }
+.pill.wait { background: var(--wait-tint); color: var(--wait); }
+.pill.stop { background: var(--stop-tint); color: var(--stop); }
