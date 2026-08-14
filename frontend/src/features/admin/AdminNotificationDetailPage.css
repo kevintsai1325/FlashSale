@@ -1,0 +1,79 @@
+.admin-notification-detail {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 900px;
+}
+
+.notification-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.notification-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 3px 9px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.notification-status-pill.status-sent {
+  background: var(--go-tint);
+  color: var(--go);
+}
+.notification-status-pill.status-pending {
+  background: var(--wait-tint);
+  color: var(--wait);
+}
+.notification-status-pill.status-failed {
+  background: var(--stop-tint);
+  color: var(--stop);
+}
+
+.notification-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+}
+
+.notification-info-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.notification-info-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.notification-info-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.notification-last-error {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--stop);
+  background: var(--stop-tint);
+  border-radius: 4px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+}

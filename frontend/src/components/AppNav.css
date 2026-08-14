@@ -35,6 +35,33 @@
   color: var(--stub);
 }
 
+.nav-bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.nav-bell .badge {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--stop);
+  color: var(--paper-raised);
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .nav-logout {
   background: none;
   border: 1px solid var(--line-strong);

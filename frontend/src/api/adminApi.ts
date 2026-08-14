@@ -169,3 +169,67 @@ export async function getAdminOrderDetail(orderId: number): Promise<AdminOrderDe
   const response = await apiFetch(`/api/admin/orders/${orderId}`)
   return response.json()
 }
+
+/** Mirrors the backend's `NotificationView` record. `createdAt`/`updatedAt` are ISO-8601 strings. */
+export interface NotificationView {
+  id: number
+  userId: number
+  channel: string
+  template: string
+  recipient: string
+  status: string
+  attemptCount: number
+  lastError: string | null
+  read: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/** Query params accepted by `GET /api/admin/notifications` (`AdminNotificationController`). */
+export interface NotificationFilters {
+  userId?: number
+  channel?: string
+  status?: string
+  read?: boolean
+  page?: number
+  size?: number
+}
+
+export async function listNotifications(
+  filters: NotificationFilters = {}
+): Promise<PagedResult<NotificationView>> {
+  const params = new URLSearchParams()
+  if (filters.userId !== undefined) params.set('userId', String(filters.userId))
+  if (filters.channel) params.set('channel', filters.channel)
+  if (filters.status) params.set('status', filters.status)
+  if (filters.read !== undefined) params.set('read', String(filters.read))
+  params.set('page', String(filters.page ?? 0))
+  params.set('size', String(filters.size ?? 20))
+
+  const response = await apiFetch(`/api/admin/notifications?${params.toString()}`)
+  return response.json()
+}
+
+export async function getNotificationDetail(id: number): Promise<NotificationView> {
+  const response = await apiFetch(`/api/admin/notifications/${id}`)
+  return response.json()
+}
+
+/** Body mirrors the backend's `ReadStatusRequest`: `{ ids: number[], read: boolean }`. */
+export async function updateNotificationReadStatus(ids: number[], read: boolean): Promise<void> {
+  await apiFetch('/api/admin/notifications/read-status', {
+    method: 'PATCH',
+    body: JSON.stringify({ ids, read }),
+  })
+}
+
+export async function retryNotification(id: number): Promise<void> {
+  await apiFetch(`/api/admin/notifications/${id}/retry`, { method: 'POST' })
+}
+
+/** Backend returns `Map<String, Long>` shaped as `{ count: <unread count> }`. */
+export async function getUnreadCount(): Promise<number> {
+  const response = await apiFetch('/api/admin/notifications/unread-count')
+  const data: { count: number } = await response.json()
+  return data.count
+}
