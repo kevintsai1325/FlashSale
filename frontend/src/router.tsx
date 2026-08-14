@@ -8,6 +8,7 @@ import { PurchaseStatusPage } from './features/purchase/PurchaseStatusPage'
 import { MyOrdersPage } from './features/orders/MyOrdersPage'
 import { OrderDetailPage } from './features/orders/OrderDetailPage'
 import { RequireAdmin } from './features/admin/RequireAdmin'
+import { AdminDashboardPage } from './features/admin/AdminDashboardPage'
 
 export const router = createBrowserRouter([
   { path: '/flash-sales/:id', element: <FlashSaleDetailPage /> },
@@ -24,6 +25,6 @@ export const router = createBrowserRouter([
   },
   {
     element: <RequireAdmin />,
-    children: [],
+    children: [{ path: '/admin', element: <AdminDashboardPage /> }],
   },
 ])
