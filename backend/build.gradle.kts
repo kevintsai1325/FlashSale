@@ -40,6 +40,7 @@ dependencies {
     testImplementation("org.testcontainers:postgresql:1.20.1")
     testImplementation("org.testcontainers:rabbitmq:1.20.1")
     testImplementation("org.awaitility:awaitility:4.2.2")
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
 }
 
 tasks.withType<Test> {
