@@ -11,7 +11,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -28,21 +27,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * path, idempotent-replay, sold-out, and ownership/IDOR checks all work end to end against the
  * real schema.
  *
- * <p>This class is {@code @Transactional}, so every {@code MockMvc} call in a given test method
- * runs on the same connection/transaction — it can prove the {@code SELECT ... FOR UPDATE} query
- * itself is well-formed and that the sequential sold-out/replay logic is correct, but it CANNOT
- * prove the pessimistic lock actually serializes concurrent buyers, since nothing here ever
- * contends for the row. That property — "N concurrent buyers, only as many succeed as there is
- * stock" — is proven separately by {@link PurchaseConcurrencyIT}, which deliberately omits
- * {@code @Transactional} so its requests run as genuinely concurrent, independently-committing
- * transactions.
+ * <p>The purchase-request flow is async: a successful request only reserves stock in Redis and
+ * enqueues a {@code CreateOrderRequested} outbox event — it does not resolve to {@code SUCCEEDED}
+ * or create an {@code Order} synchronously (that happens once Task 6's consumer processes the
+ * event). This class therefore only asserts on the immediate {@code PENDING}/{@code SOLD_OUT}
+ * admission outcome. It is not {@code @Transactional}: {@code InventoryStockGateway}/
+ * {@code OutboxPublisher} are real beans talking to real Testcontainers Redis/RabbitMQ, and
+ * {@code @Scheduled} methods like {@code OutboxPublisher} run on a separate thread outside any
+ * test transaction anyway.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("integration-test")
 @Testcontainers
 @Sql("/db/testdata/inventory-fixtures.sql")
-@Transactional
 class PurchaseControllerIT {
 
     // Test-only RSA key pair (same as other web ITs), needed only because JwtKeyConfig
@@ -93,11 +91,25 @@ class PurchaseControllerIT {
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
+    @Container
+    static org.testcontainers.containers.GenericContainer<?> redis =
+        new org.testcontainers.containers.GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+
+    @Container
+    static org.testcontainers.containers.RabbitMQContainer rabbitmq =
+        new org.testcontainers.containers.RabbitMQContainer("rabbitmq:3.13-management-alpine");
+
     @DynamicPropertySource
     static void props(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.data.redis.host", redis::getHost);
+        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        registry.add("spring.rabbitmq.host", rabbitmq::getHost);
+        registry.add("spring.rabbitmq.port", rabbitmq::getAmqpPort);
+        registry.add("spring.rabbitmq.username", rabbitmq::getAdminUsername);
+        registry.add("spring.rabbitmq.password", rabbitmq::getAdminPassword);
         registry.add("spring.mail.host", () -> "localhost");
         registry.add("spring.mail.port", () -> "2525");
         registry.add("JWT_PRIVATE_KEY", () -> TEST_PRIVATE_KEY);
@@ -137,24 +149,22 @@ class PurchaseControllerIT {
                 .header("Authorization", "Bearer " + firstUserToken)
                 .header("Idempotency-Key", "key-1"))
             .andExpect(status().isAccepted())
-            .andExpect(jsonPath("$.status").value("SUCCEEDED"))
-            .andExpect(jsonPath("$.orderId").isNotEmpty())
+            .andExpect(jsonPath("$.status").value("PENDING"))
+            .andExpect(jsonPath("$.orderId").isEmpty())
             .andExpect(jsonPath("$.requestId").isNotEmpty())
             .andReturn();
 
         String firstBody = firstPurchase.getResponse().getContentAsString();
         String firstRequestId = objectMapper.readTree(firstBody).get("requestId").asText();
-        long firstOrderId = objectMapper.readTree(firstBody).get("orderId").asLong();
 
-        // Replay with the same idempotency key must return the identical requestId/orderId,
-        // not create a second order or decrement inventory again.
+        // Replay with the same idempotency key must return the identical requestId, not create
+        // a second PurchaseRequest row or reserve stock twice.
         mockMvc.perform(post("/api/flash-sales/1/purchase-requests")
                 .header("Authorization", "Bearer " + firstUserToken)
                 .header("Idempotency-Key", "key-1"))
             .andExpect(status().isAccepted())
-            .andExpect(jsonPath("$.status").value("SUCCEEDED"))
-            .andExpect(jsonPath("$.requestId").value(firstRequestId))
-            .andExpect(jsonPath("$.orderId").value(firstOrderId));
+            .andExpect(jsonPath("$.status").value("PENDING"))
+            .andExpect(jsonPath("$.requestId").value(firstRequestId));
 
         // A second user competing for the same (now-exhausted, stock=1) inventory must be
         // told SOLD_OUT rather than succeeding or erroring.
@@ -169,8 +179,7 @@ class PurchaseControllerIT {
         mockMvc.perform(get("/api/purchase-requests/" + firstRequestId)
                 .header("Authorization", "Bearer " + firstUserToken))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("SUCCEEDED"))
-            .andExpect(jsonPath("$.orderId").value(firstOrderId));
+            .andExpect(jsonPath("$.status").value("PENDING"));
 
         // A different authenticated user must not be able to read another user's purchase
         // request by guessing/obtaining its requestId (IDOR check) — the API must respond as
@@ -179,11 +188,5 @@ class PurchaseControllerIT {
                 .header("Authorization", "Bearer " + secondUserToken))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value("PURCHASE_REQUEST_NOT_FOUND"));
-
-        mockMvc.perform(get("/api/orders/me")
-                .header("Authorization", "Bearer " + firstUserToken))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].id").value(firstOrderId));
     }
 }

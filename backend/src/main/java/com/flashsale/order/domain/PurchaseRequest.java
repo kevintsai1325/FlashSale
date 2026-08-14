@@ -44,8 +44,8 @@ public class PurchaseRequest {
         return request;
     }
 
-    public static PurchaseRequest succeed(Long userId, Long flashSaleId, String idempotencyKey, Long orderId) {
-        return create(userId, flashSaleId, idempotencyKey, PurchaseRequestStatus.SUCCEEDED, orderId);
+    public static PurchaseRequest pending(Long userId, Long flashSaleId, String idempotencyKey) {
+        return create(userId, flashSaleId, idempotencyKey, PurchaseRequestStatus.PENDING, null);
     }
 
     public static PurchaseRequest soldOut(Long userId, Long flashSaleId, String idempotencyKey) {
@@ -54,6 +54,15 @@ public class PurchaseRequest {
 
     public static PurchaseRequest reject(Long userId, Long flashSaleId, String idempotencyKey) {
         return create(userId, flashSaleId, idempotencyKey, PurchaseRequestStatus.REJECTED, null);
+    }
+
+    public void markSucceeded(Long orderId) {
+        this.status = PurchaseRequestStatus.SUCCEEDED;
+        this.orderId = orderId;
+    }
+
+    public void markFailed() {
+        this.status = PurchaseRequestStatus.FAILED;
     }
 
     public Long getId() { return id; }

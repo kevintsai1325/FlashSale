@@ -2,11 +2,13 @@ package com.flashsale.order.application;
 
 import com.flashsale.common.exception.ConflictException;
 import com.flashsale.common.exception.NotFoundException;
+import com.flashsale.common.messaging.EventTypes;
+import com.flashsale.common.messaging.OutboxWriter;
 import com.flashsale.flashsale.application.FlashSaleRepository;
 import com.flashsale.flashsale.domain.FlashSale;
-import com.flashsale.inventory.application.InventoryRepository;
-import com.flashsale.inventory.domain.Inventory;
-import com.flashsale.order.domain.Order;
+import com.flashsale.inventory.application.InventoryStockGateway;
+import com.flashsale.inventory.application.StockReservationResult;
+import com.flashsale.order.application.event.CreateOrderRequestedEvent;
 import com.flashsale.order.domain.PurchaseRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,16 +19,16 @@ import java.time.Instant;
 public class CreatePurchaseRequestService {
 
     private final FlashSaleRepository flashSaleRepository;
-    private final InventoryRepository inventoryRepository;
-    private final OrderRepository orderRepository;
+    private final InventoryStockGateway inventoryStockGateway;
     private final PurchaseRequestRepository purchaseRequestRepository;
+    private final OutboxWriter outboxWriter;
 
-    public CreatePurchaseRequestService(FlashSaleRepository flashSaleRepository, InventoryRepository inventoryRepository,
-                                         OrderRepository orderRepository, PurchaseRequestRepository purchaseRequestRepository) {
+    public CreatePurchaseRequestService(FlashSaleRepository flashSaleRepository, InventoryStockGateway inventoryStockGateway,
+                                         PurchaseRequestRepository purchaseRequestRepository, OutboxWriter outboxWriter) {
         this.flashSaleRepository = flashSaleRepository;
-        this.inventoryRepository = inventoryRepository;
-        this.orderRepository = orderRepository;
+        this.inventoryStockGateway = inventoryStockGateway;
         this.purchaseRequestRepository = purchaseRequestRepository;
+        this.outboxWriter = outboxWriter;
     }
 
     @Transactional
@@ -48,21 +50,17 @@ public class CreatePurchaseRequestService {
             return purchaseRequestRepository.save(PurchaseRequest.reject(userId, flashSaleId, idempotencyKey));
         }
 
-        Inventory inventory = inventoryRepository.findByFlashSaleIdForUpdate(flashSaleId)
-            .orElseThrow(() -> new NotFoundException("INVENTORY_NOT_FOUND", "Inventory for flash sale " + flashSaleId + " does not exist"));
-
         int quantity = flashSale.getPurchaseLimitPerUser();
-        if (!inventory.hasStock(quantity)) {
+        StockReservationResult reservation = inventoryStockGateway.reserve(flashSaleId, quantity);
+        if (reservation == StockReservationResult.INSUFFICIENT_STOCK) {
             return purchaseRequestRepository.save(PurchaseRequest.soldOut(userId, flashSaleId, idempotencyKey));
         }
 
-        inventory.sell(quantity);
-        inventoryRepository.save(inventory);
+        PurchaseRequest request = purchaseRequestRepository.save(PurchaseRequest.pending(userId, flashSaleId, idempotencyKey));
 
-        Order order = Order.createPendingPayment(userId, flashSale.getProductId(), quantity, flashSale.getSalePrice());
-        Order savedOrder = orderRepository.save(order);
+        outboxWriter.write("PurchaseRequest", request.getId().toString(), EventTypes.CREATE_ORDER_REQUESTED,
+            new CreateOrderRequestedEvent(request.getId(), userId, flashSaleId, flashSale.getProductId(), quantity, flashSale.getSalePrice()));
 
-        return purchaseRequestRepository.save(
-            PurchaseRequest.succeed(userId, flashSaleId, idempotencyKey, savedOrder.getId()));
+        return request;
     }
 }
