@@ -10,4 +10,5 @@ public interface PurchaseRequestRepository {
     Optional<PurchaseRequest> findByRequestId(UUID requestId);
     Optional<PurchaseRequest> findByUserIdAndFlashSaleIdAndIdempotencyKey(Long userId, Long flashSaleId, String idempotencyKey);
     boolean existsSucceededForUserAndFlashSale(Long userId, Long flashSaleId);
+    Optional<PurchaseRequest> findByOrderId(Long orderId);
 }

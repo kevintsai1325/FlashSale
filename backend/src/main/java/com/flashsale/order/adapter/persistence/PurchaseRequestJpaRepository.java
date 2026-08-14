@@ -9,4 +9,5 @@ public interface PurchaseRequestJpaRepository extends JpaRepository<PurchaseRequ
     Optional<PurchaseRequest> findByRequestId(UUID requestId);
     Optional<PurchaseRequest> findByUserIdAndFlashSaleIdAndIdempotencyKey(Long userId, Long flashSaleId, String idempotencyKey);
     boolean existsByUserIdAndFlashSaleIdAndStatus(Long userId, Long flashSaleId, com.flashsale.order.domain.PurchaseRequestStatus status);
+    Optional<PurchaseRequest> findByOrderId(Long orderId);
 }

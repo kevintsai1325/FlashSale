@@ -50,6 +50,32 @@ public class Order {
         return order;
     }
 
+    public void pay() {
+        requirePendingPayment("ORDER_NOT_PAYABLE");
+        status = OrderStatus.PAID;
+    }
+
+    public void cancel() {
+        requirePendingPayment("ORDER_NOT_CANCELLABLE");
+        status = OrderStatus.CANCELLED;
+    }
+
+    public void markExpired() {
+        requirePendingPayment("ORDER_NOT_EXPIRABLE");
+        status = OrderStatus.EXPIRED;
+    }
+
+    public int totalQuantity() {
+        return items.stream().mapToInt(OrderItem::getQuantity).sum();
+    }
+
+    private void requirePendingPayment(String code) {
+        if (status != OrderStatus.PENDING_PAYMENT) {
+            throw new com.flashsale.common.exception.ConflictException(code,
+                "Order " + id + " is not awaiting payment (status=" + status + ")");
+        }
+    }
+
     public Long getId() { return id; }
     public String getOrderNo() { return orderNo; }
     public Long getUserId() { return userId; }

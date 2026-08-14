@@ -1,6 +1,7 @@
 package com.flashsale.order.adapter.web;
 
 import com.flashsale.common.exception.NotFoundException;
+import com.flashsale.order.application.CancelOrderService;
 import com.flashsale.order.application.OrderRepository;
 import com.flashsale.order.application.dto.OrderDetail;
 import com.flashsale.order.application.dto.OrderSummary;
@@ -16,9 +17,11 @@ import java.util.List;
 public class OrderController {
 
     private final OrderRepository orderRepository;
+    private final CancelOrderService cancelOrderService;
 
-    public OrderController(OrderRepository orderRepository) {
+    public OrderController(OrderRepository orderRepository, CancelOrderService cancelOrderService) {
         this.orderRepository = orderRepository;
+        this.cancelOrderService = cancelOrderService;
     }
 
     @GetMapping("/me")
@@ -35,6 +38,13 @@ public class OrderController {
         Order order = orderRepository.findById(orderId)
             .filter(o -> o.getUserId().equals(userId))
             .orElseThrow(() -> new NotFoundException("ORDER_NOT_FOUND", "Order " + orderId + " does not exist"));
+        return new OrderDetail(order.getId(), order.getOrderNo(), order.getTotalAmount(), order.getStatus().name(), order.getPaymentDueAt());
+    }
+
+    @PostMapping("/{orderId}/cancel")
+    public OrderDetail cancel(@PathVariable Long orderId, @AuthenticationPrincipal Jwt jwt) {
+        Long userId = jwt.getClaim("userId");
+        Order order = cancelOrderService.cancel(orderId, userId);
         return new OrderDetail(order.getId(), order.getOrderNo(), order.getTotalAmount(), order.getStatus().name(), order.getPaymentDueAt());
     }
 }

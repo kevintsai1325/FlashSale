@@ -38,4 +38,9 @@ public class PurchaseRequestRepositoryImpl implements PurchaseRequestRepository 
     public boolean existsSucceededForUserAndFlashSale(Long userId, Long flashSaleId) {
         return jpaRepository.existsByUserIdAndFlashSaleIdAndStatus(userId, flashSaleId, PurchaseRequestStatus.SUCCEEDED);
     }
+
+    @Override
+    public Optional<PurchaseRequest> findByOrderId(Long orderId) {
+        return jpaRepository.findByOrderId(orderId);
+    }
 }
