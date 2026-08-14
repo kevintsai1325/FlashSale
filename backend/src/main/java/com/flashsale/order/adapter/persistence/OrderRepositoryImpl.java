@@ -3,6 +3,8 @@ package com.flashsale.order.adapter.persistence;
 import com.flashsale.order.application.OrderRepository;
 import com.flashsale.order.domain.Order;
 import com.flashsale.order.domain.OrderStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -45,5 +47,15 @@ public class OrderRepositoryImpl implements OrderRepository {
     @Override
     public List<Order> findAllCreatedAfter(Instant since) {
         return jpaRepository.findByCreatedAtAfter(since);
+    }
+
+    @Override
+    public Page<Order> findAllPaged(Pageable pageable) {
+        return jpaRepository.findAll(pageable);
+    }
+
+    @Override
+    public Optional<Order> findByIdWithItems(Long id) {
+        return jpaRepository.findWithItemsById(id);
     }
 }

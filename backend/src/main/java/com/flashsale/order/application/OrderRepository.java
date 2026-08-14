@@ -2,6 +2,8 @@ package com.flashsale.order.application;
 
 import com.flashsale.order.domain.Order;
 import com.flashsale.order.domain.OrderStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -17,4 +19,8 @@ public interface OrderRepository {
     long countByStatus(OrderStatus status);
     BigDecimal sumTotalAmountByStatus(OrderStatus status);
     List<Order> findAllCreatedAfter(Instant since);
+
+    // Admin order list/detail (com.flashsale.admin).
+    Page<Order> findAllPaged(Pageable pageable);
+    Optional<Order> findByIdWithItems(Long id);
 }

@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 public interface OrderJpaRepository extends JpaRepository<Order, Long> {
     List<Order> findAllByUserId(Long userId);
@@ -24,4 +25,9 @@ public interface OrderJpaRepository extends JpaRepository<Order, Long> {
     BigDecimal sumTotalAmountByStatus(@Param("status") OrderStatus status);
 
     List<Order> findByCreatedAtAfter(Instant since);
+
+    // join fetch items to avoid LazyInitializationException outside the repository call's own
+    // transaction (open-in-view is disabled — see application.yml).
+    @Query("select distinct o from Order o join fetch o.items where o.id = :id")
+    Optional<Order> findWithItemsById(@Param("id") Long id);
 }
