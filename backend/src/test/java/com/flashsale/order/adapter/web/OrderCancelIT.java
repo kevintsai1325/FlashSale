@@ -94,6 +94,11 @@ class OrderCancelIT {
         Integer releaseEventCount = jdbcTemplate.queryForObject(
             "select count(*) from outbox_events where event_type = 'StockReleaseRequested'", Integer.class);
         assertThat(releaseEventCount).isEqualTo(1);
+
+        Integer historyCount = jdbcTemplate.queryForObject(
+            "select count(*) from order_status_history where order_id = 777 and from_status = 'PENDING_PAYMENT' and to_status = 'CANCELLED'",
+            Integer.class);
+        assertThat(historyCount).isEqualTo(1);
     }
 
     @Test

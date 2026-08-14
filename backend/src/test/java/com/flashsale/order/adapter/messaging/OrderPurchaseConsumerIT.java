@@ -154,5 +154,11 @@ class OrderPurchaseConsumerIT {
         Integer remainingStock = jdbcTemplate.queryForObject(
             "select available_quantity from inventory where flash_sale_id = 1", Integer.class);
         assertThat(remainingStock).isEqualTo(0);
+
+        Long createdOrderId = jdbcTemplate.queryForObject("select id from orders limit 1", Long.class);
+        Integer historyCount = jdbcTemplate.queryForObject(
+            "select count(*) from order_status_history where order_id = ? and from_status is null and to_status = 'PENDING_PAYMENT'",
+            Integer.class, createdOrderId);
+        assertThat(historyCount).isEqualTo(1);
     }
 }

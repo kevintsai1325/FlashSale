@@ -3,7 +3,9 @@ package com.flashsale.payment.application;
 import com.flashsale.common.exception.NotFoundException;
 import com.flashsale.order.application.OrderCompensationService;
 import com.flashsale.order.application.OrderRepository;
+import com.flashsale.order.application.OrderStatusHistoryRepository;
 import com.flashsale.order.domain.Order;
+import com.flashsale.order.domain.OrderStatus;
 import com.flashsale.payment.domain.PaymentRecord;
 import com.flashsale.payment.domain.PaymentResult;
 import org.springframework.stereotype.Service;
@@ -15,12 +17,15 @@ public class SubmitPaymentService {
     private final OrderRepository orderRepository;
     private final OrderCompensationService compensationService;
     private final PaymentRecordRepository paymentRecordRepository;
+    private final OrderStatusHistoryRepository orderStatusHistoryRepository;
 
     public SubmitPaymentService(OrderRepository orderRepository, OrderCompensationService compensationService,
-                                 PaymentRecordRepository paymentRecordRepository) {
+                                 PaymentRecordRepository paymentRecordRepository,
+                                 OrderStatusHistoryRepository orderStatusHistoryRepository) {
         this.orderRepository = orderRepository;
         this.compensationService = compensationService;
         this.paymentRecordRepository = paymentRecordRepository;
+        this.orderStatusHistoryRepository = orderStatusHistoryRepository;
     }
 
     @Transactional
@@ -34,6 +39,7 @@ public class SubmitPaymentService {
         if (result == PaymentResult.SUCCESS) {
             order.pay();
             orderRepository.save(order);
+            orderStatusHistoryRepository.record(order.getId(), OrderStatus.PENDING_PAYMENT, OrderStatus.PAID);
         } else {
             compensationService.failPayment(order);
         }

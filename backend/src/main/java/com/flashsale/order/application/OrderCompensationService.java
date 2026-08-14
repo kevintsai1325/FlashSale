@@ -6,6 +6,7 @@ import com.flashsale.inventory.application.InventoryRepository;
 import com.flashsale.inventory.application.event.StockReleaseRequestedEvent;
 import com.flashsale.inventory.domain.Inventory;
 import com.flashsale.order.domain.Order;
+import com.flashsale.order.domain.OrderStatus;
 import com.flashsale.order.domain.PurchaseRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,13 +18,16 @@ public class OrderCompensationService {
     private final PurchaseRequestRepository purchaseRequestRepository;
     private final InventoryRepository inventoryRepository;
     private final OutboxWriter outboxWriter;
+    private final OrderStatusHistoryRepository orderStatusHistoryRepository;
 
     public OrderCompensationService(OrderRepository orderRepository, PurchaseRequestRepository purchaseRequestRepository,
-                                     InventoryRepository inventoryRepository, OutboxWriter outboxWriter) {
+                                     InventoryRepository inventoryRepository, OutboxWriter outboxWriter,
+                                     OrderStatusHistoryRepository orderStatusHistoryRepository) {
         this.orderRepository = orderRepository;
         this.purchaseRequestRepository = purchaseRequestRepository;
         this.inventoryRepository = inventoryRepository;
         this.outboxWriter = outboxWriter;
+        this.orderStatusHistoryRepository = orderStatusHistoryRepository;
     }
 
     @Transactional
@@ -49,6 +53,7 @@ public class OrderCompensationService {
 
     private void compensate(Order order) {
         orderRepository.save(order);
+        orderStatusHistoryRepository.record(order.getId(), OrderStatus.PENDING_PAYMENT, order.getStatus());
         PurchaseRequest purchaseRequest = purchaseRequestRepository.findByOrderId(order.getId())
             .orElseThrow(() -> new IllegalStateException("No purchase request linked to order " + order.getId()));
         int quantity = order.totalQuantity();

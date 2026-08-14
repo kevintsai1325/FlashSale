@@ -6,9 +6,11 @@ import com.flashsale.common.messaging.ConsumedMessageGuard;
 import com.flashsale.inventory.application.InventoryRepository;
 import com.flashsale.inventory.domain.Inventory;
 import com.flashsale.order.application.OrderRepository;
+import com.flashsale.order.application.OrderStatusHistoryRepository;
 import com.flashsale.order.application.PurchaseRequestRepository;
 import com.flashsale.order.application.event.CreateOrderRequestedEvent;
 import com.flashsale.order.domain.Order;
+import com.flashsale.order.domain.OrderStatus;
 import com.flashsale.order.domain.PurchaseRequest;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -26,14 +28,17 @@ public class OrderPurchaseConsumer {
     private final PurchaseRequestRepository purchaseRequestRepository;
     private final InventoryRepository inventoryRepository;
     private final OrderRepository orderRepository;
+    private final OrderStatusHistoryRepository orderStatusHistoryRepository;
     private final ObjectMapper objectMapper;
 
     public OrderPurchaseConsumer(ConsumedMessageGuard consumedMessageGuard, PurchaseRequestRepository purchaseRequestRepository,
-                                  InventoryRepository inventoryRepository, OrderRepository orderRepository, ObjectMapper objectMapper) {
+                                  InventoryRepository inventoryRepository, OrderRepository orderRepository,
+                                  OrderStatusHistoryRepository orderStatusHistoryRepository, ObjectMapper objectMapper) {
         this.consumedMessageGuard = consumedMessageGuard;
         this.purchaseRequestRepository = purchaseRequestRepository;
         this.inventoryRepository = inventoryRepository;
         this.orderRepository = orderRepository;
+        this.orderStatusHistoryRepository = orderStatusHistoryRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -61,6 +66,7 @@ public class OrderPurchaseConsumer {
 
         Order order = Order.createPendingPayment(event.userId(), event.productId(), event.quantity(), event.unitPrice());
         Order savedOrder = orderRepository.save(order);
+        orderStatusHistoryRepository.record(savedOrder.getId(), null, OrderStatus.PENDING_PAYMENT);
 
         purchaseRequest.markSucceeded(savedOrder.getId());
         purchaseRequestRepository.save(purchaseRequest);

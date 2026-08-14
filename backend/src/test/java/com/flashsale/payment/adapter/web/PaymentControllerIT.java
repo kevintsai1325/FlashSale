@@ -88,6 +88,11 @@ class PaymentControllerIT {
         Integer paymentRecordCount = jdbcTemplate.queryForObject(
             "select count(*) from payment_records where order_id = 881 and result = 'SUCCESS'", Integer.class);
         assertThat(paymentRecordCount).isEqualTo(1);
+
+        Integer historyCount = jdbcTemplate.queryForObject(
+            "select count(*) from order_status_history where order_id = 881 and from_status = 'PENDING_PAYMENT' and to_status = 'PAID'",
+            Integer.class);
+        assertThat(historyCount).isEqualTo(1);
     }
 
     @Test

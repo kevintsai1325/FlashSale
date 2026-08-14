@@ -72,5 +72,9 @@ class PaymentTimeoutSchedulerIT {
         Integer available = jdbcTemplate.queryForObject(
             "select available_quantity from inventory where flash_sale_id = 1", Integer.class);
         assertThat(available).isEqualTo(1);
+
+        Integer historyCount = jdbcTemplate.queryForObject(
+            "select count(*) from order_status_history where order_id = 883 and to_status = 'EXPIRED'", Integer.class);
+        assertThat(historyCount).isEqualTo(1);
     }
 }
