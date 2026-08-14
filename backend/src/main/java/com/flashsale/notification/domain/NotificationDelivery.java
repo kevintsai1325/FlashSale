@@ -69,12 +69,27 @@ public class NotificationDelivery {
         this.updatedAt = Instant.now();
     }
 
+    /** Admin batch read-status toggle (Task 7, {@code PATCH /api/admin/notifications/read-status}). */
+    public void markRead() {
+        this.read = true;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Admin batch read-status toggle (Task 7, {@code PATCH /api/admin/notifications/read-status}). */
+    public void markUnread() {
+        this.read = false;
+        this.updatedAt = Instant.now();
+    }
+
     public Long getId() { return id; }
     public Long getUserId() { return userId; }
+    public NotificationChannel getChannel() { return channel; }
     public String getRecipient() { return recipient; }
     public String getTemplate() { return template; }
     public NotificationStatus getStatus() { return status; }
     public int getAttemptCount() { return attemptCount; }
+    public String getLastError() { return lastError; }
+    public boolean isRead() { return read; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }
