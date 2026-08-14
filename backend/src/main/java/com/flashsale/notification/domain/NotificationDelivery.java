@@ -37,6 +37,12 @@ public class NotificationDelivery {
     @Column(name = "is_read", nullable = false)
     private boolean read = false;
 
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
     protected NotificationDelivery() {}
 
     public static NotificationDelivery pendingEmail(Long userId, String template, String recipient) {
@@ -46,14 +52,21 @@ public class NotificationDelivery {
         delivery.template = template;
         delivery.recipient = recipient;
         delivery.status = NotificationStatus.PENDING;
+        delivery.createdAt = Instant.now();
+        delivery.updatedAt = Instant.now();
         return delivery;
     }
 
-    public void markSent() { this.status = NotificationStatus.SENT; }
+    public void markSent() {
+        this.status = NotificationStatus.SENT;
+        this.updatedAt = Instant.now();
+    }
+
     public void markFailed(String error) {
         this.status = NotificationStatus.FAILED;
         this.lastError = error;
         this.attemptCount++;
+        this.updatedAt = Instant.now();
     }
 
     public Long getId() { return id; }
@@ -61,4 +74,7 @@ public class NotificationDelivery {
     public String getRecipient() { return recipient; }
     public String getTemplate() { return template; }
     public NotificationStatus getStatus() { return status; }
+    public int getAttemptCount() { return attemptCount; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 }

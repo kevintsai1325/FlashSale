@@ -30,22 +30,34 @@ public class EmailNotificationSender implements NotificationSender {
     @Async
     public void send(NotificationDelivery delivery) {
         NotificationDelivery saved = deliveryRepository.save(delivery);
+        attempt(saved);
+        deliveryRepository.save(saved);
+    }
+
+    // Deliberately synchronous (unlike send()): callers (NotificationRetryService,
+    // NotificationRetryScheduler) call deliveryRepository.save(delivery) immediately after this
+    // returns and rely on the attempt's status mutation already having happened by then.
+    @Override
+    public void retryAttempt(NotificationDelivery delivery) {
+        attempt(delivery);
+    }
+
+    private void attempt(NotificationDelivery delivery) {
         try {
             Context context = new Context();
-            context.setVariable("email", saved.getRecipient());
-            String html = templateEngine.process("email/" + saved.getTemplate(), context);
+            context.setVariable("email", delivery.getRecipient());
+            String html = templateEngine.process("email/" + delivery.getTemplate(), context);
 
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
-            helper.setTo(saved.getRecipient());
+            helper.setTo(delivery.getRecipient());
             helper.setSubject("Welcome to FlashSale");
             helper.setText(html, true);
 
             mailSender.send(message);
-            saved.markSent();
+            delivery.markSent();
         } catch (Exception e) {
-            saved.markFailed(e.getMessage());
+            delivery.markFailed(e.getMessage());
         }
-        deliveryRepository.save(saved);
     }
 }
