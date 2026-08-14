@@ -5,6 +5,7 @@ import { RegisterPage } from './features/auth/RegisterPage'
 import { LoginPage } from './features/auth/LoginPage'
 import { RequireAuth } from './features/auth/RequireAuth'
 import { PurchaseStatusPage } from './features/purchase/PurchaseStatusPage'
+import { MyOrdersPage } from './features/orders/MyOrdersPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <FlashSaleListPage /> },
@@ -15,6 +16,7 @@ export const router = createBrowserRouter([
     element: <RequireAuth />,
     children: [
       { path: '/purchase-requests/:requestId', element: <PurchaseStatusPage /> },
+      { path: '/orders', element: <MyOrdersPage /> },
     ],
   },
 ])
