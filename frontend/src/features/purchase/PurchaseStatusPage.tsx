@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getPurchaseRequest } from '../../api/purchaseApi'
+import './PurchaseStatusPage.css'
 
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'SOLD_OUT', 'REJECTED', 'FAILED'])
 const NON_SUCCESS_TERMINAL_STATUSES = new Set(['SOLD_OUT', 'REJECTED', 'FAILED'])
@@ -29,8 +30,11 @@ export function PurchaseStatusPage() {
   if (isError || !data) return <div role="alert">Failed to load purchase request status.</div>
 
   return (
-    <article>
-      <p>{STATUS_MESSAGES[data.status] ?? data.status}</p>
+    <article className="purchase-status-card">
+      {data.status === 'PENDING' && <div className="ring spin" role="status" aria-label="處理中" />}
+      {data.status === 'SUCCEEDED' && <div className="stamp go" aria-hidden="true">PASS</div>}
+      {NON_SUCCESS_TERMINAL_STATUSES.has(data.status) && <div className="stamp stop" aria-hidden="true">STOP</div>}
+      <p className="status-message">{STATUS_MESSAGES[data.status] ?? data.status}</p>
       {data.status === 'SUCCEEDED' && data.orderId != null && (
         <Link to={`/orders/${data.orderId}`}>查看訂單</Link>
       )}

@@ -47,7 +47,7 @@ describe('OrderDetailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /模擬付款成功/ }))
 
     await waitFor(() => expect(submitSpy).toHaveBeenCalledWith(1, 'SUCCESS'))
-    await waitFor(() => expect(screen.getByText(/PAID/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/已付款/)).toBeInTheDocument())
   })
 
   it('cancels the order and reflects the updated status', async () => {
@@ -59,6 +59,6 @@ describe('OrderDetailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /取消訂單/ }))
 
     await waitFor(() => expect(cancelSpy).toHaveBeenCalledWith(1))
-    await waitFor(() => expect(screen.getByText(/CANCELLED/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/已取消/)).toBeInTheDocument())
   })
 })

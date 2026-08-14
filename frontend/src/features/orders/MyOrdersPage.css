@@ -1,0 +1,79 @@
+.order-grid {
+  list-style: none;
+  margin: 0;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+@media (min-width: 900px) {
+  .order-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+}
+
+.order-card {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.order-card-link {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 16px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.order-card-no {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.order-card-amount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.orders-empty {
+  max-width: 400px;
+  margin: 48px auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.ticket-icon {
+  width: 64px;
+  height: 44px;
+  border: 2px dashed var(--line-strong);
+  border-radius: 6px;
+  position: relative;
+}
+
+.ticket-icon::before,
+.ticket-icon::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  background: var(--paper);
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+
+.ticket-icon::before { left: -6px; }
+.ticket-icon::after { right: -6px; }
