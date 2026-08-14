@@ -66,6 +66,17 @@ export function FlashSaleDetailPage() {
         <StatusPill status={data.status} />
         <p className="detail-description">{data.productDescription}</p>
         <p className="detail-price">${data.salePrice.toFixed(2)}</p>
+        {data.totalQuantity > 0 && (
+          <div className="stock-meter">
+            <div className="stock-meter-row">
+              <span>剩餘庫存</span>
+              <span className="stock-meter-count">{data.availableQuantity} / {data.totalQuantity}</span>
+            </div>
+            <div className="stock-bar">
+              <span style={{ width: `${(data.availableQuantity / data.totalQuantity) * 100}%` }} />
+            </div>
+          </div>
+        )}
         {countdown && <p className="countdown-strip">倒數 {countdown}</p>}
         <p className="detail-limit">每人限購 {data.purchaseLimitPerUser} 件</p>
         <button

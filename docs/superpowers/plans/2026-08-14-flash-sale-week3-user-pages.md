@@ -956,6 +956,8 @@ Tasks 1-5 above shipped the *functional* Week 3 pages with zero styling — `fro
 
 **One deviation from the approved visual mockup, decided up front — don't rediscover this mid-task:** the mockup's flash-sale detail screen showed a "剩餘庫存 1/3" stock meter. `GET /api/flash-sales/{id}` (`FlashSaleDetail` DTO) does not expose remaining/total quantity — only `productDescription` and `purchaseLimitPerUser`. Adding that field would be a backend DTO change, out of scope for this frontend-only round (design spec §0). **Drop the stock meter entirely** from the real `FlashSaleDetailPage` — keep the countdown-to-`endsAt` strip (real data, already returned) and the "每人限購 N 件" note (from `purchaseLimitPerUser`, already returned).
 
+> **Update (post Task 6-8):** the user asked for this back. `FlashSaleDetail` gained `totalQuantity`/`availableQuantity` (backed by `InventoryRepository.findByFlashSaleId`, defaulting to `0`/`0` if no inventory row exists yet — `Inventory` also gained a `getTotalQuantity()` getter it didn't have before), and `FlashSaleDetailPage` shows the stock meter again, guarded by `data.totalQuantity > 0` so the zero-inventory default doesn't render a nonsensical "0 / 0" bar. This was a small, deliberate exception to "no backend changes this round" — approved explicitly, not a scope-creep reversal to repeat elsewhere in this plan without asking first.
+
 - [ ] **Step 0: Read the design spec**
 
 Read `docs/superpowers/specs/2026-08-14-flash-sale-week3-user-pages-design.md` §10-11 in full (token list, status-color mapping table, RWD breakpoints, shared-component list, font strategy) before writing any code in Tasks 6-8.

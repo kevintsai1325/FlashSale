@@ -15,6 +15,8 @@ const activeSale = {
   startsAt: new Date().toISOString(),
   endsAt: new Date().toISOString(),
   purchaseLimitPerUser: 1,
+  totalQuantity: 3,
+  availableQuantity: 1,
   status: 'ACTIVE',
 }
 

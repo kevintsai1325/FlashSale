@@ -5,5 +5,6 @@ import java.time.Instant;
 
 public record FlashSaleDetail(
     Long id, String productName, String productDescription, BigDecimal salePrice,
-    Instant startsAt, Instant endsAt, int purchaseLimitPerUser, String status
+    Instant startsAt, Instant endsAt, int purchaseLimitPerUser,
+    int totalQuantity, int availableQuantity, String status
 ) {}

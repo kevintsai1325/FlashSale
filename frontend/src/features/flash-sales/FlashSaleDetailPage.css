@@ -25,6 +25,41 @@
   margin: 0;
 }
 
+.stock-meter {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stock-meter-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: .8rem;
+  color: var(--muted);
+}
+
+.stock-meter-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--stub);
+  font-weight: 600;
+}
+
+.stock-bar {
+  height: 7px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.stock-bar span {
+  display: block;
+  height: 100%;
+  background: var(--stub);
+  border-radius: 4px;
+}
+
 .countdown-strip {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;

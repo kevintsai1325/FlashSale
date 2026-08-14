@@ -6,6 +6,8 @@ import com.flashsale.common.exception.NotFoundException;
 import com.flashsale.flashsale.application.dto.FlashSaleDetail;
 import com.flashsale.flashsale.application.dto.FlashSaleSummary;
 import com.flashsale.flashsale.domain.FlashSale;
+import com.flashsale.inventory.application.InventoryRepository;
+import com.flashsale.inventory.domain.Inventory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -15,10 +17,13 @@ public class FlashSaleQueryService {
 
     private final FlashSaleRepository flashSaleRepository;
     private final ProductRepository productRepository;
+    private final InventoryRepository inventoryRepository;
 
-    public FlashSaleQueryService(FlashSaleRepository flashSaleRepository, ProductRepository productRepository) {
+    public FlashSaleQueryService(FlashSaleRepository flashSaleRepository, ProductRepository productRepository,
+                                  InventoryRepository inventoryRepository) {
         this.flashSaleRepository = flashSaleRepository;
         this.productRepository = productRepository;
+        this.inventoryRepository = inventoryRepository;
     }
 
     public List<FlashSaleSummary> listAll() {
@@ -35,8 +40,12 @@ public class FlashSaleQueryService {
         FlashSale sale = flashSaleRepository.findById(id)
             .orElseThrow(() -> new NotFoundException("FLASH_SALE_NOT_FOUND", "Flash sale " + id + " does not exist"));
         Product product = productFor(sale);
+        Inventory inventory = inventoryRepository.findByFlashSaleId(id).orElse(null);
+        int totalQuantity = inventory != null ? inventory.getTotalQuantity() : 0;
+        int availableQuantity = inventory != null ? inventory.getAvailableQuantity() : 0;
         return new FlashSaleDetail(sale.getId(), product.getName(), product.getDescription(), sale.getSalePrice(),
-            sale.getStartsAt(), sale.getEndsAt(), sale.getPurchaseLimitPerUser(), sale.getStatus().name());
+            sale.getStartsAt(), sale.getEndsAt(), sale.getPurchaseLimitPerUser(),
+            totalQuantity, availableQuantity, sale.getStatus().name());
     }
 
     private Product productFor(FlashSale sale) {

@@ -112,6 +112,8 @@ class FlashSaleControllerIT {
             .andExpect(jsonPath("$.productDescription").value("Only 100 pairs"))
             .andExpect(jsonPath("$.salePrice").value(9.99))
             .andExpect(jsonPath("$.purchaseLimitPerUser").value(1))
+            .andExpect(jsonPath("$.totalQuantity").value(100))
+            .andExpect(jsonPath("$.availableQuantity").value(42))
             .andExpect(jsonPath("$.status").value("ACTIVE"));
     }
 

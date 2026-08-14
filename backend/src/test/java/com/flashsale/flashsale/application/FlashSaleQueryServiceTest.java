@@ -6,6 +6,8 @@ import com.flashsale.common.exception.NotFoundException;
 import com.flashsale.flashsale.application.dto.FlashSaleSummary;
 import com.flashsale.flashsale.domain.FlashSale;
 import com.flashsale.flashsale.domain.FlashSaleStatus;
+import com.flashsale.inventory.application.InventoryRepository;
+import com.flashsale.inventory.domain.Inventory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -24,12 +26,13 @@ class FlashSaleQueryServiceTest {
 
     @Mock FlashSaleRepository flashSaleRepository;
     @Mock ProductRepository productRepository;
+    @Mock InventoryRepository inventoryRepository;
 
     FlashSaleQueryService service;
 
     @Test
     void listActiveSalesJoinsProductDetails() {
-        service = new FlashSaleQueryService(flashSaleRepository, productRepository);
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
         FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
             Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), 1);
         Product product = Product.create("Limited Sneakers", "Only 100 pairs");
@@ -45,9 +48,43 @@ class FlashSaleQueryServiceTest {
 
     @Test
     void detailThrowsNotFoundForUnknownSale() {
-        service = new FlashSaleQueryService(flashSaleRepository, productRepository);
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
         when(flashSaleRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getDetail(99L)).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void detailIncludesInventoryQuantities() {
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
+            Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), 1);
+        Product product = Product.create("Limited Sneakers", "Only 100 pairs");
+        Inventory inventory = Inventory.initialize(1L, 100);
+        inventory.sell(58);
+        when(flashSaleRepository.findById(1L)).thenReturn(Optional.of(sale));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(inventoryRepository.findByFlashSaleId(1L)).thenReturn(Optional.of(inventory));
+
+        var result = service.getDetail(1L);
+
+        assertThat(result.totalQuantity()).isEqualTo(100);
+        assertThat(result.availableQuantity()).isEqualTo(42);
+    }
+
+    @Test
+    void detailDefaultsQuantitiesToZeroWhenNoInventoryRow() {
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
+            Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), 1);
+        Product product = Product.create("Limited Sneakers", "Only 100 pairs");
+        when(flashSaleRepository.findById(1L)).thenReturn(Optional.of(sale));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(inventoryRepository.findByFlashSaleId(1L)).thenReturn(Optional.empty());
+
+        var result = service.getDetail(1L);
+
+        assertThat(result.totalQuantity()).isEqualTo(0);
+        assertThat(result.availableQuantity()).isEqualTo(0);
     }
 }

@@ -12,6 +12,8 @@ export interface FlashSaleSummary {
 export interface FlashSaleDetail extends FlashSaleSummary {
   productDescription: string
   purchaseLimitPerUser: number
+  totalQuantity: number
+  availableQuantity: number
 }
 
 export async function listFlashSales(): Promise<FlashSaleSummary[]> {
