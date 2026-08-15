@@ -13,6 +13,7 @@ import { ApiLogsPage } from './features/admin/ApiLogsPage'
 import { AdminOrdersPage } from './features/admin/AdminOrdersPage'
 import { AdminOrderDetailPage } from './features/admin/AdminOrderDetailPage'
 import { AdminProductsPage } from './features/admin/AdminProductsPage'
+import { AdminFlashSalesPage } from './features/admin/AdminFlashSalesPage'
 import { AdminNotificationsPage } from './features/admin/AdminNotificationsPage'
 import { AdminNotificationDetailPage } from './features/admin/AdminNotificationDetailPage'
 
@@ -36,6 +37,7 @@ export const router = createBrowserRouter([
       { path: '/admin/api-logs', element: <ApiLogsPage /> },
       { path: '/admin/orders', element: <AdminOrdersPage /> },
       { path: '/admin/products', element: <AdminProductsPage /> },
+      { path: '/admin/flash-sales', element: <AdminFlashSalesPage /> },
       { path: '/admin/orders/:orderId', element: <AdminOrderDetailPage /> },
       { path: '/admin/notifications', element: <AdminNotificationsPage /> },
       { path: '/admin/notifications/:id', element: <AdminNotificationDetailPage /> },

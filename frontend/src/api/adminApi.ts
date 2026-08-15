@@ -270,3 +270,35 @@ export async function updateProduct(id: number, name: string, description: strin
   })
   return response.json()
 }
+
+/** Mirrors the backend's `flashsale.application.dto.FlashSaleSummary` record. */
+export interface AdminFlashSaleSummary {
+  id: number
+  productName: string
+  salePrice: number
+  startsAt: string
+  endsAt: string
+  status: string
+}
+
+export async function listAdminFlashSales(): Promise<AdminFlashSaleSummary[]> {
+  const response = await apiFetch('/api/admin/flash-sales')
+  return response.json()
+}
+
+export interface CreateFlashSaleInput {
+  productId: number
+  salePrice: number
+  startsAt: string
+  endsAt: string
+  purchaseLimitPerUser: number
+  totalQuantity: number
+}
+
+export async function createFlashSale(input: CreateFlashSaleInput): Promise<{ id: number }> {
+  const response = await apiFetch('/api/admin/flash-sales', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  return response.json()
+}

@@ -22,6 +22,9 @@ export function AdminNav() {
         <NavLink to="/admin/products" className={navLinkClassName}>
           商品管理
         </NavLink>
+        <NavLink to="/admin/flash-sales" className={navLinkClassName}>
+          搶購活動管理
+        </NavLink>
         <NavLink to="/admin/notifications" className={navLinkClassName}>
           通知中心
         </NavLink>
