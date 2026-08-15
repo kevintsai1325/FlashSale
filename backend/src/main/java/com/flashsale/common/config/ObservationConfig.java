@@ -6,9 +6,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Registers the {@code @Observed}-annotation aspect. Spring Boot auto-configures an
- * {@link ObservationRegistry} bean but does not register {@link ObservedAspect} itself — it has to
- * be added explicitly to activate the {@code @Observed} annotation on scheduled jobs.
+ * Registers the {@code @Observed}-annotation aspect. Spring Boot 3.3+ already auto-configures
+ * {@link ObservedAspect} via {@code ObservationAutoConfiguration$ObservedAspectConfiguration}
+ * when {@code aspectjweaver} is on the classpath (which {@code spring-boot-starter-aop} provides
+ * here), guarded by {@code @ConditionalOnMissingBean} — so this explicit bean is not filling a
+ * gap that would otherwise be missing. It's kept as a defensive/explicit registration so
+ * {@code @Observed} on scheduled jobs doesn't depend on undocumented auto-configuration behavior
+ * that could change across Boot versions; {@code @ConditionalOnMissingBean} on Boot's side means
+ * at most one of the two ever wins.
  */
 @Configuration
 public class ObservationConfig {

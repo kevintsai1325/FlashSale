@@ -127,8 +127,12 @@ docker compose exec postgres psql -U flashsale -d flashsale \
   `/actuator/metrics` 系列端點需要 `ADMIN` 角色的 JWT(比照後台 API 的授權方式),同樣只在容器
   內部或直接對 backend 發請求時可用。
 - **Zipkin**:`http://localhost:9411/zipkin/`(只在本機 debug 用,沒有透過 Nginx 反代,不對外
-  暴露)。每個 HTTP 請求都會產生一條 trace,並延續到 RabbitMQ producer/consumer 與排程背景
-  工作,可以用來追蹤一次搶購請求從進站到訂單建立的完整呼叫鏈。
+  暴露)。每個 HTTP 請求都會產生一條獨立的 trace;RabbitMQ producer/consumer(outbox 送出到
+  `OrderPurchaseConsumer` 處理)透過 `observation-enabled` 正確串成另一條獨立的 trace,但因為
+  outbox 沒有持久化 trace context,這條訊息 trace 跟原本觸發它的 HTTP 請求 trace 是**分開**的
+  兩條,不是同一條;每個排程背景工作也各自起一條獨立 trace。要串成從進站到訂單建立的完整
+  呼叫鏈,需要在 `outbox_events` 加一欄存 trace context 並手動傳遞,目前是已知限制,列為未來
+  工作。
 - **結構化日誌**:`docker compose logs backend` 輸出的每一行都是 JSON,可以用 `jq` 過濾/解析,
   每一行都帶有 `traceId`/`spanId`,可以拿 Zipkin 上看到的 trace id 回頭到 log 裡搜尋同一次
   請求的完整處理過程。

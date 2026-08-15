@@ -178,10 +178,15 @@ spring:
 
 `spring.rabbitmq.template.observation-enabled` / `listener.simple.observation-enabled` 這兩個
 設定開啟後,Spring Boot 3.3 的 auto-configuration 會自動幫 `RabbitTemplate`(producer)與
-`@RabbitListener`(consumer)包上 Micrometer Observation,讓 span 資訊透過訊息 header 傳遞——
-`CreatePurchaseRequestService` 發布 `CreateOrderRequestedEvent` 到 outbox、`OutboxPublisher`
-真正送出訊息、`OrderPurchaseConsumer.handle()` 收到訊息處理,這三段會在 Zipkin 上顯示成同一條
-trace 底下的不同 span,不需要手動傳遞 trace context。
+`@RabbitListener`(consumer)包上 Micrometer Observation,讓 span 資訊透過訊息 header 傳遞——但
+這只能串起 producer 跟 consumer 彼此之間的 trace,不會延續到更早觸發它們的 HTTP 請求。
+`CreatePurchaseRequestService` 把 `CreateOrderRequestedEvent` 寫進 outbox 這一步,是在該次 HTTP
+請求自己的 trace 底下;真正把訊息送出去的 `OutboxPublisher.publishPending()` 是 `@Scheduled`
+方法,沒有上游 span,所以它呼叫 `rabbitTemplate.send()` 時起的是一條全新的 trace,
+`OrderPurchaseConsumer.handle()` 收到訊息後掛的 span 屬於這條新 trace。也就是說,outbox 寫入
+(HTTP 請求 trace)跟後續的送出+消費(另一條獨立 trace)在 Zipkin 上會是兩條不同的 trace,不是
+同一條——`observation-enabled` 只保證 producer/consumer 這一段本身乾淨地串成一條 trace,不代表
+它跟最初的 HTTP 請求 trace 相連。
 
 四個排程(`PaymentTimeoutScheduler.expireOverduePayments()`、
 `InventoryReconciliationScheduler`、`NotificationRetryScheduler`、`ApiAuditRetentionScheduler`)
