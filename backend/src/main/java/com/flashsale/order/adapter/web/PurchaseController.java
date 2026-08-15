@@ -43,7 +43,7 @@ public class PurchaseController {
         Long userId = jwt.getClaim("userId");
         PurchaseRequest request = purchaseRequestRepository.findByRequestId(requestId)
             .filter(r -> r.getUserId().equals(userId))
-            .orElseThrow(() -> new NotFoundException("PURCHASE_REQUEST_NOT_FOUND", "Purchase request " + requestId + " does not exist"));
+            .orElseThrow(() -> new NotFoundException("PURCHASE_REQUEST_NOT_FOUND", "搶購請求 " + requestId + " 不存在"));
         return new PurchaseRequestView(request.getRequestId(), request.getStatus().name(), request.getOrderId());
     }
 }

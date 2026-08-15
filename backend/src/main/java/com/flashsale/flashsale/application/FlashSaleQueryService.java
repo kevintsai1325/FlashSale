@@ -39,7 +39,7 @@ public class FlashSaleQueryService {
 
     public FlashSaleDetail getDetail(Long id) {
         FlashSale sale = flashSaleRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("FLASH_SALE_NOT_FOUND", "Flash sale " + id + " does not exist"));
+            .orElseThrow(() -> new NotFoundException("FLASH_SALE_NOT_FOUND", "搶購活動 " + id + " 不存在"));
         Product product = productFor(sale);
         Inventory inventory = inventoryRepository.findByFlashSaleId(id).orElse(null);
         int totalQuantity = inventory != null ? inventory.getTotalQuantity() : 0;
@@ -51,6 +51,6 @@ public class FlashSaleQueryService {
 
     private Product productFor(FlashSale sale) {
         return productRepository.findById(sale.getProductId())
-            .orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "Product " + sale.getProductId() + " does not exist"));
+            .orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "商品 " + sale.getProductId() + " 不存在"));
     }
 }

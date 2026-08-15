@@ -34,10 +34,10 @@ public class LoginService {
     @Transactional
     public LoginResult login(String email, String rawPassword) {
         User user = userRepository.findByEmail(email)
-            .orElseThrow(() -> new UnauthorizedException("INVALID_CREDENTIALS", "Invalid email or password"));
+            .orElseThrow(() -> new UnauthorizedException("INVALID_CREDENTIALS", "帳號或密碼錯誤"));
 
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
-            throw new UnauthorizedException("INVALID_CREDENTIALS", "Invalid email or password");
+            throw new UnauthorizedException("INVALID_CREDENTIALS", "帳號或密碼錯誤");
         }
 
         String accessToken = jwtIssuer.issueAccessToken(user);

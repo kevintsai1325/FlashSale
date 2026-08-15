@@ -48,8 +48,8 @@ export function FlashSaleDetailPage() {
     onSuccess: (result) => navigate(`/purchase-requests/${result.requestId}`),
   })
 
-  if (isLoading) return <div>Loading…</div>
-  if (isError || !data) return <div role="alert">Failed to load flash sale.</div>
+  if (isLoading) return <div>載入中…</div>
+  if (isError || !data) return <div role="alert">無法載入搶購活動。</div>
 
   const quantityValue = Number(quantity)
   const isQuantityValid = Number.isInteger(quantityValue) && quantityValue > 0 && quantityValue <= data.purchaseLimitPerUser

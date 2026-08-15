@@ -40,15 +40,15 @@ public class CreatePurchaseRequestService {
         }
 
         FlashSale flashSale = flashSaleRepository.findById(flashSaleId)
-            .orElseThrow(() -> new NotFoundException("FLASH_SALE_NOT_FOUND", "Flash sale " + flashSaleId + " does not exist"));
+            .orElseThrow(() -> new NotFoundException("FLASH_SALE_NOT_FOUND", "搶購活動 " + flashSaleId + " 不存在"));
 
         if (!flashSale.isPurchasableAt(Instant.now())) {
-            throw new ConflictException("FLASH_SALE_NOT_ACTIVE", "Flash sale is not currently active");
+            throw new ConflictException("FLASH_SALE_NOT_ACTIVE", "搶購活動目前未開放搶購");
         }
 
         if (quantity > flashSale.getPurchaseLimitPerUser()) {
             throw new ConflictException("PURCHASE_QUANTITY_EXCEEDS_LIMIT",
-                "Quantity " + quantity + " exceeds the purchase limit of " + flashSale.getPurchaseLimitPerUser() + " for this flash sale");
+                "數量 " + quantity + " 超過此活動每人限購 " + flashSale.getPurchaseLimitPerUser() + " 件的上限");
         }
 
         if (purchaseRequestRepository.existsSucceededForUserAndFlashSale(userId, flashSaleId)) {

@@ -90,7 +90,7 @@ class AdminFlashSaleServiceTest {
 
         assertThatThrownBy(() -> service.update(1L, new BigDecimal("19.99"), starts, ends, 1, 50))
             .isInstanceOf(ConflictException.class)
-            .hasMessageContaining("started");
+            .hasMessageContaining("已經開始");
     }
 
     @Test
@@ -104,7 +104,7 @@ class AdminFlashSaleServiceTest {
 
         assertThatThrownBy(() -> service.update(1L, new BigDecimal("9.99"), starts, ends, 1, 99))
             .isInstanceOf(ConflictException.class)
-            .hasMessageContaining("started");
+            .hasMessageContaining("已經開始");
     }
 
     @Test
@@ -135,6 +135,6 @@ class AdminFlashSaleServiceTest {
 
         assertThatThrownBy(() -> service.update(1L, new BigDecimal("9.99"), starts, laterEnds, 1, 50))
             .isInstanceOf(ConflictException.class)
-            .hasMessageContaining("must be between");
+            .hasMessageContaining("必須介於");
     }
 }

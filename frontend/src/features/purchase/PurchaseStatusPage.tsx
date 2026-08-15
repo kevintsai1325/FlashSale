@@ -27,8 +27,8 @@ export function PurchaseStatusPage() {
     },
   })
 
-  if (isLoading) return <div>Loading…</div>
-  if (isError || !data) return <div role="alert">Failed to load purchase request status.</div>
+  if (isLoading) return <div>載入中…</div>
+  if (isError || !data) return <div role="alert">無法載入搶購請求狀態。</div>
 
   return (
     <>

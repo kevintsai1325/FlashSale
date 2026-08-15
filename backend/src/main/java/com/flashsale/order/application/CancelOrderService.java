@@ -20,7 +20,7 @@ public class CancelOrderService {
     public Order cancel(Long orderId, Long userId) {
         Order order = orderRepository.findById(orderId)
             .filter(o -> o.getUserId().equals(userId))
-            .orElseThrow(() -> new NotFoundException("ORDER_NOT_FOUND", "Order " + orderId + " does not exist"));
+            .orElseThrow(() -> new NotFoundException("ORDER_NOT_FOUND", "訂單 " + orderId + " 不存在"));
         compensationService.cancel(order);
         return order;
     }

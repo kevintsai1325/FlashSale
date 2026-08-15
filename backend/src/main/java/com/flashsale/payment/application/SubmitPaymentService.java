@@ -32,7 +32,7 @@ public class SubmitPaymentService {
     public Order submit(Long orderId, Long userId, PaymentResult result) {
         Order order = orderRepository.findById(orderId)
             .filter(o -> o.getUserId().equals(userId))
-            .orElseThrow(() -> new NotFoundException("ORDER_NOT_FOUND", "Order " + orderId + " does not exist"));
+            .orElseThrow(() -> new NotFoundException("ORDER_NOT_FOUND", "訂單 " + orderId + " 不存在"));
 
         paymentRecordRepository.save(PaymentRecord.record(orderId, result));
 

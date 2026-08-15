@@ -71,7 +71,7 @@ public class AdminOrderQueryService {
 
     public AdminOrderDetail getDetail(Long orderId) {
         Order order = orderRepository.findByIdWithItems(orderId)
-            .orElseThrow(() -> new NotFoundException("ORDER_NOT_FOUND", "Order " + orderId + " does not exist"));
+            .orElseThrow(() -> new NotFoundException("ORDER_NOT_FOUND", "訂單 " + orderId + " 不存在"));
 
         List<AdminOrderItemView> items = order.getItems().stream()
             .map(i -> new AdminOrderItemView(i.getProductId(), i.getQuantity(), i.getUnitPrice()))

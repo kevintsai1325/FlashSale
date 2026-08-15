@@ -99,9 +99,9 @@ export function AdminFlashSalesPage() {
         </form>
 
         {salesQuery.isLoading ? (
-          <div>Loading…</div>
+          <div>載入中…</div>
         ) : salesQuery.isError || !salesQuery.data ? (
-          <div role="alert">Failed to load flash sales.</div>
+          <div role="alert">無法載入搶購活動列表。</div>
         ) : (
           <table className="admin-table">
             <thead>

@@ -32,9 +32,9 @@ export function AdminNotificationDetailPage() {
           <Link to="/admin/notifications">← 通知中心</Link>
         </p>
         {isLoading ? (
-          <div>Loading…</div>
+          <div>載入中…</div>
         ) : isError || !data ? (
-          <div role="alert">Failed to load notification.</div>
+          <div role="alert">無法載入通知。</div>
         ) : (
           <>
             <div className="notification-header">
@@ -95,7 +95,7 @@ export function AdminNotificationDetailPage() {
               </button>
             )}
 
-            {retryMutation.isError && <div role="alert">Failed to retry notification.</div>}
+            {retryMutation.isError && <div role="alert">重送通知失敗。</div>}
           </>
         )}
       </div>

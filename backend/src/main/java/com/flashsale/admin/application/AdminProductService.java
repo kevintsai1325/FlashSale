@@ -28,7 +28,7 @@ public class AdminProductService {
     @Transactional
     public ProductView update(Long id, String name, String description) {
         Product product = productRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "Product " + id + " does not exist"));
+            .orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "商品 " + id + " 不存在"));
         product.rename(name, description);
         return toView(product);
     }

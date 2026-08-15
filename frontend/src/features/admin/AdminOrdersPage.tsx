@@ -103,9 +103,9 @@ export function AdminOrdersPage() {
         </form>
 
         {isLoading ? (
-          <div>Loading…</div>
+          <div>載入中…</div>
         ) : isError || !data ? (
-          <div role="alert">Failed to load orders.</div>
+          <div role="alert">無法載入訂單列表。</div>
         ) : (
           <>
             <div className="admin-table-scroll">

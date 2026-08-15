@@ -164,12 +164,12 @@ export function AdminNotificationsPage() {
           </div>
         )}
 
-        {readStatusMutation.isError && <div role="alert">Failed to update read status.</div>}
+        {readStatusMutation.isError && <div role="alert">更新已讀狀態失敗。</div>}
 
         {isLoading ? (
-          <div>Loading…</div>
+          <div>載入中…</div>
         ) : isError || !data ? (
-          <div role="alert">Failed to load notifications.</div>
+          <div role="alert">無法載入通知列表。</div>
         ) : (
           <>
             <div className="admin-table-scroll">

@@ -32,7 +32,7 @@ public class AdminFlashSaleService {
     public FlashSale create(Long productId, BigDecimal salePrice, Instant startsAt, Instant endsAt,
                              int purchaseLimitPerUser, int totalQuantity) {
         productRepository.findById(productId)
-            .orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "Product " + productId + " does not exist"));
+            .orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "商品 " + productId + " 不存在"));
 
         FlashSale sale = FlashSale.schedule(productId, salePrice, startsAt, endsAt, purchaseLimitPerUser);
         FlashSale saved = flashSaleRepository.save(sale);
@@ -44,11 +44,11 @@ public class AdminFlashSaleService {
     public FlashSale update(Long id, BigDecimal salePrice, Instant startsAt, Instant endsAt,
                              int purchaseLimitPerUser, int totalQuantity) {
         FlashSale sale = flashSaleRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("FLASH_SALE_NOT_FOUND", "Flash sale " + id + " does not exist"));
+            .orElseThrow(() -> new NotFoundException("FLASH_SALE_NOT_FOUND", "搶購活動 " + id + " 不存在"));
         Instant now = Instant.now();
 
         Inventory inventory = inventoryRepository.findByFlashSaleId(id)
-            .orElseThrow(() -> new NotFoundException("INVENTORY_NOT_FOUND", "Inventory for flash sale " + id + " does not exist"));
+            .orElseThrow(() -> new NotFoundException("INVENTORY_NOT_FOUND", "搶購活動 " + id + " 的庫存資料不存在"));
 
         if (sale.effectiveStatus(now) == FlashSaleStatus.SCHEDULED) {
             sale.reschedule(salePrice, startsAt, endsAt, purchaseLimitPerUser);
@@ -65,11 +65,11 @@ public class AdminFlashSaleService {
             || totalQuantity != inventory.getTotalQuantity();
         if (otherFieldsChanged) {
             throw new ConflictException("FLASH_SALE_ALREADY_STARTED",
-                "Flash sale " + id + " has already started — only endsAt may be shortened");
+                "搶購活動 " + id + " 已經開始,只能縮短結束時間");
         }
         if (endsAt.isBefore(now) || endsAt.isAfter(sale.getEndsAt())) {
             throw new ConflictException("FLASH_SALE_ENDS_AT_OUT_OF_RANGE",
-                "endsAt must be between now and the flash sale's current endsAt");
+                "結束時間必須介於現在與活動原本的結束時間之間");
         }
         sale.endEarly(endsAt);
         return sale;

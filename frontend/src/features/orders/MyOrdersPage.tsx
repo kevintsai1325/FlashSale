@@ -8,8 +8,8 @@ import './MyOrdersPage.css'
 export function MyOrdersPage() {
   const { data, isLoading, isError } = useQuery({ queryKey: ['orders', 'me'], queryFn: listMyOrders })
 
-  if (isLoading) return <div>Loading…</div>
-  if (isError || !data) return <div role="alert">Failed to load orders.</div>
+  if (isLoading) return <div>載入中…</div>
+  if (isError || !data) return <div role="alert">無法載入訂單列表。</div>
 
   return (
     <>

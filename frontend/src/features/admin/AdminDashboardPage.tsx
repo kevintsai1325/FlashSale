@@ -83,9 +83,9 @@ export function AdminDashboardPage() {
     <>
       <AdminNav />
       {isLoading ? (
-        <div>Loading…</div>
+        <div>載入中…</div>
       ) : isError || !summaryQuery.data || !trendsQuery.data ? (
-        <div role="alert">Failed to load dashboard.</div>
+        <div role="alert">無法載入儀表板。</div>
       ) : (
         <div className="admin-dashboard">
           <div className="stat-card-grid">

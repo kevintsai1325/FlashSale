@@ -40,7 +40,7 @@ public class RedisInventoryStockGateway implements InventoryStockGateway {
             int available = inventoryRepository.findByFlashSaleId(flashSaleId)
                 .map(Inventory::getAvailableQuantity)
                 .orElseThrow(() -> new NotFoundException("INVENTORY_NOT_FOUND",
-                    "Inventory for flash sale " + flashSaleId + " does not exist"));
+                    "搶購活動 " + flashSaleId + " 的庫存資料不存在"));
             redisTemplate.opsForValue().setIfAbsent(stockKey(flashSaleId), String.valueOf(available));
         }
     }
@@ -57,7 +57,7 @@ public class RedisInventoryStockGateway implements InventoryStockGateway {
             }
             if (remaining == null || remaining == -2) {
                 throw new ServiceUnavailableException("STOCK_GATEWAY_UNAVAILABLE",
-                    "Unable to reach Redis to reserve stock for flash sale " + flashSaleId);
+                    "無法連線至庫存服務,請稍後再試(活動 " + flashSaleId + ")");
             }
             StockReservationResult result = remaining == -1 ? StockReservationResult.INSUFFICIENT_STOCK : StockReservationResult.RESERVED;
             purchaseMetrics.recordReservationOutcome(result == StockReservationResult.RESERVED ? "reserved" : "insufficient_stock");

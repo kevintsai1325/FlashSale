@@ -24,7 +24,7 @@ public class NotificationRetryService {
     public void retry(Long deliveryId) {
         NotificationDelivery delivery = deliveryRepository.findById(deliveryId)
             .orElseThrow(() -> new NotFoundException("NOTIFICATION_NOT_FOUND",
-                "Notification " + deliveryId + " does not exist"));
+                "通知 " + deliveryId + " 不存在"));
         notificationSender.retryAttempt(delivery);
         deliveryRepository.save(delivery);
     }

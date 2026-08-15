@@ -24,7 +24,7 @@ public class ProblemDetailAccessDeniedHandler implements AccessDeniedHandler {
     public void handle(HttpServletRequest request, HttpServletResponse response,
                         AccessDeniedException accessDeniedException) throws java.io.IOException {
         ProblemDetail problemDetail = ProblemDetails.of(HttpStatus.FORBIDDEN, "ACCESS_DENIED",
-            "You do not have permission to access this resource", request.getRequestURI());
+            "您沒有權限存取此資源", request.getRequestURI());
         response.setStatus(HttpStatus.FORBIDDEN.value());
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         objectMapper.writeValue(response.getWriter(), problemDetail);

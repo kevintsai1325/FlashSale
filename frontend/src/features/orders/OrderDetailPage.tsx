@@ -35,8 +35,8 @@ export function OrderDetailPage() {
     onSuccess: updateCache,
   })
 
-  if (isLoading) return <div>Loading…</div>
-  if (isError || !data) return <div role="alert">Failed to load order.</div>
+  if (isLoading) return <div>載入中…</div>
+  if (isError || !data) return <div role="alert">無法載入訂單。</div>
 
   return (
     <>

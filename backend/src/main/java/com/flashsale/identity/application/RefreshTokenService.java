@@ -26,10 +26,10 @@ public class RefreshTokenService {
         String hash = LoginService.hash(rawToken);
         RefreshToken token = refreshTokenRepository.findByTokenHash(hash)
             .filter(t -> t.isValid(Instant.now()))
-            .orElseThrow(() -> new UnauthorizedException("INVALID_REFRESH_TOKEN", "Refresh token is invalid or expired"));
+            .orElseThrow(() -> new UnauthorizedException("INVALID_REFRESH_TOKEN", "登入憑證已失效,請重新登入"));
 
         User user = userRepository.findById(token.getUserId())
-            .orElseThrow(() -> new UnauthorizedException("INVALID_REFRESH_TOKEN", "User no longer exists"));
+            .orElseThrow(() -> new UnauthorizedException("INVALID_REFRESH_TOKEN", "使用者不存在"));
 
         return jwtIssuer.issueAccessToken(user);
     }

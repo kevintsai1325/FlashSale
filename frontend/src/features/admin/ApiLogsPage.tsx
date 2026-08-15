@@ -196,9 +196,9 @@ export function ApiLogsPage() {
         </form>
 
         {isLoading ? (
-          <div>Loading…</div>
+          <div>載入中…</div>
         ) : isError || !data ? (
-          <div role="alert">Failed to load API logs.</div>
+          <div role="alert">無法載入 API 紀錄。</div>
         ) : (
           <>
             <div className="admin-table-scroll">

@@ -32,10 +32,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
-        String detail = ex.getBindingResult().getFieldErrors().stream()
-            .map(e -> e.getField() + " " + e.getDefaultMessage())
-            .reduce((a, b) -> a + "; " + b)
-            .orElse("Validation failed");
+        String detail = ex.getBindingResult().getAllErrors().stream()
+            .map(org.springframework.validation.ObjectError::getDefaultMessage)
+            .reduce((a, b) -> a + "；" + b)
+            .orElse("輸入資料驗證失敗");
         return build(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", detail, request);
     }
 

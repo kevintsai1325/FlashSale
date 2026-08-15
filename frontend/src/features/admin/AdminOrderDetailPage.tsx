@@ -23,9 +23,9 @@ export function AdminOrderDetailPage() {
           <Link to="/admin/orders">← 訂單查詢</Link>
         </p>
         {isLoading ? (
-          <div>Loading…</div>
+          <div>載入中…</div>
         ) : isError || !data ? (
-          <div role="alert">Failed to load order.</div>
+          <div role="alert">無法載入訂單。</div>
         ) : (
           <>
             <div className="order-header">

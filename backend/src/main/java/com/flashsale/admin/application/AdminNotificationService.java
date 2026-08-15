@@ -77,7 +77,7 @@ public class AdminNotificationService {
         NotificationDelivery delivery = findOrThrow(id);
         if (delivery.getStatus() != NotificationStatus.FAILED) {
             throw new ConflictException("NOTIFICATION_NOT_FAILED",
-                "Notification " + id + " is " + delivery.getStatus() + ", only FAILED deliveries can be retried");
+                "通知 " + id + " 目前狀態為 " + delivery.getStatus() + ",只有失敗的通知才能重送");
         }
         notificationRetryService.retry(id);
     }
@@ -89,6 +89,6 @@ public class AdminNotificationService {
     private NotificationDelivery findOrThrow(Long id) {
         return deliveryRepository.findById(id)
             .orElseThrow(() -> new NotFoundException("NOTIFICATION_NOT_FOUND",
-                "Notification " + id + " does not exist"));
+                "通知 " + id + " 不存在"));
     }
 }

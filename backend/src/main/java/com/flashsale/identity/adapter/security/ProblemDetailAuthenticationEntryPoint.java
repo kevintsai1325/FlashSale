@@ -24,7 +24,7 @@ public class ProblemDetailAuthenticationEntryPoint implements AuthenticationEntr
     public void commence(HttpServletRequest request, HttpServletResponse response,
                           AuthenticationException authException) throws java.io.IOException {
         ProblemDetail problemDetail = ProblemDetails.of(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED",
-            "Authentication is required to access this resource", request.getRequestURI());
+            "存取此資源需要先登入", request.getRequestURI());
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         objectMapper.writeValue(response.getWriter(), problemDetail);

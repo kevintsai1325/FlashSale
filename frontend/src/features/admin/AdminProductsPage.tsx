@@ -46,9 +46,9 @@ export function AdminProductsPage() {
         </form>
 
         {isLoading ? (
-          <div>Loading…</div>
+          <div>載入中…</div>
         ) : isError || !data ? (
-          <div role="alert">Failed to load products.</div>
+          <div role="alert">無法載入商品列表。</div>
         ) : (
           <table className="admin-table">
             <thead>

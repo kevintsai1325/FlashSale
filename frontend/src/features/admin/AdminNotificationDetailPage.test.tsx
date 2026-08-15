@@ -113,6 +113,6 @@ describe('AdminNotificationDetailPage', () => {
     await waitFor(() => expect(screen.getByText('user42@example.com')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: '重新排程' }))
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Failed to retry notification.'))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('重送通知失敗。'))
   })
 })

@@ -25,7 +25,7 @@ public class RegisterUserService {
     @Transactional
     public User register(String email, String rawPassword) {
         userRepository.findByEmail(email).ifPresent(existing -> {
-            throw new ConflictException("EMAIL_ALREADY_REGISTERED", "Email is already registered");
+            throw new ConflictException("EMAIL_ALREADY_REGISTERED", "此電子郵件已被註冊");
         });
 
         User user = User.register(email, passwordEncoder.encode(rawPassword), Role.USER);

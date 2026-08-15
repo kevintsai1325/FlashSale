@@ -8,8 +8,8 @@ import './FlashSaleListPage.css'
 export function FlashSaleListPage() {
   const { data, isLoading, isError } = useQuery({ queryKey: ['flash-sales'], queryFn: listFlashSales })
 
-  if (isLoading) return <div>Loading flash sales…</div>
-  if (isError) return <div role="alert">Failed to load flash sales.</div>
+  if (isLoading) return <div>載入搶購活動中…</div>
+  if (isError) return <div role="alert">無法載入搶購活動列表。</div>
 
   return (
     <>

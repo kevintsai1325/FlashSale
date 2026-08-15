@@ -93,6 +93,6 @@ describe('AdminNotificationsPage', () => {
     fireEvent.click(screen.getByLabelText('select notification 1'))
     fireEvent.click(await screen.findByRole('button', { name: '標記已讀' }))
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Failed to update read status.'))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('更新已讀狀態失敗。'))
   })
 })
