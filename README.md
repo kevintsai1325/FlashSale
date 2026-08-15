@@ -117,3 +117,29 @@ docker compose exec postgres psql -U flashsale -d flashsale \
 
 `load-tests/` 目錄下有一支 k6 壓力測試腳本,操作方式與資料準備請參考
 [`load-tests/README.md`](load-tests/README.md)。
+
+## 可觀測性 (Observability)
+
+- **Actuator**:`/actuator/health/liveness`、`/actuator/health/readiness` 兩個端點目前只給
+  容器內部使用(`compose.yaml` 的 backend healthcheck 打 `http://localhost:8080/actuator/health/readiness`),
+  沒有透過 Nginx 對外反代——`nginx/nginx.conf` 沒有 `/actuator/` 的 location 規則,本機除錯可以用
+  `docker compose exec backend wget -qO- http://localhost:8080/actuator/health/liveness`。
+  `/actuator/metrics` 系列端點需要 `ADMIN` 角色的 JWT(比照後台 API 的授權方式),同樣只在容器
+  內部或直接對 backend 發請求時可用。
+- **Zipkin**:`http://localhost:9411/zipkin/`(只在本機 debug 用,沒有透過 Nginx 反代,不對外
+  暴露)。每個 HTTP 請求都會產生一條 trace,並延續到 RabbitMQ producer/consumer 與排程背景
+  工作,可以用來追蹤一次搶購請求從進站到訂單建立的完整呼叫鏈。
+- **結構化日誌**:`docker compose logs backend` 輸出的每一行都是 JSON,可以用 `jq` 過濾/解析,
+  每一行都帶有 `traceId`/`spanId`,可以拿 Zipkin 上看到的 trace id 回頭到 log 裡搜尋同一次
+  請求的完整處理過程。
+- **自訂搶購指標**:`purchase.reservation`(tag `outcome=reserved|insufficient_stock`)、
+  `purchase.reservation.latency`、`purchase.order.created` 這三個 Micrometer 指標可以透過
+  `/actuator/metrics/{name}` 查詢,反映 Redis 預扣成功/售罄次數與延遲分布。
+
+## CI
+
+[![CI](https://github.com/kevintsai1325/FlashSale/actions/workflows/ci.yml/badge.svg)](https://github.com/kevintsai1325/FlashSale/actions/workflows/ci.yml)
+
+GitHub Actions 在每次 push 到 `main` 或開 PR 時,平行執行 backend(`./gradlew test`,涵蓋
+unit/application/integration/API/ArchUnit 測試)與 frontend(lint、型別檢查、build、
+vitest)兩個 job。CI 只驗證 build+test 通過,不包含映像檔建置/推送/部署。
