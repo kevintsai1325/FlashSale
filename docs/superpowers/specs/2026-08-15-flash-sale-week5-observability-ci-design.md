@@ -95,8 +95,16 @@ Actuator 的既有行為,不需要手寫任何 `HealthIndicator` 實作。`/actu
 
 ## 4. 自訂搶購業務指標
 
-新增 `inventory/adapter/redis/PurchaseMetrics`(`@Component`,建構子注入 `MeterRegistry`),
-提供:
+新增 `common/metrics/PurchaseMetrics`(`@Component`,建構子注入 `MeterRegistry`)。放在
+`common` 而不是 `inventory/adapter/redis` 底下,是因為這個元件同時被 `inventory` 模組
+(`RedisInventoryStockGateway`)跟 `order` 模組(`OrderPurchaseConsumer`)呼叫——寫進任何一個
+模組自己的 `adapter` package 底下,另一個模組要呼叫它就會變成「跨模組直接依賴對方的 adapter
+package」,ArchUnit 的 `modulesDoNotReachIntoOtherModulesAdapterPackages` 規則字面上不會抓到這個
+情境(它只檢查非 adapter 類別依賴其他模組 adapter,adapter 對 adapter 不在檢查範圍內),但這正是
+Week 4 handoff 文件記錄的 `ApiAuditQueryService`/`AdminOrderQueryService` 那種「規則沒涵蓋到但
+實質上跨模組耦合」的同類問題,沒必要在本輪再種一個同樣性質的debt。放進 `common..`(比照既有的
+`common.web`/`common.messaging`)兩個模組都能自由依賴,不需要新的 port 介面——這只是一個記錄
+指標的橫切工具,不是業務邏輯,不需要走 hexagonal port/adapter 那一套。提供:
 
 - `Counter reservationOutcome(String outcome)`:tag `outcome` 值為 `reserved` /
   `insufficient_stock`,對應 `StockReservationResult` 的兩種結果。
