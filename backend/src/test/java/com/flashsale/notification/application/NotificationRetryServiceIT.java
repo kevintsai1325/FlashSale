@@ -1,18 +1,14 @@
 package com.flashsale.notification.application;
 
 import com.flashsale.common.exception.NotFoundException;
+import com.flashsale.testsupport.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
@@ -30,21 +26,10 @@ import static org.mockito.Mockito.when;
 // createMimeMessage() returns a real (offline) MimeMessage so Thymeleaf rendering + message
 // construction runs unmodified, and send(...) is a Mockito no-op standing in for a successful
 // SMTP handoff.
-@SpringBootTest
-@ActiveProfiles("integration-test")
-@Testcontainers
-class NotificationRetryServiceIT {
-
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+class NotificationRetryServiceIT extends AbstractIntegrationTest {
 
     @DynamicPropertySource
-    static void props(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.mail.host", () -> "localhost");
-        registry.add("spring.mail.port", () -> "2525");
+    static void mailHealthProps(DynamicPropertyRegistry registry) {
         // @MockBean below replaces the real JavaMailSenderImpl with a Mockito mock, which breaks
         // Actuate's MailHealthContributorAutoConfiguration (it specifically scans for
         // JavaMailSenderImpl beans and throws "Beans must not be empty" otherwise). Not relevant

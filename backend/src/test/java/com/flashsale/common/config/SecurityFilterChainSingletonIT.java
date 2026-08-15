@@ -1,15 +1,9 @@
 package com.flashsale.common.config;
 
+import com.flashsale.testsupport.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.List;
 
@@ -34,20 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * any other way (e.g. by ordering the chains or narrowing their request matchers), since the
  * whole point of {@code PermitAllSecurityConfig} was to be a temporary stopgap for Task 7 only.
  */
-@SpringBootTest
-@ActiveProfiles("integration-test")
-@Testcontainers
-class SecurityFilterChainSingletonIT {
-
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
-
-    @DynamicPropertySource
-    static void props(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-    }
+class SecurityFilterChainSingletonIT extends AbstractIntegrationTest {
 
     @Autowired
     List<SecurityFilterChain> securityFilterChains;

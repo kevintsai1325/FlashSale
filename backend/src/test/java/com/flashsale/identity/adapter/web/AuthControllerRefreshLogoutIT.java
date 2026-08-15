@@ -1,29 +1,20 @@
 package com.flashsale.identity.adapter.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flashsale.testsupport.AbstractIntegrationTest;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("integration-test")
-@Testcontainers
-class AuthControllerRefreshLogoutIT {
+class AuthControllerRefreshLogoutIT extends AbstractIntegrationTest {
 
     // Test-only RSA key pair, generated once via:
     //   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048
@@ -71,16 +62,8 @@ class AuthControllerRefreshLogoutIT {
         -----END PUBLIC KEY-----
         """;
 
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
-
     @DynamicPropertySource
-    static void props(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.mail.host", () -> "localhost");
-        registry.add("spring.mail.port", () -> "2525");
+    static void jwtKeyProps(DynamicPropertyRegistry registry) {
         registry.add("JWT_PRIVATE_KEY", () -> TEST_PRIVATE_KEY);
         registry.add("JWT_PUBLIC_KEY", () -> TEST_PUBLIC_KEY);
     }

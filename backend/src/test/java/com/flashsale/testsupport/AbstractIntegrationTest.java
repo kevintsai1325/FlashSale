@@ -31,13 +31,30 @@ import org.testcontainers.containers.RabbitMQContainer;
  * fixtures during {@code SpringExtension}'s {@code BeforeEachCallback}, which JUnit invokes
  * *before* this class's own {@code @BeforeEach} methods would run — a {@code @BeforeEach} reset
  * here would wipe out the fixture data a test just asked for.
+ *
+ * <p><b>Not every IT extends this class.</b> Classes that assert on eventual outcomes produced by
+ * a real {@code @RabbitListener} or {@code @Scheduled} background job (consumers, DLQ handlers,
+ * schedulers) were deliberately left on the old per-class isolated-container pattern. Once
+ * containers are shared, a cached context's listener/scheduler beans keep running as live
+ * background threads for the rest of the suite — even while a *different* cached context is the
+ * one under test — so they can race a test's manual poll for a message meant only for it, or
+ * process another test's leftover rows. That was measured causing real, reproducible failures
+ * (a manual {@code rabbitTemplate.receive()} returning null because a live listener from another
+ * cached context had already consumed the message) before those classes were excluded here.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("integration-test")
 public abstract class AbstractIntegrationTest {
 
-    protected static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
+    // A handful of small, legitimate property differences between subclasses (JWT keypair
+    // overrides, a disabled mail health check) mean more than one distinct ApplicationContext ends
+    // up cached at once (spring.test.context.cache.maxSize=10). Each cached context keeps its own
+    // HikariCP pool (default size 10) open against this single shared container for as long as it
+    // stays cached, so several simultaneously-cached contexts can exceed Postgres's default
+    // max_connections (100). Raise the ceiling generously.
+    protected static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
+        .withCommand("postgres", "-c", "max_connections=300");
     protected static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
     protected static final RabbitMQContainer RABBITMQ = new RabbitMQContainer("rabbitmq:3.13-management-alpine");
 

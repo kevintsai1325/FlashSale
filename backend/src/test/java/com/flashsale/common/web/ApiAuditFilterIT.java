@@ -1,18 +1,13 @@
 package com.flashsale.common.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flashsale.testsupport.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Duration;
 import java.util.Map;
@@ -32,11 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * and {@code GET /api/orders/me}) are Postgres-only code paths with no Redis/RabbitMQ involved,
  * matching the precedent set by {@code FlashSaleControllerIT} and {@code AuthControllerLoginIT}.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("integration-test")
-@Testcontainers
-class ApiAuditFilterIT {
+class ApiAuditFilterIT extends AbstractIntegrationTest {
 
     // Test-only RSA key pair (same as other web ITs), needed only because JwtKeyConfig
     // requires JWT_PRIVATE_KEY/JWT_PUBLIC_KEY to build the app context.
@@ -83,16 +74,8 @@ class ApiAuditFilterIT {
         -----END PUBLIC KEY-----
         """;
 
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
-
     @DynamicPropertySource
-    static void props(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.mail.host", () -> "localhost");
-        registry.add("spring.mail.port", () -> "2525");
+    static void jwtKeyProps(DynamicPropertyRegistry registry) {
         registry.add("JWT_PRIVATE_KEY", () -> TEST_PRIVATE_KEY);
         registry.add("JWT_PUBLIC_KEY", () -> TEST_PUBLIC_KEY);
     }
