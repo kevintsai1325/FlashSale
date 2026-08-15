@@ -10,6 +10,7 @@ import com.flashsale.inventory.application.InventoryRepository;
 import com.flashsale.inventory.domain.Inventory;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 
 @Service
@@ -31,7 +32,7 @@ public class FlashSaleQueryService {
             .map(sale -> {
                 Product product = productFor(sale);
                 return new FlashSaleSummary(sale.getId(), product.getName(), sale.getSalePrice(),
-                    sale.getStartsAt(), sale.getEndsAt(), sale.getStatus().name());
+                    sale.getStartsAt(), sale.getEndsAt(), sale.effectiveStatus(Instant.now()).name());
             })
             .toList();
     }
@@ -45,7 +46,7 @@ public class FlashSaleQueryService {
         int availableQuantity = inventory != null ? inventory.getAvailableQuantity() : 0;
         return new FlashSaleDetail(sale.getId(), product.getName(), product.getDescription(), sale.getSalePrice(),
             sale.getStartsAt(), sale.getEndsAt(), sale.getPurchaseLimitPerUser(),
-            totalQuantity, availableQuantity, sale.getStatus().name());
+            totalQuantity, availableQuantity, sale.effectiveStatus(Instant.now()).name());
     }
 
     private Product productFor(FlashSale sale) {

@@ -87,4 +87,54 @@ class FlashSaleQueryServiceTest {
         assertThat(result.totalQuantity()).isEqualTo(0);
         assertThat(result.availableQuantity()).isEqualTo(0);
     }
+
+    // FlashSale.schedule() always persists FlashSaleStatus.SCHEDULED and nothing in the codebase
+    // ever transitions it afterwards — the status reported to callers must instead be computed
+    // from startsAt/endsAt/now, or a sale whose window has already elapsed keeps reporting itself
+    // as ACTIVE forever (the bug: list page shows "搶購中" for an activity that ended days ago,
+    // then the purchase attempt is correctly rejected by CreatePurchaseRequestService's real
+    // isPurchasableAt() check, producing a confusing contradiction for the user).
+
+    @Test
+    void listReportsEndedForASaleWhoseWindowHasAlreadyElapsed() {
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
+            Instant.now().minusSeconds(7200), Instant.now().minusSeconds(3600), 1);
+        Product product = Product.create("Limited Sneakers", "Only 100 pairs");
+        when(flashSaleRepository.findAll()).thenReturn(List.of(sale));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+
+        List<FlashSaleSummary> result = service.listAll();
+
+        assertThat(result.get(0).status()).isEqualTo("ENDED");
+    }
+
+    @Test
+    void listReportsScheduledForASaleThatHasNotStartedYet() {
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
+            Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), 1);
+        Product product = Product.create("Limited Sneakers", "Only 100 pairs");
+        when(flashSaleRepository.findAll()).thenReturn(List.of(sale));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+
+        List<FlashSaleSummary> result = service.listAll();
+
+        assertThat(result.get(0).status()).isEqualTo("SCHEDULED");
+    }
+
+    @Test
+    void detailReportsEndedForASaleWhoseWindowHasAlreadyElapsed() {
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
+            Instant.now().minusSeconds(7200), Instant.now().minusSeconds(3600), 1);
+        Product product = Product.create("Limited Sneakers", "Only 100 pairs");
+        when(flashSaleRepository.findById(1L)).thenReturn(Optional.of(sale));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(inventoryRepository.findByFlashSaleId(1L)).thenReturn(Optional.empty());
+
+        var result = service.getDetail(1L);
+
+        assertThat(result.status()).isEqualTo("ENDED");
+    }
 }

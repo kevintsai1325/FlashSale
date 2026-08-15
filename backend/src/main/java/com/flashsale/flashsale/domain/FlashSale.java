@@ -49,6 +49,20 @@ public class FlashSale {
         return !now.isBefore(startsAt) && now.isBefore(endsAt);
     }
 
+    /**
+     * The persisted {@link #status} is written once by {@link #schedule} and never transitions
+     * afterwards — nothing in this codebase moves a sale from SCHEDULED to ACTIVE to ENDED as time
+     * passes. Callers that need to know whether a sale is currently active, upcoming, or over must
+     * derive it from {@code startsAt}/{@code endsAt} instead of trusting {@link #getStatus()},
+     * which reads as whatever it was set to at creation regardless of how much time has elapsed.
+     */
+    public FlashSaleStatus effectiveStatus(Instant now) {
+        if (now.isBefore(startsAt)) {
+            return FlashSaleStatus.SCHEDULED;
+        }
+        return now.isBefore(endsAt) ? FlashSaleStatus.ACTIVE : FlashSaleStatus.ENDED;
+    }
+
     public Long getId() { return id; }
     public Long getProductId() { return productId; }
     public BigDecimal getSalePrice() { return salePrice; }
