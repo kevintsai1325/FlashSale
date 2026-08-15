@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import './AdminNav.css'
 
 function navLinkClassName({ isActive }: { isActive: boolean }) {
@@ -28,6 +28,9 @@ export function AdminNav() {
         <NavLink to="/admin/notifications" className={navLinkClassName}>
           通知中心
         </NavLink>
+        <Link to="/" className="admin-nav-link">
+          回前台
+        </Link>
       </div>
     </nav>
   )
