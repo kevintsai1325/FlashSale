@@ -63,6 +63,27 @@ public class FlashSale {
         return now.isBefore(endsAt) ? FlashSaleStatus.ACTIVE : FlashSaleStatus.ENDED;
     }
 
+    /**
+     * Only valid while {@link #effectiveStatus} is {@code SCHEDULED} — the caller
+     * ({@code AdminFlashSaleService}) is responsible for checking that before calling this;
+     * this method itself has no side channel to verify "now" against {@code startsAt}.
+     */
+    public void reschedule(BigDecimal salePrice, Instant startsAt, Instant endsAt, int purchaseLimitPerUser) {
+        this.salePrice = salePrice;
+        this.startsAt = startsAt;
+        this.endsAt = endsAt;
+        this.purchaseLimitPerUser = purchaseLimitPerUser;
+    }
+
+    /**
+     * Shortens {@code endsAt} on a sale that has already started — the only edit allowed once
+     * purchasing may be underway. The caller must have already verified
+     * {@code !newEndsAt.isBefore(now) && !newEndsAt.isAfter(this.endsAt)}.
+     */
+    public void endEarly(Instant newEndsAt) {
+        this.endsAt = newEndsAt;
+    }
+
     public Long getId() { return id; }
     public Long getProductId() { return productId; }
     public BigDecimal getSalePrice() { return salePrice; }

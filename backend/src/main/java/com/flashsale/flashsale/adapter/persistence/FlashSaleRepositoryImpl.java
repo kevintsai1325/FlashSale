@@ -20,4 +20,7 @@ public class FlashSaleRepositoryImpl implements FlashSaleRepository {
 
     @Override
     public Optional<FlashSale> findById(Long id) { return jpaRepository.findById(id); }
+
+    @Override
+    public FlashSale save(FlashSale flashSale) { return jpaRepository.save(flashSale); }
 }

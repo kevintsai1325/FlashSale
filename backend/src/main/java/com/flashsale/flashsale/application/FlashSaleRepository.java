@@ -7,4 +7,5 @@ import java.util.Optional;
 public interface FlashSaleRepository {
     List<FlashSale> findAll();
     Optional<FlashSale> findById(Long id);
+    FlashSale save(FlashSale flashSale);
 }
