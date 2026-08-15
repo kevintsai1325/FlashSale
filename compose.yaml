@@ -37,6 +37,11 @@ services:
       timeout: 5s
       retries: 10
 
+  zipkin:
+    image: openzipkin/zipkin:3
+    ports:
+      - "9411:9411"
+
   backend:
     build: ./backend
     environment:
@@ -56,6 +61,7 @@ services:
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: guest
       SPRING_RABBITMQ_PASSWORD: guest
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,6 +71,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      zipkin:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/readiness"]
       interval: 10s

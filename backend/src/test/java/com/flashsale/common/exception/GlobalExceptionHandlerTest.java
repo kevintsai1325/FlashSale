@@ -19,10 +19,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class GlobalExceptionHandlerTest {
 
     // @WebMvcTest auto-detects Filter beans app-wide (not just for the sliced controller), so
-    // ApiAuditFilter's constructor dependency on ApiAuditWriter must be satisfiable even though
-    // addFilters=false means the filter is never actually invoked in this test.
+    // ApiAuditFilter's constructor dependencies (ApiAuditWriter, Tracer) must be satisfiable even
+    // though addFilters=false means the filter is never actually invoked in this test. Tracer is
+    // normally auto-configured by micrometer-tracing-bridge-brave, but @WebMvcTest only imports a
+    // narrow slice of auto-configuration that doesn't include it.
     @MockBean
     com.flashsale.common.web.ApiAuditWriter apiAuditWriter;
+
+    @MockBean
+    io.micrometer.tracing.Tracer tracer;
 
     @Autowired
     MockMvc mockMvc;

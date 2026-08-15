@@ -22,10 +22,11 @@ import static org.awaitility.Awaitility.await;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Verifies that {@code TraceIdFilter} + {@code ApiAuditFilter} write one row per HTTP request to
+ * Verifies that {@code ApiAuditFilter} writes one row per HTTP request to
  * {@code api_audit_logs}, asynchronously (hence {@code awaitility} polling below). Only a
  * Postgres Testcontainer is used here — both endpoints exercised ({@code GET /api/flash-sales}
  * and {@code GET /api/orders/me}) are Postgres-only code paths with no Redis/RabbitMQ involved,
@@ -166,6 +167,20 @@ class ApiAuditFilterIT {
             // MockMvc requests without an explicit X-Real-IP header fall back to getRemoteAddr(),
             // which MockMvc defaults to "127.0.0.1" — never null/blank.
             assertThat(row.get("client_ip")).isEqualTo("127.0.0.1");
+        });
+    }
+
+    @Test
+    void traceIdIsARealBraveTraceIdNotAUuid() throws Exception {
+        mockMvc.perform(get("/api/flash-sales"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("X-Trace-Id", org.hamcrest.Matchers.matchesPattern("^[0-9a-f]{16,32}$")));
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            Map<String, Object> row = jdbcTemplate.queryForMap(
+                "select * from api_audit_logs where path_template = '/api/flash-sales' " +
+                    "and method = 'GET' and status = 200 order by id desc limit 1");
+            assertThat((String) row.get("trace_id")).matches("^[0-9a-f]{16,32}$");
         });
     }
 

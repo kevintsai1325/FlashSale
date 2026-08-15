@@ -1,5 +1,7 @@
 package com.flashsale.common.web;
 
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -32,24 +34,36 @@ import java.io.IOException;
  * by construction: nothing here reads the Authorization header, the request/response body streams
  * are never touched, and the only identity data captured is the numeric {@code userId} claim
  * already verified by Spring Security.
+ *
+ * <p>Trace id comes from Micrometer Tracing's {@link Tracer} (Spring Boot auto-configures a span
+ * around the whole request before this filter runs, once {@code micrometer-tracing-bridge-brave}
+ * is on the classpath) rather than a bespoke filter — see design spec §5.2.
  */
 @Component
 @Order(SecurityProperties.DEFAULT_FILTER_ORDER + 1)
 public class ApiAuditFilter extends OncePerRequestFilter {
 
+    private static final String TRACE_ID_HEADER = "X-Trace-Id";
     private static final String ERROR_CODE_ATTRIBUTE = "apiAuditErrorCode";
     private static final int MAX_USER_AGENT_LENGTH = 255;
 
     private final ApiAuditWriter auditWriter;
+    private final Tracer tracer;
 
-    public ApiAuditFilter(ApiAuditWriter auditWriter) {
+    public ApiAuditFilter(ApiAuditWriter auditWriter, Tracer tracer) {
         this.auditWriter = auditWriter;
+        this.tracer = tracer;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         long startMillis = System.currentTimeMillis();
+        Span currentSpan = tracer.currentSpan();
+        String traceId = currentSpan != null ? currentSpan.context().traceId() : null;
+        if (traceId != null) {
+            response.setHeader(TRACE_ID_HEADER, traceId);
+        }
         try {
             filterChain.doFilter(request, response);
         } finally {
@@ -62,11 +76,8 @@ public class ApiAuditFilter extends OncePerRequestFilter {
                 pathTemplate = request.getRequestURI();
             }
 
-            // Design spec 3.3: request_id and trace_id store the same value this round — they're
-            // only meant to diverge once Week 5 adds real distributed-tracing spans. Both columns
-            // come from TraceIdFilter's request attribute, not the servlet container's own id.
-            String traceId = (String) request.getAttribute(TraceIdFilter.TRACE_ID_ATTRIBUTE);
-
+            // Design spec 3.3/5.2: request_id and trace_id store the same value this round — they're
+            // only meant to diverge once a real span/trace concept needs a separate per-hop request id.
             ApiAuditLog log = new ApiAuditLog(
                 request.getMethod(),
                 pathTemplate,

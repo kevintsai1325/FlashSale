@@ -25,8 +25,11 @@ spring:
     port: ${SPRING_RABBITMQ_PORT:5672}
     username: ${SPRING_RABBITMQ_USERNAME:guest}
     password: ${SPRING_RABBITMQ_PASSWORD:guest}
+    template:
+      observation-enabled: true
     listener:
       simple:
+        observation-enabled: true
         retry:
           enabled: true
           max-attempts: 3
@@ -57,6 +60,12 @@ management:
       enabled: true
     livenessstate:
       enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${MANAGEMENT_ZIPKIN_TRACING_ENDPOINT:http://localhost:9411/api/v2/spans}
 
 logging:
   level:

@@ -5,6 +5,11 @@ spring:
   flyway:
     enabled: true
 
+management:
+  tracing:
+    sampling:
+      probability: 0
+
 # Shared test-only RSA key pair for JwtKeyConfig, used by every IT that boots the full Spring
 # context but doesn't care about JWT specifics (e.g. FlashSaleApplicationTests, FlywayMigrationIT,
 # SecurityFilterChainSingletonIT, AuthControllerRegisterIT). Tests that DO care about JWT/login
