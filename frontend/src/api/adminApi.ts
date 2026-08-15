@@ -242,3 +242,31 @@ export async function getUnreadCount(): Promise<number> {
   const data: { count: number } = await response.json()
   return data.count
 }
+
+/** Mirrors the backend's `admin.application.dto.ProductView` record. */
+export interface ProductView {
+  id: number
+  name: string
+  description: string | null
+}
+
+export async function listProducts(): Promise<ProductView[]> {
+  const response = await apiFetch('/api/admin/products')
+  return response.json()
+}
+
+export async function createProduct(name: string, description: string): Promise<ProductView> {
+  const response = await apiFetch('/api/admin/products', {
+    method: 'POST',
+    body: JSON.stringify({ name, description }),
+  })
+  return response.json()
+}
+
+export async function updateProduct(id: number, name: string, description: string): Promise<ProductView> {
+  const response = await apiFetch(`/api/admin/products/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name, description }),
+  })
+  return response.json()
+}
