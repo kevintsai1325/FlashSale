@@ -3,6 +3,7 @@ package com.flashsale.inventory.application;
 import com.flashsale.flashsale.application.FlashSaleRepository;
 import com.flashsale.flashsale.domain.FlashSale;
 import com.flashsale.inventory.domain.Inventory;
+import io.micrometer.observation.annotation.Observed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,6 +28,7 @@ public class InventoryReconciliationScheduler {
     }
 
     @Scheduled(fixedDelay = 60000)
+    @Observed(name = "scheduler.reconcileActiveFlashSales")
     public void reconcileActiveFlashSales() {
         Instant now = Instant.now();
         for (FlashSale flashSale : flashSaleRepository.findAll()) {

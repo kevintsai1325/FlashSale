@@ -28,6 +28,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-thymeleaf")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-amqp")
+    implementation("org.springframework.boot:spring-boot-starter-aop")
     implementation("io.micrometer:micrometer-tracing-bridge-brave")
     implementation("io.zipkin.reporter2:zipkin-reporter-brave")
     implementation("org.flywaydb:flyway-core")
@@ -43,8 +44,11 @@ dependencies {
     testImplementation("org.testcontainers:rabbitmq:1.20.1")
     testImplementation("org.awaitility:awaitility:4.2.2")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
+    testImplementation("io.micrometer:micrometer-observation-test")
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    maxHeapSize = "2g"
+    systemProperty("spring.test.context.cache.maxSize", "10")
 }

@@ -1,6 +1,7 @@
 package com.flashsale.notification.application;
 
 import com.flashsale.notification.domain.NotificationDelivery;
+import io.micrometer.observation.annotation.Observed;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +31,7 @@ public class NotificationRetryScheduler {
     }
 
     @Scheduled(fixedDelay = 60000)
+    @Observed(name = "scheduler.retryDueNotifications")
     public void retryDueNotifications() {
         for (NotificationDelivery delivery : deliveryRepository.findFailedWithAttemptsBelow(MAX_ATTEMPTS)) {
             if (isDue(delivery)) {

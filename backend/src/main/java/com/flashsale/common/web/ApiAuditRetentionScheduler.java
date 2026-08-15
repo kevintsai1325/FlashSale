@@ -1,5 +1,6 @@
 package com.flashsale.common.web;
 
+import io.micrometer.observation.annotation.Observed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +31,7 @@ public class ApiAuditRetentionScheduler {
 
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
+    @Observed(name = "scheduler.purgeExpiredLogs")
     public void purgeExpiredLogs() {
         Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
         int deleted = repository.deleteByOccurredAtBefore(cutoff);

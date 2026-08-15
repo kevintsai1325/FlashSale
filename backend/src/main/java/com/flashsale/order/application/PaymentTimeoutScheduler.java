@@ -1,6 +1,7 @@
 package com.flashsale.order.application;
 
 import com.flashsale.order.domain.Order;
+import io.micrometer.observation.annotation.Observed;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +20,7 @@ public class PaymentTimeoutScheduler {
     }
 
     @Scheduled(fixedDelay = 30000)
+    @Observed(name = "scheduler.expireOverduePayments")
     public void expireOverduePayments() {
         List<Order> overdue = orderRepository.findPendingPaymentPastDue(Instant.now());
         for (Order order : overdue) {
