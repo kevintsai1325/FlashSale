@@ -20,6 +20,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.time.Instant;
 import java.util.HashMap;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -150,6 +151,42 @@ class AdminFlashSaleControllerIT {
                 .contentType(APPLICATION_JSON)
                 .content(body))
             .andExpect(status().isConflict());
+    }
+
+    @Test
+    void adminCanFreelyUpdateAStillScheduledFlashSale() throws Exception {
+        String adminToken = registerAdminAndLogin("flashsale-admin-scheduled@example.com");
+        long productId = insertProduct("Scheduled Sale Product");
+
+        jdbcTemplate.update(
+            "insert into flash_sales (product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status) " +
+            "values (?, 9.99, now() + interval '1 hour', now() + interval '2 hour', 1, 'SCHEDULED')", productId);
+        long saleId = jdbcTemplate.queryForObject(
+            "select id from flash_sales where product_id = ?", Long.class, productId);
+        jdbcTemplate.update("insert into inventory (flash_sale_id, total_quantity, available_quantity) values (?, 10, 10)", saleId);
+
+        Instant newStarts = Instant.now().plusSeconds(3600 * 3);
+        Instant newEnds = Instant.now().plusSeconds(3600 * 4);
+        String body = "{\"salePrice\":29.99," +
+            "\"startsAt\":\"" + newStarts + "\"," +
+            "\"endsAt\":\"" + newEnds + "\"," +
+            "\"purchaseLimitPerUser\":5,\"totalQuantity\":80}";
+
+        mockMvc.perform(put("/api/admin/flash-sales/" + saleId)
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isOk());
+
+        var saleRow = jdbcTemplate.queryForMap(
+            "select sale_price, purchase_limit_per_user from flash_sales where id = ?", saleId);
+        assertThat(((Number) saleRow.get("sale_price")).doubleValue()).isEqualTo(29.99);
+        assertThat(((Number) saleRow.get("purchase_limit_per_user")).intValue()).isEqualTo(5);
+
+        var inventoryRow = jdbcTemplate.queryForMap(
+            "select total_quantity, available_quantity from inventory where flash_sale_id = ?", saleId);
+        assertThat(((Number) inventoryRow.get("total_quantity")).intValue()).isEqualTo(80);
+        assertThat(((Number) inventoryRow.get("available_quantity")).intValue()).isEqualTo(80);
     }
 
     @Test

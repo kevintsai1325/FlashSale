@@ -47,24 +47,28 @@ public class AdminFlashSaleService {
             .orElseThrow(() -> new NotFoundException("FLASH_SALE_NOT_FOUND", "Flash sale " + id + " does not exist"));
         Instant now = Instant.now();
 
+        Inventory inventory = inventoryRepository.findByFlashSaleId(id)
+            .orElseThrow(() -> new NotFoundException("INVENTORY_NOT_FOUND", "Inventory for flash sale " + id + " does not exist"));
+
         if (sale.effectiveStatus(now) == FlashSaleStatus.SCHEDULED) {
             sale.reschedule(salePrice, startsAt, endsAt, purchaseLimitPerUser);
             // A SCHEDULED sale has 0 reserved/sold quantity by construction (nothing can
-            // purchase it yet), so it's safe to just re-initialize the whole inventory row to
+            // purchase it yet), so it's safe to just reset the existing inventory row to
             // the new totalQuantity rather than compute a partial adjustment.
-            inventoryRepository.save(Inventory.initialize(id, totalQuantity));
+            inventory.resetTo(totalQuantity);
             return sale;
         }
 
         boolean otherFieldsChanged = salePrice.compareTo(sale.getSalePrice()) != 0
             || !startsAt.equals(sale.getStartsAt())
-            || purchaseLimitPerUser != sale.getPurchaseLimitPerUser();
+            || purchaseLimitPerUser != sale.getPurchaseLimitPerUser()
+            || totalQuantity != inventory.getTotalQuantity();
         if (otherFieldsChanged) {
             throw new ConflictException("FLASH_SALE_ALREADY_STARTED",
                 "Flash sale " + id + " has already started — only endsAt may be shortened");
         }
         if (endsAt.isBefore(now) || endsAt.isAfter(sale.getEndsAt())) {
-            throw new ConflictException("FLASH_SALE_ALREADY_STARTED",
+            throw new ConflictException("FLASH_SALE_ENDS_AT_OUT_OF_RANGE",
                 "endsAt must be between now and the flash sale's current endsAt");
         }
         sale.endEarly(endsAt);

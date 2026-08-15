@@ -64,6 +64,8 @@ class AdminFlashSaleServiceTest {
         FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
             Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), 1);
         when(flashSaleRepository.findById(1L)).thenReturn(Optional.of(sale));
+        Inventory inventory = Inventory.initialize(1L, 50);
+        when(inventoryRepository.findByFlashSaleId(1L)).thenReturn(Optional.of(inventory));
 
         Instant newStarts = Instant.now().plusSeconds(1800);
         Instant newEnds = Instant.now().plusSeconds(9000);
@@ -73,6 +75,8 @@ class AdminFlashSaleServiceTest {
         assertThat(sale.getStartsAt()).isEqualTo(newStarts);
         assertThat(sale.getEndsAt()).isEqualTo(newEnds);
         assertThat(sale.getPurchaseLimitPerUser()).isEqualTo(2);
+        assertThat(inventory.getTotalQuantity()).isEqualTo(80);
+        assertThat(inventory.getAvailableQuantity()).isEqualTo(80);
     }
 
     @Test
@@ -82,8 +86,23 @@ class AdminFlashSaleServiceTest {
         Instant ends = Instant.now().plusSeconds(3600);
         FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"), starts, ends, 1);
         when(flashSaleRepository.findById(1L)).thenReturn(Optional.of(sale));
+        when(inventoryRepository.findByFlashSaleId(1L)).thenReturn(Optional.of(Inventory.initialize(1L, 50)));
 
         assertThatThrownBy(() -> service.update(1L, new BigDecimal("19.99"), starts, ends, 1, 50))
+            .isInstanceOf(ConflictException.class)
+            .hasMessageContaining("started");
+    }
+
+    @Test
+    void updateRejectsTotalQuantityChangeOnceTheSaleHasStarted() {
+        service = new AdminFlashSaleService(flashSaleRepository, productRepository, inventoryRepository);
+        Instant starts = Instant.now().minusSeconds(60);
+        Instant ends = Instant.now().plusSeconds(3600);
+        FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"), starts, ends, 1);
+        when(flashSaleRepository.findById(1L)).thenReturn(Optional.of(sale));
+        when(inventoryRepository.findByFlashSaleId(1L)).thenReturn(Optional.of(Inventory.initialize(1L, 50)));
+
+        assertThatThrownBy(() -> service.update(1L, new BigDecimal("9.99"), starts, ends, 1, 99))
             .isInstanceOf(ConflictException.class)
             .hasMessageContaining("started");
     }
@@ -95,9 +114,10 @@ class AdminFlashSaleServiceTest {
         Instant originalEnds = Instant.now().plusSeconds(3600);
         FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"), starts, originalEnds, 1);
         when(flashSaleRepository.findById(1L)).thenReturn(Optional.of(sale));
+        when(inventoryRepository.findByFlashSaleId(1L)).thenReturn(Optional.of(Inventory.initialize(1L, 50)));
 
         Instant earlierEnds = Instant.now().plusSeconds(60);
-        service.update(1L, new BigDecimal("9.99"), starts, earlierEnds, 1, /* totalQuantity unused on this path */ 0);
+        service.update(1L, new BigDecimal("9.99"), starts, earlierEnds, 1, /* matches mocked inventory's current totalQuantity */ 50);
 
         assertThat(sale.getEndsAt()).isEqualTo(earlierEnds);
     }
@@ -109,10 +129,12 @@ class AdminFlashSaleServiceTest {
         Instant originalEnds = Instant.now().plusSeconds(3600);
         FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"), starts, originalEnds, 1);
         when(flashSaleRepository.findById(1L)).thenReturn(Optional.of(sale));
+        when(inventoryRepository.findByFlashSaleId(1L)).thenReturn(Optional.of(Inventory.initialize(1L, 50)));
 
         Instant laterEnds = originalEnds.plusSeconds(3600);
 
-        assertThatThrownBy(() -> service.update(1L, new BigDecimal("9.99"), starts, laterEnds, 1, 0))
-            .isInstanceOf(ConflictException.class);
+        assertThatThrownBy(() -> service.update(1L, new BigDecimal("9.99"), starts, laterEnds, 1, 50))
+            .isInstanceOf(ConflictException.class)
+            .hasMessageContaining("must be between");
     }
 }

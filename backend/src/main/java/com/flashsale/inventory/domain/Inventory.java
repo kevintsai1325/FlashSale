@@ -55,6 +55,11 @@ public class Inventory {
         soldQuantity -= quantity;
     }
 
+    public void resetTo(int totalQuantity) {
+        this.totalQuantity = totalQuantity;
+        this.availableQuantity = totalQuantity;
+    }
+
     public Long getId() { return id; }
     public Long getFlashSaleId() { return flashSaleId; }
     public int getTotalQuantity() { return totalQuantity; }
