@@ -27,7 +27,7 @@ export function RegisterPage() {
         <div className="kicker"><span className="wordmark">FLASH SALE</span></div>
         <h2>建立帳號</h2>
         <p className="sub">搶購前先取得你的入場資格</p>
-        <form onSubmit={handleSubmit((values) => mutation.mutate(values))}>
+        <form noValidate onSubmit={handleSubmit((values) => mutation.mutate(values))}>
           <div className="field">
             <label htmlFor="email">Email</label>
             <input id="email" type="email" {...register('email')} />

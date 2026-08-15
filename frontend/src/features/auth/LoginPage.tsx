@@ -34,7 +34,7 @@ export function LoginPage() {
         <div className="kicker"><span className="wordmark">FLASH SALE</span></div>
         <h2>登入以搶購</h2>
         <p className="sub">回到搶購佇列繼續完成</p>
-        <form onSubmit={handleSubmit((values) => mutation.mutate(values))}>
+        <form noValidate onSubmit={handleSubmit((values) => mutation.mutate(values))}>
           <div className="field">
             <label htmlFor="email">Email</label>
             <input id="email" type="email" {...register('email')} />

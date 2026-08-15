@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -29,5 +29,15 @@ describe('LoginPage', () => {
     renderPage([{ pathname: '/login' }])
 
     expect((screen.getByLabelText(/email/i) as HTMLInputElement).value).toBe('')
+  })
+
+  it('shows the validation message instead of letting native browser validation swallow the submit', async () => {
+    renderPage([{ pathname: '/login' }])
+
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'not-an-email' } })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'x' } })
+    fireEvent.click(screen.getByRole('button', { name: /login/i }))
+
+    await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0))
   })
 })

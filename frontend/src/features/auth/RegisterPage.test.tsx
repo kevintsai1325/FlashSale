@@ -49,4 +49,17 @@ describe('RegisterPage', () => {
 
     await waitFor(() => expect(screen.getByText('login page, prefill: a@example.com')).toBeInTheDocument())
   })
+
+  it('shows the validation message instead of letting native browser validation swallow the submit', async () => {
+    const registerSpy = vi.spyOn(authApi, 'register')
+
+    renderPage()
+
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'not-an-email' } })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'short' } })
+    fireEvent.click(screen.getByRole('button', { name: /register/i }))
+
+    await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0))
+    expect(registerSpy).not.toHaveBeenCalled()
+  })
 })
