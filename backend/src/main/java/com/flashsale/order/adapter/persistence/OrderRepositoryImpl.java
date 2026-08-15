@@ -50,8 +50,8 @@ public class OrderRepositoryImpl implements OrderRepository {
     }
 
     @Override
-    public Page<Order> findAllPaged(Pageable pageable) {
-        return jpaRepository.findAll(pageable);
+    public Page<Order> findAllPaged(OrderStatus status, Pageable pageable) {
+        return status == null ? jpaRepository.findAll(pageable) : jpaRepository.findByStatus(status, pageable);
     }
 
     @Override

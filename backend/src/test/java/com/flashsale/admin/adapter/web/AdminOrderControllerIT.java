@@ -17,6 +17,7 @@ import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -147,7 +148,10 @@ class AdminOrderControllerIT {
         // Inside the window but a different user -> excluded.
         insertAuditLog("/api/purchase", otherShopperId, "trace-other-user", "now() - interval '10 minutes'");
 
-        mockMvc.perform(get("/api/admin/orders").header("Authorization", "Bearer " + adminToken))
+        // Scoped to status=PAID so this assertion stays valid regardless of what other order rows
+        // other test methods in this class may have inserted into the shared Testcontainers DB
+        // (see filtersOrderListByStatus, which deliberately avoids the PAID status for this reason).
+        mockMvc.perform(get("/api/admin/orders").param("status", "PAID").header("Authorization", "Bearer " + adminToken))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.totalElements").value(1))
             .andExpect(jsonPath("$.content[0].orderNo").value("ORD-ADMIN-1"))
@@ -170,6 +174,52 @@ class AdminOrderControllerIT {
             .andExpect(jsonPath("$.statusHistory[1].toStatus").value("PAID"))
             .andExpect(jsonPath("$.relatedApiLogs.length()").value(1))
             .andExpect(jsonPath("$.relatedApiLogs[0].traceId").value("trace-order-creation"));
+    }
+
+    @Test
+    void filtersOrderListByStatus() throws Exception {
+        String adminToken = registerAdminAndLogin("order-status-admin@example.com");
+
+        jdbcTemplate.update("insert into users (email, password_hash, role) values ('order-status-shopper@example.com', 'x', 'USER')");
+        Long shopperId = userId("order-status-shopper@example.com");
+
+        jdbcTemplate.update("insert into products (id, name) values (701, 'Status Filter Product')");
+        jdbcTemplate.update(
+            "insert into flash_sales (id, product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status) " +
+            "values (701, 701, 9.99, now() - interval '1 hour', now() + interval '1 hour', 2, 'ACTIVE')");
+
+        // Deliberately CANCELLED + EXPIRED, not PAID: adminSeesOrderListAndDetailWithHistoryAndCorrelatedAuditLogs
+        // (above) inserts a PAID order into this same shared Testcontainers DB, and test method
+        // execution order within a class isn't guaranteed, so any assertion here scoped to PAID
+        // (or an unscoped/unfiltered row-count assertion) could pass or fail depending on which
+        // test method happens to run first. CANCELLED/EXPIRED are otherwise unused in this class.
+        jdbcTemplate.update(
+            "insert into orders (order_no, user_id, total_amount, status, created_at) " +
+            "values ('ORD-STATUS-CANCELLED', ?, 20.00, 'CANCELLED', now() - interval '5 minutes')", shopperId);
+        jdbcTemplate.update(
+            "insert into orders (order_no, user_id, total_amount, status, created_at) " +
+            "values ('ORD-STATUS-EXPIRED', ?, 30.00, 'EXPIRED', now() - interval '15 minutes')", shopperId);
+
+        // No status filter -> includes both of this test's orders (order-independent: checks
+        // presence via response body content, not an exact totalElements count, since other test
+        // methods' orders may also be present in the shared table).
+        MvcResult unfiltered = mockMvc.perform(get("/api/admin/orders").param("size", "100").header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andReturn();
+        String unfilteredBody = unfiltered.getResponse().getContentAsString();
+        assertThat(unfilteredBody).contains("ORD-STATUS-CANCELLED").contains("ORD-STATUS-EXPIRED");
+
+        // status=CANCELLED -> only the CANCELLED order (safe: no other test in this class uses CANCELLED).
+        mockMvc.perform(get("/api/admin/orders").param("status", "CANCELLED").header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalElements").value(1))
+            .andExpect(jsonPath("$.content[0].orderNo").value("ORD-STATUS-CANCELLED"));
+
+        // status=EXPIRED -> only the EXPIRED order (safe: no other test in this class uses EXPIRED).
+        mockMvc.perform(get("/api/admin/orders").param("status", "EXPIRED").header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalElements").value(1))
+            .andExpect(jsonPath("$.content[0].orderNo").value("ORD-STATUS-EXPIRED"));
     }
 
     @Test

@@ -140,6 +140,35 @@ class ApiAuditFilterIT {
         });
     }
 
+    @Test
+    void clientIpPrefersXRealIpHeaderOverRemoteAddr() throws Exception {
+        mockMvc.perform(get("/api/flash-sales").header("X-Real-IP", "203.0.113.42"))
+            .andExpect(status().isOk());
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            Map<String, Object> row = jdbcTemplate.queryForMap(
+                "select * from api_audit_logs where path_template = '/api/flash-sales' " +
+                    "and method = 'GET' and status = 200 and client_ip = '203.0.113.42' " +
+                    "order by id desc limit 1");
+            assertThat(row.get("client_ip")).isEqualTo("203.0.113.42");
+        });
+    }
+
+    @Test
+    void clientIpFallsBackToRemoteAddrWhenXRealIpHeaderAbsent() throws Exception {
+        mockMvc.perform(get("/api/flash-sales"))
+            .andExpect(status().isOk());
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            Map<String, Object> row = jdbcTemplate.queryForMap(
+                "select * from api_audit_logs where path_template = '/api/flash-sales' " +
+                    "and method = 'GET' and status = 200 order by id desc limit 1");
+            // MockMvc requests without an explicit X-Real-IP header fall back to getRemoteAddr(),
+            // which MockMvc defaults to "127.0.0.1" — never null/blank.
+            assertThat(row.get("client_ip")).isEqualTo("127.0.0.1");
+        });
+    }
+
     private String requestBody(String email, String password) throws Exception {
         return objectMapper.writeValueAsString(Map.of("email", email, "password", password));
     }

@@ -52,10 +52,18 @@ interface LogFilterForm {
   status: string
   userId: string
   traceId: string
+  from: string
+  to: string
 }
 
 function emptyFilterForm(traceId: string): LogFilterForm {
-  return { method: '', pathTemplate: '', status: '', userId: '', traceId }
+  return { method: '', pathTemplate: '', status: '', userId: '', traceId, from: '', to: '' }
+}
+
+function toIsoInstant(datetimeLocalValue: string): string | undefined {
+  if (!datetimeLocalValue.trim()) return undefined
+  const parsed = new Date(datetimeLocalValue)
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString()
 }
 
 function toQueryFilters(form: LogFilterForm, page: number): ApiLogFilters {
@@ -65,6 +73,8 @@ function toQueryFilters(form: LogFilterForm, page: number): ApiLogFilters {
     status: form.status.trim() ? Number(form.status) : undefined,
     userId: form.userId.trim() ? Number(form.userId) : undefined,
     traceId: form.traceId.trim() || undefined,
+    from: toIsoInstant(form.from),
+    to: toIsoInstant(form.to),
     page,
     size: PAGE_SIZE,
   }
@@ -155,6 +165,24 @@ export function ApiLogsPage() {
               id="log-filter-traceId"
               value={form.traceId}
               onChange={(e) => setForm((f) => ({ ...f, traceId: e.target.value }))}
+            />
+          </label>
+          <label htmlFor="log-filter-from">
+            From
+            <input
+              id="log-filter-from"
+              type="datetime-local"
+              value={form.from}
+              onChange={(e) => setForm((f) => ({ ...f, from: e.target.value }))}
+            />
+          </label>
+          <label htmlFor="log-filter-to">
+            To
+            <input
+              id="log-filter-to"
+              type="datetime-local"
+              value={form.to}
+              onChange={(e) => setForm((f) => ({ ...f, to: e.target.value }))}
             />
           </label>
           <div className="log-filter-actions">

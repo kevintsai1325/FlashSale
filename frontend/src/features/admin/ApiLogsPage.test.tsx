@@ -62,6 +62,26 @@ describe('ApiLogsPage', () => {
     )
   })
 
+  it('applies from/to filter form values as ISO-8601 query params on submit', async () => {
+    const spy = vi.spyOn(adminApi, 'listApiLogs').mockResolvedValue(page1)
+    renderPage()
+
+    await waitFor(() => expect(spy).toHaveBeenCalled())
+
+    fireEvent.change(screen.getByLabelText(/From/), { target: { value: '2026-08-14T10:00' } })
+    fireEvent.change(screen.getByLabelText(/To/), { target: { value: '2026-08-14T12:00' } })
+    fireEvent.click(screen.getByRole('button', { name: /查詢/ }))
+
+    await waitFor(() =>
+      expect(spy).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          from: new Date('2026-08-14T10:00').toISOString(),
+          to: new Date('2026-08-14T12:00').toISOString(),
+        })
+      )
+    )
+  })
+
   it('pre-fills the traceId filter from the traceId query param', async () => {
     const spy = vi.spyOn(adminApi, 'listApiLogs').mockResolvedValue(page1)
     renderPage(['/admin/api-logs?traceId=trace-xyz'])

@@ -31,8 +31,7 @@ class ArchitectureTest {
         for (String module : new String[]{"identity", "catalog", "flashsale", "inventory", "order", "payment", "notification", "admin"}) {
             ArchRule rule = noClasses().that().resideInAPackage(BASE_PACKAGE + "." + module + "..")
                 .and().resideOutsideOfPackage(BASE_PACKAGE + "." + module + ".adapter..")
-                .should().dependOnClassesThat().resideInAnyPackage(otherModulesAdapterPackages(module))
-                .allowEmptyShould(module.equals("admin"));
+                .should().dependOnClassesThat().resideInAnyPackage(otherModulesAdapterPackages(module));
             rule.check(CLASSES);
         }
     }

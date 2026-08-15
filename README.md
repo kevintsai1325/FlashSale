@@ -90,3 +90,30 @@ The certificate is self-signed, so browsers and `curl` will warn about it.
 
 All host traffic goes through `https://localhost:8443` — there is no other
 exposed port.
+
+## 管理後台 (Admin)
+
+前端有一組 `/admin/*` 路由(儀表板、訂單列表、API 稽核紀錄、通知管理),僅
+`ADMIN` 角色可以進入;一般 `USER` 或未登入者會被導回首頁。
+
+### 將帳號升級為 ADMIN
+
+先透過一般註冊流程建立帳號並登入一次,再直接對 Postgres 執行 SQL,把
+`users` 資料表中該帳號的 `role` 欄位改成 `ADMIN`:
+
+```bash
+docker compose exec postgres psql -U flashsale -d flashsale \
+  -c "UPDATE users SET role = 'ADMIN' WHERE email = 'you@example.com';"
+```
+
+`role` 是 JWT access token 簽發時就寫死的 claim,所以升級後**必須重新登入**
+一次,新的 token 才會帶有 `ROLE_ADMIN` 權限。
+
+### 進入管理後台
+
+重新登入後,瀏覽器打開 `https://localhost:8443/admin` 即可看到管理後台。
+
+### 壓力測試
+
+`load-tests/` 目錄下有一支 k6 壓力測試腳本,操作方式與資料準備請參考
+[`load-tests/README.md`](load-tests/README.md)。

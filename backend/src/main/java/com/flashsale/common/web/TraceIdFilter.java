@@ -23,8 +23,10 @@ import java.util.UUID;
  *
  * <p>Registered with {@link Ordered#HIGHEST_PRECEDENCE} so it runs before every other filter,
  * including Spring Security's filter chain (which Spring Boot registers at
- * {@code SecurityProperties.DEFAULT_FILTER_ORDER}, i.e. {@code HIGHEST_PRECEDENCE + 100}) — the
- * trace id must exist before any other filter or the security chain runs.
+ * {@code SecurityProperties.DEFAULT_FILTER_ORDER} — despite the name, this is <b>not</b>
+ * {@code HIGHEST_PRECEDENCE + 100}; its actual value is
+ * {@code OrderedFilter.REQUEST_WRAPPER_FILTER_MAX_ORDER - 100}, i.e. {@code -100}) — the trace id
+ * must exist before any other filter or the security chain runs.
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)

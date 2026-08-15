@@ -9,12 +9,40 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { getDashboardSummary, getDashboardTrends, type TrendPoint } from '../../api/adminApi'
+import { getDashboardSummary, getDashboardTrends, type InventorySummary, type TrendPoint } from '../../api/adminApi'
 import { AdminNav } from './AdminNav'
 import './AdminDashboardPage.css'
 
 function formatBucketLabel(bucketStart: string): string {
   return new Date(bucketStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function InventorySummaryCard({ flashSaleId, summary }: { flashSaleId: string; summary: InventorySummary }) {
+  return (
+    <div className="dashboard-chart-card">
+      <h3>搶購活動 #{flashSaleId}</h3>
+      <table className="inventory-summary-table">
+        <tbody>
+          <tr>
+            <th>總庫存</th>
+            <td>{summary.totalQuantity}</td>
+          </tr>
+          <tr>
+            <th>可購買</th>
+            <td>{summary.availableQuantity}</td>
+          </tr>
+          <tr>
+            <th>鎖定中</th>
+            <td>{summary.reservedQuantity}</td>
+          </tr>
+          <tr>
+            <th>已售出</th>
+            <td>{summary.soldQuantity}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 function TrendChart({ title, data }: { title: string; data: TrendPoint[] }) {
@@ -87,6 +115,17 @@ export function AdminDashboardPage() {
             <TrendChart title="近一小時趨勢" data={trendsQuery.data.lastHour} />
             <TrendChart title="近 24 小時趨勢" data={trendsQuery.data.last24Hours} />
           </div>
+
+          {Object.keys(summaryQuery.data.inventoryByFlashSaleId).length > 0 && (
+            <div className="dashboard-section">
+              <h2>庫存摘要</h2>
+              <div className="dashboard-charts">
+                {Object.entries(summaryQuery.data.inventoryByFlashSaleId).map(([flashSaleId, inventory]) => (
+                  <InventorySummaryCard key={flashSaleId} flashSaleId={flashSaleId} summary={inventory} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>

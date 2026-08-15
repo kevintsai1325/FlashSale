@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -16,6 +16,10 @@ import './AdminOrdersPage.css'
 
 const PAGE_SIZE = 20
 const EMPTY_ORDERS: AdminOrderSummary[] = []
+
+// Same enum values as the backend's `OrderStatus` (see StatusPill's STATUS_MAP for the canonical
+// frontend list of order statuses this codebase renders).
+const ORDER_STATUSES = ['PENDING_PAYMENT', 'PAID', 'CANCELLED', 'EXPIRED'] as const
 
 const features = tableFeatures({ rowSortingFeature, sortedRowModel: createSortedRowModel() })
 const columnHelper = createColumnHelper<typeof features, AdminOrderSummary>()
@@ -41,15 +45,26 @@ const columns = columnHelper.columns([
 ])
 
 export function AdminOrdersPage() {
+  const [status, setStatus] = useState('')
+  const [appliedStatus, setAppliedStatus] = useState('')
   const [page, setPage] = useState(0)
   const [sorting, setSorting] = useState<SortingState>([])
 
-  const queryFilters = useMemo(() => ({ page, size: PAGE_SIZE }), [page])
+  const queryFilters = useMemo(
+    () => ({ status: appliedStatus || undefined, page, size: PAGE_SIZE }),
+    [appliedStatus, page]
+  )
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin', 'orders', queryFilters],
     queryFn: () => listAdminOrders(queryFilters),
   })
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    setPage(0)
+    setAppliedStatus(status)
+  }
 
   const table = useTable({
     features,
@@ -66,6 +81,27 @@ export function AdminOrdersPage() {
     <>
       <AdminNav />
       <div className="admin-orders-page">
+        <form className="order-filter-form" onSubmit={handleSubmit}>
+          <label htmlFor="order-filter-status">
+            狀態
+            <select
+              id="order-filter-status"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="">全部</option>
+              {ORDER_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className="btn btn-outline-go">
+            查詢
+          </button>
+        </form>
+
         {isLoading ? (
           <div>Loading…</div>
         ) : isError || !data ? (

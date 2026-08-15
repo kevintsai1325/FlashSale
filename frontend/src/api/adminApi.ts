@@ -77,6 +77,10 @@ export interface ApiLogFilters {
   status?: number
   userId?: number
   traceId?: string
+  /** ISO-8601 instant string, inclusive lower bound on `occurredAt`. */
+  from?: string
+  /** ISO-8601 instant string, inclusive upper bound on `occurredAt`. */
+  to?: string
   page?: number
   size?: number
 }
@@ -88,6 +92,8 @@ export async function listApiLogs(filters: ApiLogFilters = {}): Promise<PagedRes
   if (filters.status !== undefined) params.set('status', String(filters.status))
   if (filters.userId !== undefined) params.set('userId', String(filters.userId))
   if (filters.traceId) params.set('traceId', filters.traceId)
+  if (filters.from) params.set('from', filters.from)
+  if (filters.to) params.set('to', filters.to)
   params.set('page', String(filters.page ?? 0))
   params.set('size', String(filters.size ?? 20))
 
@@ -105,8 +111,10 @@ export interface AdminOrderSummary {
   createdAt: string
 }
 
-/** Query params accepted by `GET /api/admin/orders` (`AdminOrderController`) — page/size only, no filters. */
+/** Query params accepted by `GET /api/admin/orders` (`AdminOrderController`). */
 export interface AdminOrderListFilters {
+  /** `OrderStatus` enum name, e.g. `PENDING_PAYMENT`, `PAID`, `CANCELLED`, `EXPIRED`. Omit for all statuses. */
+  status?: string
   page?: number
   size?: number
 }
@@ -115,6 +123,7 @@ export async function listAdminOrders(
   filters: AdminOrderListFilters = {}
 ): Promise<PagedResult<AdminOrderSummary>> {
   const params = new URLSearchParams()
+  if (filters.status) params.set('status', filters.status)
   params.set('page', String(filters.page ?? 0))
   params.set('size', String(filters.size ?? 20))
 

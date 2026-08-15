@@ -22,9 +22,11 @@ import java.io.IOException;
  *
  * <p>Registered to run <b>after</b> Spring Security's filter chain so {@code SecurityContextHolder}
  * is populated by the time this filter's {@code finally} block reads it. Spring Boot registers the
- * security filter chain at {@code SecurityProperties.DEFAULT_FILTER_ORDER}
- * ({@code Ordered.HIGHEST_PRECEDENCE + 100}); this filter uses one more than that so it always
- * runs later in the chain (lower order = earlier).
+ * security filter chain at {@code SecurityProperties.DEFAULT_FILTER_ORDER} — despite the name, this
+ * is <b>not</b> {@code Ordered.HIGHEST_PRECEDENCE + 100} (that would be {@code Integer.MIN_VALUE +
+ * 100}); its actual value is {@code OrderedFilter.REQUEST_WRAPPER_FILTER_MAX_ORDER - 100}, i.e.
+ * {@code -100}. This filter uses one more than that ({@code -99}) so it always runs later in the
+ * chain (lower order = earlier).
  *
  * <p>Never captures Authorization headers, passwords, JWT contents, or request/response bodies —
  * by construction: nothing here reads the Authorization header, the request/response body streams
@@ -73,12 +75,26 @@ public class ApiAuditFilter extends OncePerRequestFilter {
                 traceId,
                 traceId,
                 (int) durationMs,
-                request.getRemoteAddr(),
+                resolveClientIp(request),
                 truncate(request.getHeader("User-Agent"), MAX_USER_AGENT_LENGTH),
                 (String) request.getAttribute(ERROR_CODE_ATTRIBUTE));
 
             auditWriter.record(log);
         }
+    }
+
+    /**
+     * In the deployed stack, requests reach this backend through the Nginx reverse proxy
+     * ({@code nginx/nginx.conf}), so {@link HttpServletRequest#getRemoteAddr()} is always Nginx's
+     * own container address, not the real client. Nginx forwards the real client address via the
+     * {@code X-Real-IP} header (see {@code proxy_set_header X-Real-IP $remote_addr;} in
+     * {@code nginx/nginx.conf}), so prefer that when present. Falls back to
+     * {@code getRemoteAddr()} for requests that reach the backend directly, bypassing Nginx (e.g.
+     * integration tests using MockMvc/TestRestTemplate).
+     */
+    private static String resolveClientIp(HttpServletRequest request) {
+        String realIp = request.getHeader("X-Real-IP");
+        return (realIp != null && !realIp.isBlank()) ? realIp : request.getRemoteAddr();
     }
 
     private Long resolveUserId() {

@@ -2,6 +2,8 @@ package com.flashsale.order.adapter.persistence;
 
 import com.flashsale.order.domain.Order;
 import com.flashsale.order.domain.OrderStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,6 +14,9 @@ import java.util.Optional;
 
 public interface OrderJpaRepository extends JpaRepository<Order, Long> {
     List<Order> findAllByUserId(Long userId);
+
+    // Admin order list filter (com.flashsale.admin).
+    Page<Order> findByStatus(OrderStatus status, Pageable pageable);
 
     // join fetch items to avoid LazyInitializationException: the caller (PaymentTimeoutScheduler)
     // reads order.totalQuantity() in a different transaction than this query runs in.

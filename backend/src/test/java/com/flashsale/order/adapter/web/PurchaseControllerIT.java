@@ -15,6 +15,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.util.List;
+
+import static org.hamcrest.Matchers.in;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -176,10 +179,16 @@ class PurchaseControllerIT {
             .andExpect(jsonPath("$.status").value("SOLD_OUT"))
             .andExpect(jsonPath("$.orderId").isEmpty());
 
+        // This request raced an unbounded ~500ms async window (OutboxPublisher's
+        // @Scheduled(fixedDelay = 500) consumer, which may have already processed the outbox
+        // event enqueued by the first purchase-request above) with no explicit wait here — by the
+        // time this GET runs, the request may still be PENDING or may have already legitimately
+        // completed to SUCCEEDED. Both are correct outcomes; only an unrelated status would be a
+        // bug. See PurchaseConcurrencyIT for stronger assertions on the eventual terminal state.
         mockMvc.perform(get("/api/purchase-requests/" + firstRequestId)
                 .header("Authorization", "Bearer " + firstUserToken))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("PENDING"));
+            .andExpect(jsonPath("$.status").value(in(List.of("PENDING", "SUCCEEDED"))));
 
         // A different authenticated user must not be able to read another user's purchase
         // request by guessing/obtaining its requestId (IDOR check) — the API must respond as

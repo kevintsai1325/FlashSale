@@ -13,9 +13,11 @@ function renderNav(role: 'USER' | 'ADMIN' | null) {
       value={{
         isAuthenticated: role !== null,
         role,
+        isRestoring: false,
         login: vi.fn(),
         logout: vi.fn(),
         markAuthenticated: vi.fn(),
+        finishRestoring: vi.fn(),
       }}
     >
       <QueryClientProvider client={queryClient}>

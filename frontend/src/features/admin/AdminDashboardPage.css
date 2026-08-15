@@ -62,3 +62,39 @@
   font-size: 0.9rem;
   color: var(--ink);
 }
+
+.dashboard-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboard-section h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.inventory-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.inventory-summary-table th,
+.inventory-summary-table td {
+  text-align: left;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.inventory-summary-table th {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.inventory-summary-table td {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

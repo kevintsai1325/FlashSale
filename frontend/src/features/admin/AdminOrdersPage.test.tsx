@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -33,5 +33,19 @@ describe('AdminOrdersPage', () => {
     await waitFor(() => expect(screen.getByText('ORD-1')).toBeInTheDocument())
     expect(screen.getByText('已付款')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /ORD-1/ })).toHaveAttribute('href', '/admin/orders/1')
+  })
+
+  it('applies the selected status filter as a query param on submit', async () => {
+    const spy = vi.spyOn(adminApi, 'listAdminOrders').mockResolvedValue(page1)
+    renderPage()
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ status: undefined, page: 0 })))
+
+    fireEvent.change(screen.getByLabelText(/狀態/), { target: { value: 'CANCELLED' } })
+    fireEvent.click(screen.getByRole('button', { name: /查詢/ }))
+
+    await waitFor(() =>
+      expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'CANCELLED', page: 0 }))
+    )
   })
 })

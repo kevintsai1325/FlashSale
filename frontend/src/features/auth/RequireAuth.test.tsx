@@ -6,7 +6,7 @@ import { AuthContext } from './useAuth'
 
 function renderWithAuth(isAuthenticated: boolean) {
   return render(
-    <AuthContext.Provider value={{ isAuthenticated, role: null, login: vi.fn(), logout: vi.fn(), markAuthenticated: vi.fn() }}>
+    <AuthContext.Provider value={{ isAuthenticated, role: null, isRestoring: false, login: vi.fn(), logout: vi.fn(), markAuthenticated: vi.fn(), finishRestoring: vi.fn() }}>
       <MemoryRouter initialEntries={['/protected']}>
         <Routes>
           <Route path="/login" element={<div>login page</div>} />

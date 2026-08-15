@@ -4,6 +4,7 @@ import com.flashsale.admin.application.AdminOrderQueryService;
 import com.flashsale.admin.application.dto.AdminOrderDetail;
 import com.flashsale.admin.application.dto.AdminOrderSummary;
 import com.flashsale.admin.application.dto.PagedResult;
+import com.flashsale.order.domain.OrderStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,9 +27,10 @@ public class AdminOrderController {
 
     @GetMapping
     public PagedResult<AdminOrderSummary> list(
+            @RequestParam(required = false) OrderStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return adminOrderQueryService.list(page, size);
+        return adminOrderQueryService.list(status, page, size);
     }
 
     @GetMapping("/{orderId}")

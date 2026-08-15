@@ -20,7 +20,7 @@ public interface OrderRepository {
     BigDecimal sumTotalAmountByStatus(OrderStatus status);
     List<Order> findAllCreatedAfter(Instant since);
 
-    // Admin order list/detail (com.flashsale.admin).
-    Page<Order> findAllPaged(Pageable pageable);
+    // Admin order list/detail (com.flashsale.admin). status is optional — null returns all statuses.
+    Page<Order> findAllPaged(OrderStatus status, Pageable pageable);
     Optional<Order> findByIdWithItems(Long id);
 }

@@ -8,13 +8,13 @@ import { AuthProvider, useAuth } from './features/auth/useAuth'
 const queryClient = new QueryClient()
 
 function AppContent() {
-  const { markAuthenticated } = useAuth()
+  const { markAuthenticated, finishRestoring } = useAuth()
 
   useEffect(() => {
     authApi.refresh().then(markAuthenticated).catch(() => {
       // No valid refresh cookie (never logged in, or it expired) — stay logged out.
-    })
-  }, [markAuthenticated])
+    }).finally(finishRestoring)
+  }, [markAuthenticated, finishRestoring])
 
   return (
     <>

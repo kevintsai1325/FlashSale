@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
+
 /**
  * Admin-only read API behind {@code /api/admin/**} (guarded by {@code SecurityConfig}'s
  * {@code hasRole("ADMIN")} rule). Filters over {@code api_audit_logs} (Task 2).
@@ -29,8 +31,10 @@ public class AdminApiLogController {
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return apiAuditQueryService.search(method, pathTemplate, status, userId, traceId, page, size);
+        return apiAuditQueryService.search(method, pathTemplate, status, userId, traceId, from, to, page, size);
     }
 }

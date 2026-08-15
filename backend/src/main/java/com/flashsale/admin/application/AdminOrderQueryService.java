@@ -57,9 +57,9 @@ public class AdminOrderQueryService {
         this.apiAuditLogRepository = apiAuditLogRepository;
     }
 
-    public PagedResult<AdminOrderSummary> list(int page, int size) {
+    public PagedResult<AdminOrderSummary> list(OrderStatus status, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Order> result = orderRepository.findAllPaged(pageable);
+        Page<Order> result = orderRepository.findAllPaged(status, pageable);
 
         List<AdminOrderSummary> content = result.getContent().stream()
             .map(o -> new AdminOrderSummary(o.getId(), o.getOrderNo(), o.getUserId(), o.getTotalAmount(),

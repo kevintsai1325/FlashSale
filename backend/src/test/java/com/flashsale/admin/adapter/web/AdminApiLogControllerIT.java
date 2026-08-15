@@ -17,6 +17,9 @@ import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.Duration;
+import java.time.Instant;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -172,6 +175,49 @@ class AdminApiLogControllerIT {
             .andExpect(jsonPath("$.content[0].traceId").value("trace-aaa"))
             .andReturn();
         assertThat(combined.getResponse().getContentAsString()).contains("trace-aaa");
+    }
+
+    @Test
+    void filtersApiAuditLogsByOccurredAtTimeRange() throws Exception {
+        String adminToken = registerAdminAndLogin("apilog-time-admin@example.com");
+
+        jdbcTemplate.update("insert into users (email, password_hash, role) values ('apilog-time-shopper@example.com', 'x', 'USER')");
+        Long shopperId = userId("apilog-time-shopper@example.com");
+
+        // Row OLD: 10 minutes ago. Row RECENT: 1 minute ago. Both scoped to a dedicated shopper so
+        // filtering by userId isolates exactly these two rows from any background request logging.
+        insertAuditLog("GET", "/api/time-range-test/old", 200, shopperId, "trace-time-old", "now() - interval '10 minutes'");
+        insertAuditLog("GET", "/api/time-range-test/recent", 200, shopperId, "trace-time-recent", "now() - interval '1 minutes'");
+
+        Instant cutoff = Instant.now().minus(Duration.ofMinutes(5));
+
+        // from only: excludes OLD (10 min ago, before cutoff), includes RECENT (1 min ago, after cutoff).
+        mockMvc.perform(get("/api/admin/api-logs")
+                .param("userId", shopperId.toString())
+                .param("from", cutoff.toString())
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalElements").value(1))
+            .andExpect(jsonPath("$.content[0].traceId").value("trace-time-recent"));
+
+        // to only: excludes RECENT (after cutoff), includes OLD (before cutoff).
+        mockMvc.perform(get("/api/admin/api-logs")
+                .param("userId", shopperId.toString())
+                .param("to", cutoff.toString())
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalElements").value(1))
+            .andExpect(jsonPath("$.content[0].traceId").value("trace-time-old"));
+
+        // from + to combined: narrow window bracketing only RECENT.
+        mockMvc.perform(get("/api/admin/api-logs")
+                .param("userId", shopperId.toString())
+                .param("from", Instant.now().minus(Duration.ofMinutes(2)).toString())
+                .param("to", Instant.now().toString())
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalElements").value(1))
+            .andExpect(jsonPath("$.content[0].traceId").value("trace-time-recent"));
     }
 
     @Test

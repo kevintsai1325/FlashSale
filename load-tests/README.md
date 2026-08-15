@@ -12,6 +12,27 @@ under real concurrent load — but end-to-end through the real stack: Nginx
 No `k6` binary is assumed on `PATH`. All commands below run k6 via the
 official `grafana/k6` Docker image against the Docker Compose stack.
 
+## Step 0: Reset before re-running (skip on the very first run)
+
+`compose.yaml` declares a named volume for Postgres data, which persists
+across `docker compose down` (without `-v`). Re-running Step 1's seed SQL a
+second time without resetting first hits a primary-key conflict (`products`/
+`flash_sales`/`inventory` id `1` already exists), and even if you dodge that
+by picking new ids, leftover rows from the previous run would silently
+inflate Step 3's verification counts. Before seeding again, truncate just the
+tables this script touches:
+
+```bash
+docker compose exec -T postgres psql -U flashsale -d flashsale <<'EOF'
+TRUNCATE TABLE purchase_requests, order_items, orders, inventory, flash_sales, products, users RESTART IDENTITY CASCADE;
+EOF
+```
+
+(A full `docker compose down -v` before `docker compose up --build -d` also
+works and is a bit more foolproof — it forces Flyway migrations to rerun from
+scratch too — but is slower to iterate with; the `TRUNCATE` above is the
+faster option for repeated runs against an already-running stack.)
+
 ## Step 1: Seed a flash sale with known, small stock
 
 Scale, following the same values/structure `PurchaseConcurrencyIT` and the
@@ -77,19 +98,27 @@ Per the design spec's explicit "no CI integration this round," verification
 here is a documented manual check rather than a k6 `handleSummary`/teardown
 step:
 
+All queries below are scoped to `flash_sale_id = 1` (the id seeded in Step 1)
+so that, if you skip Step 0's reset, leftover rows from a previous run can't
+silently inflate these counts (`orders` has no `flash_sale_id` column of its
+own, so that one is scoped via a join through `purchase_requests`):
+
 ```bash
 docker compose exec -T postgres psql -U flashsale -d flashsale <<'EOF'
 -- Must equal STOCK (10): exactly as many orders as there was stock, never more.
-SELECT COUNT(*) AS successful_orders FROM orders;
+SELECT COUNT(*) AS successful_orders
+FROM orders o
+JOIN purchase_requests pr ON pr.order_id = o.id
+WHERE pr.flash_sale_id = 1;
 
 -- Must equal VUS - STOCK (30 - 10 = 20): every buyer who didn't get stock is SOLD_OUT.
-SELECT COUNT(*) AS sold_out_requests FROM purchase_requests WHERE status = 'SOLD_OUT';
+SELECT COUNT(*) AS sold_out_requests FROM purchase_requests WHERE status = 'SOLD_OUT' AND flash_sale_id = 1;
 
 -- Sanity: inventory must never go negative or under-decrement.
 SELECT available_quantity, reserved_quantity, sold_quantity FROM inventory WHERE flash_sale_id = 1;
 
 -- Sanity: every purchase_request should have landed in a terminal state (no VU stuck PENDING).
-SELECT status, COUNT(*) FROM purchase_requests GROUP BY status ORDER BY status;
+SELECT status, COUNT(*) FROM purchase_requests WHERE flash_sale_id = 1 GROUP BY status ORDER BY status;
 EOF
 ```
 

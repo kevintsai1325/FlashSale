@@ -10,9 +10,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+
 /**
  * Filtered/paged read access over {@code api_audit_logs} (Task 2) for the admin API-logs screen.
- * Four optional filters combined with plain {@code Specification.and(...)} — not worth a generic
+ * Optional filters combined with plain {@code Specification.and(...)} — not worth a generic
  * dynamic-query framework for this few fields.
  */
 @Service
@@ -25,7 +27,7 @@ public class ApiAuditQueryService {
     }
 
     public PagedResult<ApiAuditLogView> search(String method, String pathTemplate, Integer status, Long userId,
-                                                String traceId, int page, int size) {
+                                                String traceId, Instant from, Instant to, int page, int size) {
         Specification<ApiAuditLog> spec = Specification.where(null);
         if (method != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("method"), method));
@@ -41,6 +43,12 @@ public class ApiAuditQueryService {
         }
         if (traceId != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("traceId"), traceId));
+        }
+        if (from != null) {
+            spec = spec.and((root, query, cb) -> cb.greaterThanOrEqualTo(root.get("occurredAt"), from));
+        }
+        if (to != null) {
+            spec = spec.and((root, query, cb) -> cb.lessThanOrEqualTo(root.get("occurredAt"), to));
         }
 
         Page<ApiAuditLog> result = repository.findAll(spec,

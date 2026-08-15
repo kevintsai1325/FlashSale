@@ -45,10 +45,17 @@ describe('AdminDashboardPage', () => {
     renderPage()
 
     await waitFor(() => expect(screen.getByText('120')).toBeInTheDocument())
-    expect(screen.getByText('100')).toBeInTheDocument()
+    // "100" is rendered twice: succeededPurchaseRequests (stat card) and the inventory summary's
+    // totalQuantity (below) — assert on both occurrences rather than a single unique element.
+    expect(screen.getAllByText('100')).toHaveLength(2)
     expect(screen.getByText('$4999.50')).toBeInTheDocument()
 
     const charts = await screen.findAllByTestId('dashboard-trend-chart')
     expect(charts).toHaveLength(2)
+
+    expect(screen.getByText('搶購活動 #501')).toBeInTheDocument()
+    expect(screen.getByText('40')).toBeInTheDocument()
+    expect(screen.getByText('10')).toBeInTheDocument()
+    expect(screen.getByText('50')).toBeInTheDocument()
   })
 })
