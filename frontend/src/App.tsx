@@ -16,12 +16,7 @@ function AppContent() {
     }).finally(finishRestoring)
   }, [markAuthenticated, finishRestoring])
 
-  return (
-    <>
-      <h1>FlashSale</h1>
-      <RouterProvider router={router} />
-    </>
-  )
+  return <RouterProvider router={router} />
 }
 
 export default function App() {
