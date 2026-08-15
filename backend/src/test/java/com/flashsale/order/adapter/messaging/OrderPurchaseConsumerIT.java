@@ -2,6 +2,7 @@ package com.flashsale.order.adapter.messaging;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -31,7 +32,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @AutoConfigureMockMvc
 @ActiveProfiles("integration-test")
 @Testcontainers
-@Sql("/db/testdata/inventory-fixtures.sql")
 class OrderPurchaseConsumerIT {
 
     @Container
@@ -110,6 +110,7 @@ class OrderPurchaseConsumerIT {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired JdbcTemplate jdbcTemplate;
+    @Autowired MeterRegistry meterRegistry;
 
     private String requestBody(String email, String password) throws Exception {
         return objectMapper.writeValueAsString(new HashMap<>() {{
@@ -128,6 +129,7 @@ class OrderPurchaseConsumerIT {
     }
 
     @Test
+    @Sql("/db/testdata/inventory-fixtures.sql")
     void pendingPurchaseRequestEventuallyBecomesSucceededWithARealOrder() throws Exception {
         String token = registerAndLogin("consumer-test@example.com", "secret123");
 
@@ -160,5 +162,33 @@ class OrderPurchaseConsumerIT {
             "select count(*) from order_status_history where order_id = ? and from_status is null and to_status = 'PENDING_PAYMENT'",
             Integer.class, createdOrderId);
         assertThat(historyCount).isEqualTo(1);
+    }
+
+    @Test
+    void successfulOrderCreationIncrementsOrderCreatedCounter() throws Exception {
+        double before = meterRegistry.find("purchase.order.created").counter() == null
+            ? 0.0 : meterRegistry.find("purchase.order.created").counter().count();
+
+        // Dedicated flash sale id (2), distinct from the id=1 fixture used by
+        // pendingPurchaseRequestEventuallyBecomesSucceededWithARealOrder() above: the shared
+        // Postgres container persists across test methods in this class, so reusing the
+        // class-level inventory-fixtures.sql id=1 row here would either duplicate-key on the
+        // INSERT (if that test's @Sql fixture already ran) or exhaust the single unit of stock
+        // it seeds. Same pattern as PaymentControllerIT's per-test product ids.
+        jdbcTemplate.update("INSERT INTO products (id, name, description) VALUES (2, 'Metrics Test Product', 'Only 1 pair')");
+        jdbcTemplate.update("INSERT INTO flash_sales (id, product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status) " +
+            "VALUES (2, 2, 9.99, now() - interval '1 minute', now() + interval '1 hour', 1, 'ACTIVE')");
+        jdbcTemplate.update("INSERT INTO inventory (id, flash_sale_id, total_quantity, available_quantity, reserved_quantity, sold_quantity, version) " +
+            "VALUES (2, 2, 1, 1, 0, 0, 0)");
+
+        // Same flow as pendingPurchaseRequestEventuallyBecomesSucceededWithARealOrder() above:
+        // register+login, submit a purchase request, wait for it to resolve to a real order.
+        String token = registerAndLogin("consumer-metrics-test@example.com", "secret123");
+        mockMvc.perform(post("/api/flash-sales/2/purchase-requests")
+                .header("Authorization", "Bearer " + token)
+                .header("Idempotency-Key", "consumer-metrics-key-1"));
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+            assertThat(meterRegistry.get("purchase.order.created").counter().count()).isGreaterThan(before));
     }
 }

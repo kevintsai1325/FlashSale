@@ -2,10 +2,12 @@ package com.flashsale.inventory.adapter.redis;
 
 import com.flashsale.common.exception.ServiceUnavailableException;
 import com.flashsale.common.exception.NotFoundException;
+import com.flashsale.common.metrics.PurchaseMetrics;
 import com.flashsale.inventory.application.InventoryRepository;
 import com.flashsale.inventory.application.InventoryStockGateway;
 import com.flashsale.inventory.application.StockReservationResult;
 import com.flashsale.inventory.domain.Inventory;
+import io.micrometer.core.instrument.Timer;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
@@ -19,12 +21,14 @@ public class RedisInventoryStockGateway implements InventoryStockGateway {
     private final StringRedisTemplate redisTemplate;
     private final RedisScript<Long> reserveStockScript;
     private final InventoryRepository inventoryRepository;
+    private final PurchaseMetrics purchaseMetrics;
 
     public RedisInventoryStockGateway(StringRedisTemplate redisTemplate, RedisScript<Long> reserveStockScript,
-                                       InventoryRepository inventoryRepository) {
+                                       InventoryRepository inventoryRepository, PurchaseMetrics purchaseMetrics) {
         this.redisTemplate = redisTemplate;
         this.reserveStockScript = reserveStockScript;
         this.inventoryRepository = inventoryRepository;
+        this.purchaseMetrics = purchaseMetrics;
     }
 
     private String stockKey(Long flashSaleId) {
@@ -43,17 +47,24 @@ public class RedisInventoryStockGateway implements InventoryStockGateway {
 
     @Override
     public StockReservationResult reserve(Long flashSaleId, int quantity) {
-        ensureSeeded(flashSaleId);
-        Long remaining = redisTemplate.execute(reserveStockScript, List.of(stockKey(flashSaleId)), String.valueOf(quantity));
-        if (remaining != null && remaining == -2) {
+        Timer.Sample sample = purchaseMetrics.startReservationTimer();
+        try {
             ensureSeeded(flashSaleId);
-            remaining = redisTemplate.execute(reserveStockScript, List.of(stockKey(flashSaleId)), String.valueOf(quantity));
+            Long remaining = redisTemplate.execute(reserveStockScript, List.of(stockKey(flashSaleId)), String.valueOf(quantity));
+            if (remaining != null && remaining == -2) {
+                ensureSeeded(flashSaleId);
+                remaining = redisTemplate.execute(reserveStockScript, List.of(stockKey(flashSaleId)), String.valueOf(quantity));
+            }
+            if (remaining == null || remaining == -2) {
+                throw new ServiceUnavailableException("STOCK_GATEWAY_UNAVAILABLE",
+                    "Unable to reach Redis to reserve stock for flash sale " + flashSaleId);
+            }
+            StockReservationResult result = remaining == -1 ? StockReservationResult.INSUFFICIENT_STOCK : StockReservationResult.RESERVED;
+            purchaseMetrics.recordReservationOutcome(result == StockReservationResult.RESERVED ? "reserved" : "insufficient_stock");
+            return result;
+        } finally {
+            purchaseMetrics.stopReservationTimer(sample);
         }
-        if (remaining == null || remaining == -2) {
-            throw new ServiceUnavailableException("STOCK_GATEWAY_UNAVAILABLE",
-                "Unable to reach Redis to reserve stock for flash sale " + flashSaleId);
-        }
-        return remaining == -1 ? StockReservationResult.INSUFFICIENT_STOCK : StockReservationResult.RESERVED;
     }
 
     @Override

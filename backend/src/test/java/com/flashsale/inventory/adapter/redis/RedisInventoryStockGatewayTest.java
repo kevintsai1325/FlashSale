@@ -1,9 +1,11 @@
 package com.flashsale.inventory.adapter.redis;
 
 import com.flashsale.common.exception.ServiceUnavailableException;
+import com.flashsale.common.metrics.PurchaseMetrics;
 import com.flashsale.inventory.application.InventoryRepository;
 import com.flashsale.inventory.application.StockReservationResult;
 import com.flashsale.inventory.domain.Inventory;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -27,10 +29,11 @@ class RedisInventoryStockGatewayTest {
     @Mock RedisScript<Long> reserveStockScript;
     @Mock InventoryRepository inventoryRepository;
     @Mock ValueOperations<String, String> valueOperations;
+    PurchaseMetrics purchaseMetrics = new PurchaseMetrics(new SimpleMeterRegistry());
 
     @Test
     void throwsServiceUnavailableWhenLuaScriptReturnsMinusTwoBothAttempts() {
-        RedisInventoryStockGateway gateway = new RedisInventoryStockGateway(redisTemplate, reserveStockScript, inventoryRepository);
+        RedisInventoryStockGateway gateway = new RedisInventoryStockGateway(redisTemplate, reserveStockScript, inventoryRepository, purchaseMetrics);
 
         // Stub hasKey to return true so ensureSeeded is a no-op (doesn't try to load from DB)
         when(redisTemplate.hasKey(anyString())).thenReturn(true);
@@ -49,7 +52,7 @@ class RedisInventoryStockGatewayTest {
 
     @Test
     void reservesSuccessfullyWhenLuaReturnsRemainderQuantity() {
-        RedisInventoryStockGateway gateway = new RedisInventoryStockGateway(redisTemplate, reserveStockScript, inventoryRepository);
+        RedisInventoryStockGateway gateway = new RedisInventoryStockGateway(redisTemplate, reserveStockScript, inventoryRepository, purchaseMetrics);
 
         // Stub hasKey to return true
         when(redisTemplate.hasKey(anyString())).thenReturn(true);
@@ -66,7 +69,7 @@ class RedisInventoryStockGatewayTest {
 
     @Test
     void returnInsufficientStockWhenLuaReturnsMinusOne() {
-        RedisInventoryStockGateway gateway = new RedisInventoryStockGateway(redisTemplate, reserveStockScript, inventoryRepository);
+        RedisInventoryStockGateway gateway = new RedisInventoryStockGateway(redisTemplate, reserveStockScript, inventoryRepository, purchaseMetrics);
 
         when(redisTemplate.hasKey(anyString())).thenReturn(true);
 
@@ -80,7 +83,7 @@ class RedisInventoryStockGatewayTest {
 
     @Test
     void retriesSeededOnceWhenScriptInitiallyReturnsMinusTwo() {
-        RedisInventoryStockGateway gateway = new RedisInventoryStockGateway(redisTemplate, reserveStockScript, inventoryRepository);
+        RedisInventoryStockGateway gateway = new RedisInventoryStockGateway(redisTemplate, reserveStockScript, inventoryRepository, purchaseMetrics);
 
         Inventory inventory = Inventory.initialize(42L, 5);
         when(inventoryRepository.findByFlashSaleId(42L)).thenReturn(Optional.of(inventory));

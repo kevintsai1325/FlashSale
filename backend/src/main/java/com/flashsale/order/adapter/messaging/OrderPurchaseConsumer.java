@@ -3,6 +3,7 @@ package com.flashsale.order.adapter.messaging;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flashsale.common.config.RabbitConfig;
 import com.flashsale.common.messaging.ConsumedMessageGuard;
+import com.flashsale.common.metrics.PurchaseMetrics;
 import com.flashsale.inventory.application.InventoryRepository;
 import com.flashsale.inventory.domain.Inventory;
 import com.flashsale.order.application.OrderRepository;
@@ -30,16 +31,19 @@ public class OrderPurchaseConsumer {
     private final OrderRepository orderRepository;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
     private final ObjectMapper objectMapper;
+    private final PurchaseMetrics purchaseMetrics;
 
     public OrderPurchaseConsumer(ConsumedMessageGuard consumedMessageGuard, PurchaseRequestRepository purchaseRequestRepository,
                                   InventoryRepository inventoryRepository, OrderRepository orderRepository,
-                                  OrderStatusHistoryRepository orderStatusHistoryRepository, ObjectMapper objectMapper) {
+                                  OrderStatusHistoryRepository orderStatusHistoryRepository, ObjectMapper objectMapper,
+                                  PurchaseMetrics purchaseMetrics) {
         this.consumedMessageGuard = consumedMessageGuard;
         this.purchaseRequestRepository = purchaseRequestRepository;
         this.inventoryRepository = inventoryRepository;
         this.orderRepository = orderRepository;
         this.orderStatusHistoryRepository = orderStatusHistoryRepository;
         this.objectMapper = objectMapper;
+        this.purchaseMetrics = purchaseMetrics;
     }
 
     @RabbitListener(queues = RabbitConfig.CREATE_ORDER_QUEUE)
@@ -70,5 +74,6 @@ public class OrderPurchaseConsumer {
 
         purchaseRequest.markSucceeded(savedOrder.getId());
         purchaseRequestRepository.save(purchaseRequest);
+        purchaseMetrics.orderCreated();
     }
 }

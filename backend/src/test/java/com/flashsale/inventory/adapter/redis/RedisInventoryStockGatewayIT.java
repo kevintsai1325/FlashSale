@@ -3,6 +3,7 @@ package com.flashsale.inventory.adapter.redis;
 import com.flashsale.common.exception.ServiceUnavailableException;
 import com.flashsale.inventory.application.InventoryStockGateway;
 import com.flashsale.inventory.application.StockReservationResult;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +57,7 @@ class RedisInventoryStockGatewayIT {
     @Autowired InventoryStockGateway gateway;
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired StringRedisTemplate redisTemplate;
+    @Autowired MeterRegistry meterRegistry;
 
     @BeforeEach
     void seedFlashSaleAndInventory() {
@@ -198,5 +200,27 @@ class RedisInventoryStockGatewayIT {
 
         // Verify final Redis value is correct (0, since all 3 were reserved)
         assertThat(gateway.currentValue(50L)).contains(0);
+    }
+
+    @Test
+    void reserveIncrementsReservedCounterAndRecordsLatency() {
+        // @BeforeEach seedFlashSaleAndInventory() already seeds flash sale id 42 with
+        // available_quantity 3 — reserving 1 succeeds without any extra setup.
+        gateway.reserve(42L, 1);
+
+        assertThat(meterRegistry.get("purchase.reservation").tag("outcome", "reserved").counter().count())
+            .isGreaterThanOrEqualTo(1.0);
+        assertThat(meterRegistry.get("purchase.reservation.latency").timer().count())
+            .isGreaterThanOrEqualTo(1L);
+    }
+
+    @Test
+    void reserveIncrementsInsufficientStockCounterWhenSoldOut() {
+        gateway.reserve(42L, 3); // exhausts the seeded available_quantity of 3
+
+        gateway.reserve(42L, 1); // now sold out
+
+        assertThat(meterRegistry.get("purchase.reservation").tag("outcome", "insufficient_stock").counter().count())
+            .isGreaterThanOrEqualTo(1.0);
     }
 }
