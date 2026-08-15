@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getOrder, cancelOrder, submitPayment } from '../../api/orderApi'
 import type { OrderDetail } from '../../api/orderApi'
+import { AppNav } from '../../components/AppNav'
 import { StatusPill } from '../../components/StatusPill'
 import './OrderDetailPage.css'
 
@@ -38,36 +39,39 @@ export function OrderDetailPage() {
   if (isError || !data) return <div role="alert">Failed to load order.</div>
 
   return (
-    <article className="order-detail">
-      <p><Link to="/orders">← 我的訂單</Link></p>
-      <h2>{data.orderNo}</h2>
-      <StatusPill status={data.status} />
-      <div className="amount-strip">
-        <span>訂單金額</span>
-        <span className="amount-value">${data.totalAmount.toFixed(2)}</span>
-      </div>
-      {data.status === 'PENDING_PAYMENT' && (
-        <>
-          {data.paymentDueAt && <p>付款期限：{new Date(data.paymentDueAt).toLocaleString()}</p>}
-          <div className="order-actions">
-            <button className="btn btn-outline-go" onClick={() => payMutation.mutate('SUCCESS')} disabled={payMutation.isPending}>
-              模擬付款成功
-            </button>
-            <button className="btn btn-outline-stop" onClick={() => payMutation.mutate('FAILURE')} disabled={payMutation.isPending}>
-              模擬付款失敗
-            </button>
-            <button className="btn btn-ghost" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>
-              取消訂單
-            </button>
-          </div>
-        </>
-      )}
-      {data.status !== 'PENDING_PAYMENT' && (
-        <p className="paid-note">
-          <span className={`paid-dot ${data.status === 'PAID' ? 'go' : 'stop'}`} aria-hidden="true" />
-          {TERMINAL_NOTES[data.status] ?? '訂單已結案'}
-        </p>
-      )}
-    </article>
+    <>
+      <AppNav />
+      <article className="order-detail">
+        <p><Link to="/orders">← 我的訂單</Link></p>
+        <h2>{data.orderNo}</h2>
+        <StatusPill status={data.status} />
+        <div className="amount-strip">
+          <span>訂單金額</span>
+          <span className="amount-value">${data.totalAmount.toFixed(2)}</span>
+        </div>
+        {data.status === 'PENDING_PAYMENT' && (
+          <>
+            {data.paymentDueAt && <p>付款期限：{new Date(data.paymentDueAt).toLocaleString()}</p>}
+            <div className="order-actions">
+              <button className="btn btn-outline-go" onClick={() => payMutation.mutate('SUCCESS')} disabled={payMutation.isPending}>
+                模擬付款成功
+              </button>
+              <button className="btn btn-outline-stop" onClick={() => payMutation.mutate('FAILURE')} disabled={payMutation.isPending}>
+                模擬付款失敗
+              </button>
+              <button className="btn btn-ghost" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>
+                取消訂單
+              </button>
+            </div>
+          </>
+        )}
+        {data.status !== 'PENDING_PAYMENT' && (
+          <p className="paid-note">
+            <span className={`paid-dot ${data.status === 'PAID' ? 'go' : 'stop'}`} aria-hidden="true" />
+            {TERMINAL_NOTES[data.status] ?? '訂單已結案'}
+          </p>
+        )}
+      </article>
+    </>
   )
 }

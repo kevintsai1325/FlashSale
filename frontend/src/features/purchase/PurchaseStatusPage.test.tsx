@@ -4,17 +4,20 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { PurchaseStatusPage } from './PurchaseStatusPage'
 import * as purchaseApi from '../../api/purchaseApi'
+import { AuthProvider } from '../auth/useAuth'
 
 function renderPage(requestId = 'req-1') {
   const queryClient = new QueryClient()
   return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/purchase-requests/${requestId}`]}>
-        <Routes>
-          <Route path="/purchase-requests/:requestId" element={<PurchaseStatusPage />} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>
+    <AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/purchase-requests/${requestId}`]}>
+          <Routes>
+            <Route path="/purchase-requests/:requestId" element={<PurchaseStatusPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </AuthProvider>
   )
 }
 

@@ -16,7 +16,7 @@ export function AppNav() {
 
   return (
     <nav className="app-nav">
-      <span className="wordmark">FLASH SALE</span>
+      <Link className="wordmark" to="/">FLASH SALE</Link>
       <div className="nav-links">
         <Link className="nav-link" to="/orders">我的訂單</Link>
         {role === 'ADMIN' && (

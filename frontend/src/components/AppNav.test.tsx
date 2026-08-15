@@ -30,6 +30,12 @@ function renderNav(role: 'USER' | 'ADMIN' | null) {
 }
 
 describe('AppNav', () => {
+  it('links the wordmark back to the flash sale list', () => {
+    renderNav('USER')
+
+    expect(screen.getByText('FLASH SALE')).toHaveAttribute('href', '/')
+  })
+
   it('does not render the notification bell for a non-admin user', () => {
     const spy = vi.spyOn(adminApi, 'getUnreadCount').mockResolvedValue(0)
     renderNav('USER')
