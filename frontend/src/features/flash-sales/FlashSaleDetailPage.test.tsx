@@ -14,9 +14,9 @@ const activeSale = {
   salePrice: 9.99,
   startsAt: new Date().toISOString(),
   endsAt: new Date().toISOString(),
-  purchaseLimitPerUser: 1,
-  totalQuantity: 3,
-  availableQuantity: 1,
+  purchaseLimitPerUser: 3,
+  totalQuantity: 10,
+  availableQuantity: 10,
   status: 'ACTIVE',
 }
 
@@ -50,7 +50,7 @@ describe('FlashSaleDetailPage purchase button', () => {
     expect(createSpy).not.toHaveBeenCalled()
   })
 
-  it('navigates to the status page after a successful purchase request', async () => {
+  it('navigates to the status page after a successful purchase request, defaulting quantity to 1', async () => {
     vi.spyOn(flashSaleApi, 'getFlashSale').mockResolvedValue(activeSale)
     vi.spyOn(purchaseApi, 'createPurchaseRequest').mockResolvedValue({ requestId: 'req-1', status: 'PENDING', orderId: null })
     renderPage(true)
@@ -59,6 +59,38 @@ describe('FlashSaleDetailPage purchase button', () => {
     fireEvent.click(screen.getByRole('button', { name: /搶購/ }))
 
     await waitFor(() => expect(screen.getByText('status page')).toBeInTheDocument())
-    expect(purchaseApi.createPurchaseRequest).toHaveBeenCalledWith(1, expect.any(String))
+    expect(purchaseApi.createPurchaseRequest).toHaveBeenCalledWith(1, expect.any(String), 1)
+  })
+
+  it('sends the chosen quantity when it is within the purchase limit', async () => {
+    vi.spyOn(flashSaleApi, 'getFlashSale').mockResolvedValue(activeSale)
+    vi.spyOn(purchaseApi, 'createPurchaseRequest').mockResolvedValue({ requestId: 'req-1', status: 'PENDING', orderId: null })
+    renderPage(true)
+
+    const quantityInput = await screen.findByLabelText('數量')
+    fireEvent.change(quantityInput, { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: /搶購/ }))
+
+    await waitFor(() => expect(purchaseApi.createPurchaseRequest).toHaveBeenCalledWith(1, expect.any(String), 3))
+  })
+
+  it('disables the purchase button when quantity is 0', async () => {
+    vi.spyOn(flashSaleApi, 'getFlashSale').mockResolvedValue(activeSale)
+    renderPage(true)
+
+    const quantityInput = await screen.findByLabelText('數量')
+    fireEvent.change(quantityInput, { target: { value: '0' } })
+
+    expect(screen.getByRole('button', { name: /搶購/ })).toBeDisabled()
+  })
+
+  it('disables the purchase button when quantity exceeds the purchase limit', async () => {
+    vi.spyOn(flashSaleApi, 'getFlashSale').mockResolvedValue(activeSale)
+    renderPage(true)
+
+    const quantityInput = await screen.findByLabelText('數量')
+    fireEvent.change(quantityInput, { target: { value: '4' } })
+
+    expect(screen.getByRole('button', { name: /搶購/ })).toBeDisabled()
   })
 })

@@ -32,7 +32,7 @@ public class CreatePurchaseRequestService {
     }
 
     @Transactional
-    public PurchaseRequest createPurchaseRequest(Long userId, Long flashSaleId, String idempotencyKey) {
+    public PurchaseRequest createPurchaseRequest(Long userId, Long flashSaleId, String idempotencyKey, int quantity) {
         var existing = purchaseRequestRepository
             .findByUserIdAndFlashSaleIdAndIdempotencyKey(userId, flashSaleId, idempotencyKey);
         if (existing.isPresent()) {
@@ -46,11 +46,15 @@ public class CreatePurchaseRequestService {
             throw new ConflictException("FLASH_SALE_NOT_ACTIVE", "Flash sale is not currently active");
         }
 
+        if (quantity > flashSale.getPurchaseLimitPerUser()) {
+            throw new ConflictException("PURCHASE_QUANTITY_EXCEEDS_LIMIT",
+                "Quantity " + quantity + " exceeds the purchase limit of " + flashSale.getPurchaseLimitPerUser() + " for this flash sale");
+        }
+
         if (purchaseRequestRepository.existsSucceededForUserAndFlashSale(userId, flashSaleId)) {
             return purchaseRequestRepository.save(PurchaseRequest.reject(userId, flashSaleId, idempotencyKey));
         }
 
-        int quantity = flashSale.getPurchaseLimitPerUser();
         StockReservationResult reservation = inventoryStockGateway.reserve(flashSaleId, quantity);
         if (reservation == StockReservationResult.INSUFFICIENT_STOCK) {
             return purchaseRequestRepository.save(PurchaseRequest.soldOut(userId, flashSaleId, idempotencyKey));

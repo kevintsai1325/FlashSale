@@ -182,7 +182,9 @@ class PurchaseConcurrencyIT {
                 barrier.await(10, TimeUnit.SECONDS);
                 MvcResult result = mockMvc.perform(post("/api/flash-sales/1/purchase-requests")
                         .header("Authorization", "Bearer " + token)
-                        .header("Idempotency-Key", idempotencyKey))
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"quantity\":1}"))
                     .andReturn();
                 assertThat(result.getResponse().getStatus())
                     .as("purchase-requests must always return 202, never a raw 5xx, even under contention")

@@ -34,6 +34,7 @@ export function FlashSaleDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { isAuthenticated } = useAuth()
+  const [quantity, setQuantity] = useState('1')
   const { data, isLoading, isError } = useQuery({
     queryKey: ['flash-sales', id],
     queryFn: () => getFlashSale(Number(id)),
@@ -43,12 +44,15 @@ export function FlashSaleDetailPage() {
   const countdown = useCountdown(data?.endsAt)
 
   const mutation = useMutation({
-    mutationFn: () => createPurchaseRequest(Number(id), crypto.randomUUID()),
+    mutationFn: () => createPurchaseRequest(Number(id), crypto.randomUUID(), Number(quantity)),
     onSuccess: (result) => navigate(`/purchase-requests/${result.requestId}`),
   })
 
   if (isLoading) return <div>Loading…</div>
   if (isError || !data) return <div role="alert">Failed to load flash sale.</div>
+
+  const quantityValue = Number(quantity)
+  const isQuantityValid = Number.isInteger(quantityValue) && quantityValue > 0 && quantityValue <= data.purchaseLimitPerUser
 
   const handlePurchase = () => {
     if (!isAuthenticated) {
@@ -79,10 +83,21 @@ export function FlashSaleDetailPage() {
         )}
         {countdown && <p className="countdown-strip">倒數 {countdown}</p>}
         <p className="detail-limit">每人限購 {data.purchaseLimitPerUser} 件</p>
+        <div className="quantity-field">
+          <label htmlFor="purchase-quantity">數量</label>
+          <input
+            id="purchase-quantity"
+            type="number"
+            min="1"
+            max={data.purchaseLimitPerUser}
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+          />
+        </div>
         <button
           className="btn btn-primary btn-block"
           onClick={handlePurchase}
-          disabled={data.status !== 'ACTIVE' || mutation.isPending}
+          disabled={data.status !== 'ACTIVE' || mutation.isPending || !isQuantityValid}
         >
           搶購
         </button>

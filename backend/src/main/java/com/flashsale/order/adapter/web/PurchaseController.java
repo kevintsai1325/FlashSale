@@ -1,10 +1,12 @@
 package com.flashsale.order.adapter.web;
 
 import com.flashsale.common.exception.NotFoundException;
+import com.flashsale.order.adapter.web.dto.PurchaseCreateRequest;
 import com.flashsale.order.application.CreatePurchaseRequestService;
 import com.flashsale.order.application.PurchaseRequestRepository;
 import com.flashsale.order.application.dto.PurchaseRequestView;
 import com.flashsale.order.domain.PurchaseRequest;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -28,9 +30,10 @@ public class PurchaseController {
     @PostMapping("/api/flash-sales/{id}/purchase-requests")
     public ResponseEntity<PurchaseRequestView> purchase(@PathVariable("id") Long flashSaleId,
                                                           @RequestHeader("Idempotency-Key") String idempotencyKey,
+                                                          @Valid @RequestBody PurchaseCreateRequest body,
                                                           @AuthenticationPrincipal Jwt jwt) {
         Long userId = jwt.getClaim("userId");
-        PurchaseRequest request = createPurchaseRequestService.createPurchaseRequest(userId, flashSaleId, idempotencyKey);
+        PurchaseRequest request = createPurchaseRequestService.createPurchaseRequest(userId, flashSaleId, idempotencyKey, body.quantity());
         return ResponseEntity.status(HttpStatus.ACCEPTED)
             .body(new PurchaseRequestView(request.getRequestId(), request.getStatus().name(), request.getOrderId()));
     }

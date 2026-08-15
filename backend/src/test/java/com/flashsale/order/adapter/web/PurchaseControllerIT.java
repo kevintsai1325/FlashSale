@@ -150,7 +150,9 @@ class PurchaseControllerIT {
 
         MvcResult firstPurchase = mockMvc.perform(post("/api/flash-sales/1/purchase-requests")
                 .header("Authorization", "Bearer " + firstUserToken)
-                .header("Idempotency-Key", "key-1"))
+                .header("Idempotency-Key", "key-1")
+                .contentType(APPLICATION_JSON)
+                .content("{\"quantity\":1}"))
             .andExpect(status().isAccepted())
             .andExpect(jsonPath("$.status").value("PENDING"))
             .andExpect(jsonPath("$.orderId").isEmpty())
@@ -164,7 +166,9 @@ class PurchaseControllerIT {
         // a second PurchaseRequest row or reserve stock twice.
         mockMvc.perform(post("/api/flash-sales/1/purchase-requests")
                 .header("Authorization", "Bearer " + firstUserToken)
-                .header("Idempotency-Key", "key-1"))
+                .header("Idempotency-Key", "key-1")
+                .contentType(APPLICATION_JSON)
+                .content("{\"quantity\":1}"))
             .andExpect(status().isAccepted())
             .andExpect(jsonPath("$.status").value("PENDING"))
             .andExpect(jsonPath("$.requestId").value(firstRequestId));
@@ -174,7 +178,9 @@ class PurchaseControllerIT {
         String secondUserToken = registerAndLogin("jack@example.com", "secret123");
         mockMvc.perform(post("/api/flash-sales/1/purchase-requests")
                 .header("Authorization", "Bearer " + secondUserToken)
-                .header("Idempotency-Key", "key-2"))
+                .header("Idempotency-Key", "key-2")
+                .contentType(APPLICATION_JSON)
+                .content("{\"quantity\":1}"))
             .andExpect(status().isAccepted())
             .andExpect(jsonPath("$.status").value("SOLD_OUT"))
             .andExpect(jsonPath("$.orderId").isEmpty());

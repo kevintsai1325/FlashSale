@@ -52,10 +52,43 @@ class CreatePurchaseRequestServiceTest {
             return saved;
         });
 
-        PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-1");
+        PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-1", 1);
 
         assertThat(result.getStatus()).isEqualTo(PurchaseRequestStatus.PENDING);
         verify(outboxWriter).write(eq("PurchaseRequest"), any(), eq("CreateOrderRequested"), any());
+    }
+
+    @Test
+    void reservesTheRequestedQuantityRatherThanAlwaysTheFullLimit() {
+        service = new CreatePurchaseRequestService(flashSaleRepository, inventoryStockGateway, purchaseRequestRepository, outboxWriter);
+        FlashSale saleWithLimitOfFive = FlashSale.schedule(1L, new BigDecimal("9.99"),
+            Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), 5);
+        when(purchaseRequestRepository.findByUserIdAndFlashSaleIdAndIdempotencyKey(1L, 10L, "idem-qty"))
+            .thenReturn(Optional.empty());
+        when(flashSaleRepository.findById(10L)).thenReturn(Optional.of(saleWithLimitOfFive));
+        when(purchaseRequestRepository.existsSucceededForUserAndFlashSale(1L, 10L)).thenReturn(false);
+        when(inventoryStockGateway.reserve(10L, 3)).thenReturn(StockReservationResult.RESERVED);
+        when(purchaseRequestRepository.save(any())).thenAnswer(inv -> {
+            PurchaseRequest saved = inv.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 999L);
+            return saved;
+        });
+
+        service.createPurchaseRequest(1L, 10L, "idem-qty", 3);
+
+        verify(inventoryStockGateway).reserve(10L, 3);
+    }
+
+    @Test
+    void throwsConflictWhenQuantityExceedsThePurchaseLimit() {
+        service = new CreatePurchaseRequestService(flashSaleRepository, inventoryStockGateway, purchaseRequestRepository, outboxWriter);
+        when(purchaseRequestRepository.findByUserIdAndFlashSaleIdAndIdempotencyKey(1L, 10L, "idem-over"))
+            .thenReturn(Optional.empty());
+        when(flashSaleRepository.findById(10L)).thenReturn(Optional.of(activeSale()));
+
+        assertThatThrownBy(() -> service.createPurchaseRequest(1L, 10L, "idem-over", 2))
+            .isInstanceOf(ConflictException.class);
+        verifyNoInteractions(inventoryStockGateway, outboxWriter);
     }
 
     @Test
@@ -68,7 +101,7 @@ class CreatePurchaseRequestServiceTest {
         when(inventoryStockGateway.reserve(10L, 1)).thenReturn(StockReservationResult.INSUFFICIENT_STOCK);
         when(purchaseRequestRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-2");
+        PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-2", 1);
 
         assertThat(result.getStatus()).isEqualTo(PurchaseRequestStatus.SOLD_OUT);
         verifyNoInteractions(outboxWriter);
@@ -81,7 +114,7 @@ class CreatePurchaseRequestServiceTest {
         when(purchaseRequestRepository.findByUserIdAndFlashSaleIdAndIdempotencyKey(1L, 10L, "idem-3"))
             .thenReturn(Optional.of(existing));
 
-        PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-3");
+        PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-3", 1);
 
         assertThat(result).isSameAs(existing);
         verifyNoInteractions(inventoryStockGateway, outboxWriter);
@@ -96,7 +129,7 @@ class CreatePurchaseRequestServiceTest {
         when(purchaseRequestRepository.existsSucceededForUserAndFlashSale(1L, 10L)).thenReturn(true);
         when(purchaseRequestRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-4");
+        PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-4", 1);
 
         assertThat(result.getStatus()).isEqualTo(PurchaseRequestStatus.REJECTED);
         verifyNoInteractions(inventoryStockGateway, outboxWriter);
@@ -111,7 +144,7 @@ class CreatePurchaseRequestServiceTest {
             .thenReturn(Optional.empty());
         when(flashSaleRepository.findById(10L)).thenReturn(Optional.of(notYetStarted));
 
-        assertThatThrownBy(() -> service.createPurchaseRequest(1L, 10L, "idem-5"))
+        assertThatThrownBy(() -> service.createPurchaseRequest(1L, 10L, "idem-5", 1))
             .isInstanceOf(ConflictException.class);
         verifyNoInteractions(inventoryStockGateway, outboxWriter);
     }

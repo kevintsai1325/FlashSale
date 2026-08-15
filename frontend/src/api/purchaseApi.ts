@@ -6,10 +6,11 @@ export interface PurchaseRequestView {
   orderId: number | null
 }
 
-export async function createPurchaseRequest(flashSaleId: number, idempotencyKey: string): Promise<PurchaseRequestView> {
+export async function createPurchaseRequest(flashSaleId: number, idempotencyKey: string, quantity: number): Promise<PurchaseRequestView> {
   const response = await apiFetch(`/api/flash-sales/${flashSaleId}/purchase-requests`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ quantity }),
   })
   return response.json()
 }

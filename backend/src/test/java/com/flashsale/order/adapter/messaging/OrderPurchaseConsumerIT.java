@@ -135,7 +135,9 @@ class OrderPurchaseConsumerIT {
 
         MvcResult result = mockMvc.perform(post("/api/flash-sales/1/purchase-requests")
                 .header("Authorization", "Bearer " + token)
-                .header("Idempotency-Key", "consumer-key-1"))
+                .header("Idempotency-Key", "consumer-key-1")
+                .contentType(APPLICATION_JSON)
+                .content("{\"quantity\":1}"))
             .andReturn();
         JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
         assertThat(body.get("status").asText()).isEqualTo("PENDING");
@@ -186,7 +188,9 @@ class OrderPurchaseConsumerIT {
         String token = registerAndLogin("consumer-metrics-test@example.com", "secret123");
         mockMvc.perform(post("/api/flash-sales/2/purchase-requests")
                 .header("Authorization", "Bearer " + token)
-                .header("Idempotency-Key", "consumer-metrics-key-1"));
+                .header("Idempotency-Key", "consumer-metrics-key-1")
+                .contentType(APPLICATION_JSON)
+                .content("{\"quantity\":1}"));
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
             assertThat(meterRegistry.get("purchase.order.created").counter().count()).isGreaterThan(before));

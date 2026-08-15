@@ -75,3 +75,22 @@
   font-size: .9rem;
   margin: 0;
 }
+
+.quantity-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.quantity-field label {
+  font-size: .85rem;
+  color: var(--muted);
+}
+
+.quantity-field input {
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  width: 100px;
+}
