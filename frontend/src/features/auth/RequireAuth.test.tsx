@@ -29,4 +29,22 @@ describe('RequireAuth', () => {
     renderWithAuth(true)
     expect(screen.getByText('secret content')).toBeInTheDocument()
   })
+
+  it('does not redirect while auth restore is in progress, even though isAuthenticated is still false', () => {
+    render(
+      <AuthContext.Provider value={{ isAuthenticated: false, role: null, isRestoring: true, login: vi.fn(), logout: vi.fn(), markAuthenticated: vi.fn(), finishRestoring: vi.fn() }}>
+        <MemoryRouter initialEntries={['/protected']}>
+          <Routes>
+            <Route path="/login" element={<div>login page</div>} />
+            <Route element={<RequireAuth />}>
+              <Route path="/protected" element={<div>secret content</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>
+    )
+
+    expect(screen.queryByText('login page')).not.toBeInTheDocument()
+    expect(screen.queryByText('secret content')).not.toBeInTheDocument()
+  })
 })
