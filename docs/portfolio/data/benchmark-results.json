@@ -1,0 +1,1924 @@
+{
+    "schemaVersion":  1,
+    "mode":  "full",
+    "environment":  {
+                        "gitSha":  "aba12097c3e76b6dbbb366d7bc48bdc1154d610e",
+                        "gitBranch":  "codex/week7-portfolio",
+                        "gitDirty":  false,
+                        "k6Version":  "k6.exe v2.2.0 (commit/00a9a1b7f5, go1.26.5, windows/amd64)",
+                        "dockerVersion":  "29.6.2",
+                        "dockerComposeVersion":  "5.3.1",
+                        "os":  "Microsoft Windows 11 家用版 10.0.26200",
+                        "cpu":  {
+                                    "model":  "Intel(R) Core(TM) i7-14650HX",
+                                    "logicalCores":  24
+                                },
+                        "memoryGb":  31.6,
+                        "composeProject":  "flashsale-benchmark",
+                        "backendBaseUrl":  "http://127.0.0.1:18080",
+                        "startedAt":  "2026-08-16T12:16:45.2393687Z",
+                        "finishedAt":  "2026-08-16T12:33:57.8919578Z"
+                    },
+    "summary":  {
+                    "expectedRuns":  16,
+                    "failedRuns":  0
+                },
+    "runs":  [
+                 {
+                     "runId":  "contention-30x10-1",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  10,
+                     "startedAt":  "2026-08-16T12:17:12.410Z",
+                     "finishedAt":  "2026-08-16T12:17:14.7545829Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-30x10-1.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  30,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  157.72347,
+                                                               "min":  145.4297,
+                                                               "med":  156.2109,
+                                                               "p90":  173.02377,
+                                                               "p95":  174.8784,
+                                                               "max":  176.5393
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  336.96666666666664,
+                                                                "min":  155,
+                                                                "med":  171.5,
+                                                                "p90":  682,
+                                                                "p95":  682,
+                                                                "max":  684
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  679.8,
+                                                                   "min":  676,
+                                                                   "med":  679,
+                                                                   "p90":  682.2,
+                                                                   "p95":  683.1,
+                                                                   "max":  684
+                                                               },
+                                     "requestsPerSecond":  70.93240935831138,
+                                     "httpRequests":  50,
+                                     "iterations":  30
+                                 },
+                     "outcomes":  {
+                                      "accepted":  30,
+                                      "succeeded":  10,
+                                      "soldOut":  20,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  10,
+                                        "succeededRequests":  10,
+                                        "soldOutRequests":  20,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  10,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  10
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  30.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  30.0,
+                                                                           "TOTAL_TIME":  0.763422157,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  10.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-30x10-2",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  10,
+                     "startedAt":  "2026-08-16T12:17:20.814Z",
+                     "finishedAt":  "2026-08-16T12:17:22.5574323Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-30x10-2.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  30,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  37.23651333333333,
+                                                               "min":  22.4592,
+                                                               "med":  37.82705,
+                                                               "p90":  51.2943,
+                                                               "p95":  51.2943,
+                                                               "max":  53.4792
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  128.86666666666667,
+                                                                "min":  36,
+                                                                "med":  52.5,
+                                                                "p90":  289.4,
+                                                                "p95":  293,
+                                                                "max":  293
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  289.8,
+                                                                   "min":  288,
+                                                                   "med":  289,
+                                                                   "p90":  293,
+                                                                   "p95":  293,
+                                                                   "max":  293
+                                                               },
+                                     "requestsPerSecond":  131.4823251597346,
+                                     "httpRequests":  40,
+                                     "iterations":  30
+                                 },
+                     "outcomes":  {
+                                      "accepted":  30,
+                                      "succeeded":  10,
+                                      "soldOut":  20,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  10,
+                                        "succeededRequests":  10,
+                                        "soldOutRequests":  20,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  10,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  10
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  60.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  60.0,
+                                                                           "TOTAL_TIME":  0.903699305,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  20.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-30x10-3",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  10,
+                     "startedAt":  "2026-08-16T12:17:28.818Z",
+                     "finishedAt":  "2026-08-16T12:17:30.8623694Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-30x10-3.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  30,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  36.720106666666666,
+                                                               "min":  28.4553,
+                                                               "med":  37.0477,
+                                                               "p90":  44.7641,
+                                                               "p95":  44.77532,
+                                                               "max":  44.7845
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  195.43333333333334,
+                                                                "min":  39,
+                                                                "med":  47,
+                                                                "p90":  551,
+                                                                "p95":  551.55,
+                                                                "max":  552
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  499.4,
+                                                                   "min":  291,
+                                                                   "med":  551,
+                                                                   "p90":  552,
+                                                                   "p95":  552,
+                                                                   "max":  552
+                                                               },
+                                     "requestsPerSecond":  84.02113971875323,
+                                     "httpRequests":  48,
+                                     "iterations":  30
+                                 },
+                     "outcomes":  {
+                                      "accepted":  30,
+                                      "succeeded":  10,
+                                      "soldOut":  20,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  10,
+                                        "succeededRequests":  10,
+                                        "soldOutRequests":  20,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  10,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  10
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  90.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  90.0,
+                                                                           "TOTAL_TIME":  1.02083559,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  30.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-30x10-4",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  10,
+                     "startedAt":  "2026-08-16T12:17:36.879Z",
+                     "finishedAt":  "2026-08-16T12:17:38.9383794Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-30x10-4.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  30,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  35.416936666666665,
+                                                               "min":  25.0022,
+                                                               "med":  35.9678,
+                                                               "p90":  44.95129,
+                                                               "p95":  44.9854,
+                                                               "max":  44.9854
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  207.86666666666667,
+                                                                "min":  37,
+                                                                "med":  46,
+                                                                "p90":  541,
+                                                                "p95":  541,
+                                                                "max":  541
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  540.6,
+                                                                   "min":  540,
+                                                                   "med":  541,
+                                                                   "p90":  541,
+                                                                   "p95":  541,
+                                                                   "max":  541
+                                                               },
+                                     "requestsPerSecond":  89.38983748391206,
+                                     "httpRequests":  50,
+                                     "iterations":  30
+                                 },
+                     "outcomes":  {
+                                      "accepted":  30,
+                                      "succeeded":  10,
+                                      "soldOut":  20,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  10,
+                                        "succeededRequests":  10,
+                                        "soldOutRequests":  20,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  10,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  10
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  120.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  120.0,
+                                                                           "TOTAL_TIME":  1.186608703,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  40.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-30x10-5",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  10,
+                     "startedAt":  "2026-08-16T12:17:44.996Z",
+                     "finishedAt":  "2026-08-16T12:17:47.0155081Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-30x10-5.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  30,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  31.405703333333342,
+                                                               "min":  22.9883,
+                                                               "med":  31.247,
+                                                               "p90":  38.3798,
+                                                               "p95":  38.69847,
+                                                               "max":  38.9592
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  151.9,
+                                                                "min":  30,
+                                                                "med":  39,
+                                                                "p90":  537.1,
+                                                                "p95":  538.55,
+                                                                "max":  540
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  384,
+                                                                   "min":  279,
+                                                                   "med":  283.5,
+                                                                   "p90":  539.1,
+                                                                   "p95":  539.55,
+                                                                   "max":  540
+                                                               },
+                                     "requestsPerSecond":  78.94259975922508,
+                                     "httpRequests":  44,
+                                     "iterations":  30
+                                 },
+                     "outcomes":  {
+                                      "accepted":  30,
+                                      "succeeded":  10,
+                                      "soldOut":  20,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  10,
+                                        "succeededRequests":  10,
+                                        "soldOutRequests":  20,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  10,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  10
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  150.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  150.0,
+                                                                           "TOTAL_TIME":  1.262321394,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  50.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-100x30-1",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  30,
+                     "startedAt":  "2026-08-16T12:17:55.312Z",
+                     "finishedAt":  "2026-08-16T12:17:57.8588708Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-100x30-1.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  100,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  66.357108,
+                                                               "min":  21.498,
+                                                               "med":  69.3303,
+                                                               "p90":  105.82641,
+                                                               "p95":  110.63891,
+                                                               "max":  117.6871
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  295.73,
+                                                                "min":  48,
+                                                                "med":  101,
+                                                                "p90":  811,
+                                                                "p95":  812,
+                                                                "max":  816
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  789.6333333333333,
+                                                                   "min":  540,
+                                                                   "med":  811,
+                                                                   "p90":  816,
+                                                                   "p95":  816,
+                                                                   "max":  816
+                                                               },
+                                     "requestsPerSecond":  224.12025052829196,
+                                     "httpRequests":  188,
+                                     "iterations":  100
+                                 },
+                     "outcomes":  {
+                                      "accepted":  100,
+                                      "succeeded":  30,
+                                      "soldOut":  70,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  30,
+                                        "succeededRequests":  30,
+                                        "soldOutRequests":  70,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  30,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  30
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  250.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  250.0,
+                                                                           "TOTAL_TIME":  1.554251329,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  80.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-100x30-2",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  30,
+                     "startedAt":  "2026-08-16T12:18:08.250Z",
+                     "finishedAt":  "2026-08-16T12:18:10.3650249Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-100x30-2.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  100,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  51.771765999999985,
+                                                               "min":  14.9443,
+                                                               "med":  54.483999999999995,
+                                                               "p90":  79.08969,
+                                                               "p95":  80.681,
+                                                               "max":  84.3505
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  197.2,
+                                                                "min":  42,
+                                                                "med":  74,
+                                                                "p90":  545,
+                                                                "p95":  549,
+                                                                "max":  551
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  508.1666666666667,
+                                                                   "min":  277,
+                                                                   "med":  544.5,
+                                                                   "p90":  550,
+                                                                   "p95":  550,
+                                                                   "max":  551
+                                                               },
+                                     "requestsPerSecond":  273.1783991535672,
+                                     "httpRequests":  156,
+                                     "iterations":  100
+                                 },
+                     "outcomes":  {
+                                      "accepted":  100,
+                                      "succeeded":  30,
+                                      "soldOut":  70,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  30,
+                                        "succeededRequests":  30,
+                                        "soldOutRequests":  70,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  30,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  30
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  350.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  350.0,
+                                                                           "TOTAL_TIME":  1.721460975,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  110.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-100x30-3",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  30,
+                     "startedAt":  "2026-08-16T12:18:20.852Z",
+                     "finishedAt":  "2026-08-16T12:18:22.9835266Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-100x30-3.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  100,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  70.71596999999998,
+                                                               "min":  18.228,
+                                                               "med":  81.5275,
+                                                               "p90":  104.11326,
+                                                               "p95":  108.3748,
+                                                               "max":  112.9216
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  225.77,
+                                                                "min":  47,
+                                                                "med":  100,
+                                                                "p90":  552.1,
+                                                                "p95":  556.05,
+                                                                "max":  561
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  547.0333333333333,
+                                                                   "min":  537,
+                                                                   "med":  548,
+                                                                   "p90":  557.2,
+                                                                   "p95":  559.55,
+                                                                   "max":  561
+                                                               },
+                                     "requestsPerSecond":  276.36290525813246,
+                                     "httpRequests":  160,
+                                     "iterations":  100
+                                 },
+                     "outcomes":  {
+                                      "accepted":  100,
+                                      "succeeded":  30,
+                                      "soldOut":  70,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  30,
+                                        "succeededRequests":  30,
+                                        "soldOutRequests":  70,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  30,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  30
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  450.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  450.0,
+                                                                           "TOTAL_TIME":  1.936798553,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  140.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-100x30-4",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  30,
+                     "startedAt":  "2026-08-16T12:18:33.146Z",
+                     "finishedAt":  "2026-08-16T12:18:35.1553808Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-100x30-4.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  100,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  50.151023000000016,
+                                                               "min":  15.6631,
+                                                               "med":  51.87865,
+                                                               "p90":  75.48675000000001,
+                                                               "p95":  80.93419,
+                                                               "max":  85.8717
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  174.8,
+                                                                "min":  39,
+                                                                "med":  71.5,
+                                                                "p90":  544,
+                                                                "p95":  545,
+                                                                "max":  547
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  435.73333333333335,
+                                                                   "min":  273,
+                                                                   "med":  535.5,
+                                                                   "p90":  546.1,
+                                                                   "p95":  547,
+                                                                   "max":  547
+                                                               },
+                                     "requestsPerSecond":  261.7055776885385,
+                                     "httpRequests":  148,
+                                     "iterations":  100
+                                 },
+                     "outcomes":  {
+                                      "accepted":  100,
+                                      "succeeded":  30,
+                                      "soldOut":  70,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  30,
+                                        "succeededRequests":  30,
+                                        "soldOutRequests":  70,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  30,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  30
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  550.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  550.0,
+                                                                           "TOTAL_TIME":  2.077269473,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  170.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-100x30-5",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  30,
+                     "startedAt":  "2026-08-16T12:18:44.837Z",
+                     "finishedAt":  "2026-08-16T12:18:46.9530297Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-100x30-5.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  100,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  41.992605,
+                                                               "min":  15.5828,
+                                                               "med":  43.07645,
+                                                               "p90":  61.68621,
+                                                               "p95":  63.069344999999984,
+                                                               "max":  71.4331
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  120.48,
+                                                                "min":  30,
+                                                                "med":  57.5,
+                                                                "p90":  282,
+                                                                "p95":  286,
+                                                                "max":  301
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  282.1333333333333,
+                                                                   "min":  275,
+                                                                   "med":  281,
+                                                                   "p90":  286.90000000000003,
+                                                                   "p95":  296.65,
+                                                                   "max":  301
+                                                               },
+                                     "requestsPerSecond":  407.27276372791175,
+                                     "httpRequests":  130,
+                                     "iterations":  100
+                                 },
+                     "outcomes":  {
+                                      "accepted":  100,
+                                      "succeeded":  30,
+                                      "soldOut":  70,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  30,
+                                        "succeededRequests":  30,
+                                        "soldOutRequests":  70,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  30,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  30
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  650.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  650.0,
+                                                                           "TOTAL_TIME":  2.210184828,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  200.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-300x100-1",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  100,
+                     "startedAt":  "2026-08-16T12:19:03.293Z",
+                     "finishedAt":  "2026-08-16T12:19:06.8884877Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-300x100-1.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  300,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  74.00040300000003,
+                                                               "min":  0,
+                                                               "med":  66.48949999999999,
+                                                               "p90":  165.01582000000002,
+                                                               "p95":  175.79719500000002,
+                                                               "max":  190.4197
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  552.9190476190477,
+                                                                "min":  101,
+                                                                "med":  185.5,
+                                                                "p90":  1363.1,
+                                                                "p95":  1373,
+                                                                "max":  1635
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  998.15,
+                                                                   "min":  533,
+                                                                   "med":  956.5,
+                                                                   "p90":  1373.4,
+                                                                   "p95":  1395.3499999999992,
+                                                                   "max":  1635
+                                                               },
+                                     "requestsPerSecond":  400.22600149345595,
+                                     "httpRequests":  666,
+                                     "iterations":  300
+                                 },
+                     "outcomes":  {
+                                      "accepted":  210,
+                                      "succeeded":  100,
+                                      "soldOut":  110,
+                                      "rejected":  0,
+                                      "failed":  90,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  100,
+                                        "succeededRequests":  100,
+                                        "soldOutRequests":  110,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  100,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  100
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  860.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  860.0,
+                                                                           "TOTAL_TIME":  2.61616807,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  300.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-300x100-2",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  100,
+                     "startedAt":  "2026-08-16T12:19:23.946Z",
+                     "finishedAt":  "2026-08-16T12:19:26.5845399Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-300x100-2.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  300,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  61.87631666666668,
+                                                               "min":  0,
+                                                               "med":  61.18795,
+                                                               "p90":  129.61937000000003,
+                                                               "p95":  137.49454500000002,
+                                                               "max":  151.9467
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  377.3,
+                                                                "min":  90,
+                                                                "med":  149,
+                                                                "p90":  1098,
+                                                                "p95":  1101.55,
+                                                                "max":  1107
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  660.9,
+                                                                   "min":  280,
+                                                                   "med":  691.5,
+                                                                   "p90":  1102,
+                                                                   "p95":  1103,
+                                                                   "max":  1107
+                                                               },
+                                     "requestsPerSecond":  474.06125718926694,
+                                     "httpRequests":  537,
+                                     "iterations":  300
+                                 },
+                     "outcomes":  {
+                                      "accepted":  210,
+                                      "succeeded":  100,
+                                      "soldOut":  110,
+                                      "rejected":  0,
+                                      "failed":  90,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  100,
+                                        "succeededRequests":  100,
+                                        "soldOutRequests":  110,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  100,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  100
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  1070.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  1070.0,
+                                                                           "TOTAL_TIME":  2.982498599,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  400.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-300x100-3",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  100,
+                     "startedAt":  "2026-08-16T12:19:43.032Z",
+                     "finishedAt":  "2026-08-16T12:19:45.8981134Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-300x100-3.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  300,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  56.769122666666604,
+                                                               "min":  0,
+                                                               "med":  56.99625,
+                                                               "p90":  127.4119,
+                                                               "p95":  136.73564,
+                                                               "max":  147.6802
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  445.49528301886795,
+                                                                "min":  84,
+                                                                "med":  147,
+                                                                "p90":  1088,
+                                                                "p95":  1091.9,
+                                                                "max":  1099
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  815.6,
+                                                                   "min":  536,
+                                                                   "med":  811,
+                                                                   "p90":  1093,
+                                                                   "p95":  1094,
+                                                                   "max":  1099
+                                                               },
+                                     "requestsPerSecond":  534.4266515008259,
+                                     "httpRequests":  600,
+                                     "iterations":  300
+                                 },
+                     "outcomes":  {
+                                      "accepted":  212,
+                                      "succeeded":  100,
+                                      "soldOut":  112,
+                                      "rejected":  0,
+                                      "failed":  88,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  100,
+                                        "succeededRequests":  100,
+                                        "soldOutRequests":  112,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  100,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  100
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  1282.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  1282.0,
+                                                                           "TOTAL_TIME":  3.298353994,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  500.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-300x100-4",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  100,
+                     "startedAt":  "2026-08-16T12:20:03.677Z",
+                     "finishedAt":  "2026-08-16T12:20:06.5346688Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-300x100-4.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  300,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  81.55464800000001,
+                                                               "min":  0,
+                                                               "med":  82.826,
+                                                               "p90":  170.55377000000004,
+                                                               "p95":  181.1309,
+                                                               "max":  205.8336
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  513.9205607476636,
+                                                                "min":  120,
+                                                                "med":  198,
+                                                                "p90":  1117.7,
+                                                                "p95":  1124.7,
+                                                                "max":  1389
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  919.26,
+                                                                   "min":  539,
+                                                                   "med":  959.5,
+                                                                   "p90":  1126.4,
+                                                                   "p95":  1384,
+                                                                   "max":  1389
+                                                               },
+                                     "requestsPerSecond":  440.7213124889559,
+                                     "httpRequests":  633,
+                                     "iterations":  300
+                                 },
+                     "outcomes":  {
+                                      "accepted":  214,
+                                      "succeeded":  100,
+                                      "soldOut":  114,
+                                      "rejected":  0,
+                                      "failed":  86,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  100,
+                                        "succeededRequests":  100,
+                                        "soldOutRequests":  114,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  100,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  100
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  1496.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  1496.0,
+                                                                           "TOTAL_TIME":  3.699115808,
+                                                                           "MAX":  0.071612166
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  600.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-300x100-5",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  100,
+                     "startedAt":  "2026-08-16T12:20:22.890Z",
+                     "finishedAt":  "2026-08-16T12:20:26.0913051Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-300x100-5.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  300,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  58.35464300000001,
+                                                               "min":  0,
+                                                               "med":  55.4166,
+                                                               "p90":  122.36037000000006,
+                                                               "p95":  129.9647,
+                                                               "max":  141.9705
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  542.933962264151,
+                                                                "min":  89,
+                                                                "med":  139,
+                                                                "p90":  1337,
+                                                                "p95":  1348,
+                                                                "max":  1358
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  1023.85,
+                                                                   "min":  539,
+                                                                   "med":  1062.5,
+                                                                   "p90":  1348,
+                                                                   "p95":  1351,
+                                                                   "max":  1358
+                                                               },
+                                     "requestsPerSecond":  492.5792183496216,
+                                     "httpRequests":  683,
+                                     "iterations":  300
+                                 },
+                     "outcomes":  {
+                                      "accepted":  212,
+                                      "succeeded":  100,
+                                      "soldOut":  112,
+                                      "rejected":  0,
+                                      "failed":  88,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  100,
+                                        "succeededRequests":  100,
+                                        "soldOutRequests":  112,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  100,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  100
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  1708.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  1708.0,
+                                                                           "TOTAL_TIME":  3.986467264,
+                                                                           "MAX":  0.021382823
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  700.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "soak-1",
+                     "kind":  "soak",
+                     "status":  "valid",
+                     "stock":  6000,
+                     "startedAt":  "2026-08-16T12:23:52.335Z",
+                     "finishedAt":  "2026-08-16T12:33:54.2522623Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-soak-1.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "users":  6000,
+                     "scenario":  {
+                                      "executor":  "constant-arrival-rate",
+                                      "rate":  10,
+                                      "timeUnit":  "1s",
+                                      "duration":  "10m",
+                                      "preAllocatedVUs":  50,
+                                      "maxVUs":  200
+                                  },
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  8.108091749999986,
+                                                               "min":  0.531,
+                                                               "med":  7.59715,
+                                                               "p90":  11.77078,
+                                                               "p95":  12.55851,
+                                                               "max":  34.9809
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  405.2475,
+                                                                "min":  254,
+                                                                "med":  511,
+                                                                "p90":  520,
+                                                                "p95":  523,
+                                                                "max":  784
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  405.2475,
+                                                                   "min":  254,
+                                                                   "med":  511,
+                                                                   "p90":  520,
+                                                                   "p95":  523,
+                                                                   "max":  784
+                                                               },
+                                     "requestsPerSecond":  25.59536525354544,
+                                     "httpRequests":  15369,
+                                     "iterations":  6001
+                                 },
+                     "outcomes":  {
+                                      "accepted":  6000,
+                                      "succeeded":  6000,
+                                      "soldOut":  0,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  1
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  6000,
+                                        "succeededRequests":  6000,
+                                        "soldOutRequests":  0,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  6000,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  6000
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  7708.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  7708.0,
+                                                                           "TOTAL_TIME":  9.226234745,
+                                                                           "MAX":  0.002674274
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  6700.0
+                                                                 }
+                                  }
+                 }
+             ]
+}
