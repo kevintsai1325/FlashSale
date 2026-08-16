@@ -94,7 +94,7 @@ services:
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/internal-health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/internal-health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -110,7 +110,7 @@ services:
       - backend
       - frontend
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/internal-health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/internal-health"]
       interval: 10s
       timeout: 5s
       retries: 10
