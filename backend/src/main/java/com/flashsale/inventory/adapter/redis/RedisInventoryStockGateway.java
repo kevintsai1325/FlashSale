@@ -48,6 +48,7 @@ public class RedisInventoryStockGateway implements InventoryStockGateway {
     @Override
     public StockReservationResult reserve(Long flashSaleId, int quantity) {
         Timer.Sample sample = purchaseMetrics.startReservationTimer();
+        boolean outcomeRecorded = false;
         try {
             ensureSeeded(flashSaleId);
             Long remaining = redisTemplate.execute(reserveStockScript, List.of(stockKey(flashSaleId)), String.valueOf(quantity));
@@ -61,7 +62,13 @@ public class RedisInventoryStockGateway implements InventoryStockGateway {
             }
             StockReservationResult result = remaining == -1 ? StockReservationResult.INSUFFICIENT_STOCK : StockReservationResult.RESERVED;
             purchaseMetrics.recordReservationOutcome(result == StockReservationResult.RESERVED ? "reserved" : "insufficient_stock");
+            outcomeRecorded = true;
             return result;
+        } catch (RuntimeException exception) {
+            if (!outcomeRecorded) {
+                purchaseMetrics.recordReservationOutcome("error");
+            }
+            throw exception;
         } finally {
             purchaseMetrics.stopReservationTimer(sample);
         }

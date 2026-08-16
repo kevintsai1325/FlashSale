@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 
@@ -29,7 +30,8 @@ class RedisInventoryStockGatewayTest {
     @Mock RedisScript<Long> reserveStockScript;
     @Mock InventoryRepository inventoryRepository;
     @Mock ValueOperations<String, String> valueOperations;
-    PurchaseMetrics purchaseMetrics = new PurchaseMetrics(new SimpleMeterRegistry());
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    PurchaseMetrics purchaseMetrics = new PurchaseMetrics(meterRegistry);
 
     @Test
     void throwsServiceUnavailableWhenLuaScriptReturnsMinusTwoBothAttempts() {
@@ -48,6 +50,10 @@ class RedisInventoryStockGatewayTest {
 
         // Verify that execute was called exactly twice (initial attempt + retry)
         verify(redisTemplate, times(2)).execute(eq(reserveStockScript), anyList(), anyString());
+        assertThat(reservationCount("error")).isEqualTo(1.0);
+        assertThat(reservationCount("reserved")).isZero();
+        assertThat(reservationCount("insufficient_stock")).isZero();
+        assertThat(meterRegistry.get("purchase.reservation.latency").timer().count()).isEqualTo(1);
     }
 
     @Test
@@ -106,5 +112,38 @@ class RedisInventoryStockGatewayTest {
         assertThat(result).isEqualTo(StockReservationResult.RESERVED);
         // Verify execute was called twice (initial failed with -2, then retry succeeded)
         verify(redisTemplate, times(2)).execute(eq(reserveStockScript), anyList(), anyString());
+    }
+
+    @Test
+    void recordsOneErrorAndRethrowsTheOriginalRedisException() {
+        RedisInventoryStockGateway gateway = new RedisInventoryStockGateway(
+            redisTemplate, reserveStockScript, inventoryRepository, purchaseMetrics);
+        RedisConnectionFailureException failure = new RedisConnectionFailureException("down");
+        when(redisTemplate.hasKey(anyString())).thenReturn(true);
+        when(redisTemplate.execute(eq(reserveStockScript), anyList(), anyString())).thenThrow(failure);
+
+        assertThatThrownBy(() -> gateway.reserve(42L, 1)).isSameAs(failure);
+
+        assertThat(reservationCount("error")).isEqualTo(1.0);
+        assertThat(meterRegistry.get("purchase.reservation.latency").timer().count()).isEqualTo(1);
+    }
+
+    @Test
+    void recordsOneErrorWhenLuaReturnsNull() {
+        RedisInventoryStockGateway gateway = new RedisInventoryStockGateway(
+            redisTemplate, reserveStockScript, inventoryRepository, purchaseMetrics);
+        when(redisTemplate.hasKey(anyString())).thenReturn(true);
+        when(redisTemplate.execute(eq(reserveStockScript), anyList(), anyString())).thenReturn(null);
+
+        assertThatThrownBy(() -> gateway.reserve(42L, 1))
+            .isInstanceOf(ServiceUnavailableException.class);
+
+        assertThat(reservationCount("error")).isEqualTo(1.0);
+        assertThat(meterRegistry.get("purchase.reservation.latency").timer().count()).isEqualTo(1);
+    }
+
+    private double reservationCount(String outcome) {
+        var counter = meterRegistry.find("purchase.reservation").tag("outcome", outcome).counter();
+        return counter == null ? 0.0 : counter.count();
     }
 }
