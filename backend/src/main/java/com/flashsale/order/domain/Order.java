@@ -40,14 +40,14 @@ public class Order {
 
     protected Order() {}
 
-    public static Order createPendingPayment(Long userId, Long productId, int quantity, BigDecimal unitPrice) {
+    public static Order createPendingPayment(Long userId, Long productId, String productName, int quantity, BigDecimal unitPrice) {
         Order order = new Order();
         order.orderNo = "ORD-" + UUID.randomUUID();
         order.userId = userId;
         order.totalAmount = unitPrice.multiply(BigDecimal.valueOf(quantity));
         order.status = OrderStatus.PENDING_PAYMENT;
         order.paymentDueAt = Instant.now().plus(15, ChronoUnit.MINUTES);
-        OrderItem item = OrderItem.of(productId, quantity, unitPrice);
+        OrderItem item = OrderItem.of(productId, productName, quantity, unitPrice);
         item.assignOrder(order);
         order.items.add(item);
         return order;

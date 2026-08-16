@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flashsale.common.config.RabbitConfig;
 import com.flashsale.common.messaging.ConsumedMessageGuard;
 import com.flashsale.common.metrics.PurchaseMetrics;
+import com.flashsale.catalog.application.ProductRepository;
+import com.flashsale.catalog.domain.Product;
 import com.flashsale.inventory.application.InventoryRepository;
 import com.flashsale.inventory.domain.Inventory;
 import com.flashsale.order.application.OrderRepository;
@@ -30,13 +32,14 @@ public class OrderPurchaseConsumer {
     private final InventoryRepository inventoryRepository;
     private final OrderRepository orderRepository;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
+    private final ProductRepository productRepository;
     private final ObjectMapper objectMapper;
     private final PurchaseMetrics purchaseMetrics;
 
     public OrderPurchaseConsumer(ConsumedMessageGuard consumedMessageGuard, PurchaseRequestRepository purchaseRequestRepository,
                                   InventoryRepository inventoryRepository, OrderRepository orderRepository,
                                   OrderStatusHistoryRepository orderStatusHistoryRepository, ObjectMapper objectMapper,
-                                  PurchaseMetrics purchaseMetrics) {
+                                  PurchaseMetrics purchaseMetrics, ProductRepository productRepository) {
         this.consumedMessageGuard = consumedMessageGuard;
         this.purchaseRequestRepository = purchaseRequestRepository;
         this.inventoryRepository = inventoryRepository;
@@ -44,6 +47,7 @@ public class OrderPurchaseConsumer {
         this.orderStatusHistoryRepository = orderStatusHistoryRepository;
         this.objectMapper = objectMapper;
         this.purchaseMetrics = purchaseMetrics;
+        this.productRepository = productRepository;
     }
 
     @RabbitListener(queues = RabbitConfig.CREATE_ORDER_QUEUE)
@@ -68,7 +72,10 @@ public class OrderPurchaseConsumer {
         inventory.sell(event.quantity());
         inventoryRepository.save(inventory);
 
-        Order order = Order.createPendingPayment(event.userId(), event.productId(), event.quantity(), event.unitPrice());
+        Product product = productRepository.findById(event.productId())
+            .orElseThrow(() -> new IllegalStateException("Product " + event.productId() + " not found"));
+        Order order = Order.createPendingPayment(
+            event.userId(), event.productId(), product.getName(), event.quantity(), event.unitPrice());
         Order savedOrder = orderRepository.save(order);
         orderStatusHistoryRepository.record(savedOrder.getId(), null, OrderStatus.PENDING_PAYMENT);
 

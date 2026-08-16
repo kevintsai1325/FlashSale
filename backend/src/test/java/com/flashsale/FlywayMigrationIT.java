@@ -39,4 +39,17 @@ class FlywayMigrationIT extends AbstractIntegrationTest {
         assertThat(column.get("data_type")).isEqualTo("jsonb");
         assertThat(column.get("is_nullable")).isEqualTo("YES");
     }
+
+    @Test
+    void orderItemsHaveRequiredProductNameSnapshot() {
+        var column = jdbcTemplate.queryForMap("""
+            SELECT is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'order_items'
+              AND column_name = 'product_name'
+            """);
+
+        assertThat(column.get("is_nullable")).isEqualTo("NO");
+    }
 }

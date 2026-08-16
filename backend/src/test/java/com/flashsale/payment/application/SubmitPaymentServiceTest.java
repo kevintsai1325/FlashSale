@@ -30,7 +30,7 @@ class SubmitPaymentServiceTest {
     SubmitPaymentService service;
 
     private Order pendingOrderOwnedBy(Long userId) {
-        return Order.createPendingPayment(userId, 10L, 1, new BigDecimal("9.99"));
+        return Order.createPendingPayment(userId, 10L, "Test Product", 1, new BigDecimal("9.99"));
     }
 
     @Test

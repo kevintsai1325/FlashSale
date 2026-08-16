@@ -18,6 +18,9 @@ public class OrderItem {
     @Column(name = "product_id", nullable = false)
     private Long productId;
 
+    @Column(name = "product_name", nullable = false)
+    private String productName;
+
     @Column(nullable = false)
     private int quantity;
 
@@ -26,9 +29,10 @@ public class OrderItem {
 
     protected OrderItem() {}
 
-    public static OrderItem of(Long productId, int quantity, BigDecimal unitPrice) {
+    public static OrderItem of(Long productId, String productName, int quantity, BigDecimal unitPrice) {
         OrderItem item = new OrderItem();
         item.productId = productId;
+        item.productName = productName;
         item.quantity = quantity;
         item.unitPrice = unitPrice;
         return item;
@@ -37,6 +41,7 @@ public class OrderItem {
     void assignOrder(Order order) { this.order = order; }
 
     public Long getProductId() { return productId; }
+    public String getProductName() { return productName; }
     public int getQuantity() { return quantity; }
     public BigDecimal getUnitPrice() { return unitPrice; }
 }
