@@ -11,6 +11,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+
 @Component
 public class ProblemDetailAccessDeniedHandler implements AccessDeniedHandler {
 
@@ -28,6 +30,7 @@ public class ProblemDetailAccessDeniedHandler implements AccessDeniedHandler {
             "您沒有權限存取此資源", request.getRequestURI());
         response.setStatus(HttpStatus.FORBIDDEN.value());
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         objectMapper.writeValue(response.getWriter(), problemDetail);
     }
 }

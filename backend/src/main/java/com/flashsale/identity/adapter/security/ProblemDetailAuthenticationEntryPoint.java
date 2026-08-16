@@ -11,6 +11,8 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+
 @Component
 public class ProblemDetailAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
@@ -28,6 +30,7 @@ public class ProblemDetailAuthenticationEntryPoint implements AuthenticationEntr
             "存取此資源需要先登入", request.getRequestURI());
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         objectMapper.writeValue(response.getWriter(), problemDetail);
     }
 }
