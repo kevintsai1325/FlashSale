@@ -48,7 +48,7 @@ Extend `FlywayMigrationIT` to query `information_schema.columns` and assert `pro
 
 - [ ] **Step 2: Verify RED**
 
-From `backend`, run `.\gradlew.bat test --tests com.flashsale.order.domain.OrderTest --tests com.flashsale.FlywayMigrationIT`. Expected: compilation/schema failure because the field is absent.
+From `backend`, run `.\gradlew.bat test --tests com.flashsale.order.domain.OrderTest`. Expected: compilation failure because the field is absent. Write the `FlywayMigrationIT` assertion now, but defer running it until every implementation task is complete, per the agreed integration-test policy.
 
 - [ ] **Step 3: Implement migration and domain snapshot**
 
@@ -62,7 +62,7 @@ Pass `productName` through `Order.createPendingPayment` and `OrderItem.of`, map 
 
 - [ ] **Step 4: Verify GREEN and commit**
 
-Re-run the scoped tests, then commit:
+Re-run the domain unit test only; keep `FlywayMigrationIT` deferred. Then commit:
 
 ```powershell
 git add backend/src/main/resources/db/migration backend/src/main/java/com/flashsale/order/domain backend/src/test/java/com/flashsale/order/domain/OrderTest.java backend/src/test/java/com/flashsale/FlywayMigrationIT.java
