@@ -23,6 +23,7 @@ public class ProblemDetailAccessDeniedHandler implements AccessDeniedHandler {
     @Override
     public void handle(HttpServletRequest request, HttpServletResponse response,
                         AccessDeniedException accessDeniedException) throws java.io.IOException {
+        request.setAttribute("apiAuditErrorCode", "ACCESS_DENIED");
         ProblemDetail problemDetail = ProblemDetails.of(HttpStatus.FORBIDDEN, "ACCESS_DENIED",
             "您沒有權限存取此資源", request.getRequestURI());
         response.setStatus(HttpStatus.FORBIDDEN.value());

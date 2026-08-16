@@ -23,6 +23,7 @@ public class ProblemDetailAuthenticationEntryPoint implements AuthenticationEntr
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
                           AuthenticationException authException) throws java.io.IOException {
+        request.setAttribute("apiAuditErrorCode", "UNAUTHENTICATED");
         ProblemDetail problemDetail = ProblemDetails.of(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED",
             "存取此資源需要先登入", request.getRequestURI());
         response.setStatus(HttpStatus.UNAUTHORIZED.value());

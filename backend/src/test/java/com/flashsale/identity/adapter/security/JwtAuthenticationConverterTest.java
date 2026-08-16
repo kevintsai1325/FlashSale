@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class JwtAuthenticationConverterTest {
 
-    private final SecurityConfig securityConfig = new SecurityConfig(null, null);
+    private final SecurityConfig securityConfig = new SecurityConfig(null, null, null);
 
     private Jwt jwtWithRole(String role) {
         return Jwt.withTokenValue("test-token")

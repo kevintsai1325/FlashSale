@@ -1,5 +1,6 @@
 package com.flashsale.identity.adapter.security;
 
+import com.flashsale.common.web.ApiAuditFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -9,17 +10,21 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 
 @Configuration
 public class SecurityConfig {
 
     private final ProblemDetailAuthenticationEntryPoint authenticationEntryPoint;
     private final ProblemDetailAccessDeniedHandler accessDeniedHandler;
+    private final ApiAuditFilter apiAuditFilter;
 
     public SecurityConfig(ProblemDetailAuthenticationEntryPoint authenticationEntryPoint,
-                           ProblemDetailAccessDeniedHandler accessDeniedHandler) {
+                           ProblemDetailAccessDeniedHandler accessDeniedHandler,
+                           ApiAuditFilter apiAuditFilter) {
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
+        this.apiAuditFilter = apiAuditFilter;
     }
 
     @Bean
@@ -53,7 +58,8 @@ public class SecurityConfig {
                 .authenticationEntryPoint(authenticationEntryPoint)
                 .accessDeniedHandler(accessDeniedHandler))
             .oauth2ResourceServer(oauth2 -> oauth2
-                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
+            .addFilterAfter(apiAuditFilter, SecurityContextHolderFilter.class);
 
         return http.build();
     }

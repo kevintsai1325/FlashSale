@@ -10,6 +10,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,6 +86,42 @@ class ApiAuditFilterIT extends AbstractIntegrationTest {
     @Autowired JdbcTemplate jdbcTemplate;
 
     @Test
+    void unauthenticatedRequestIsAuditedExactlyOnce() throws Exception {
+        long beforeId = latestAuditId();
+
+        mockMvc.perform(get("/api/orders/me"))
+            .andExpect(status().isUnauthorized());
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            List<Map<String, Object>> rows = auditRowsAfter(beforeId, "/api/orders/me", 401);
+            assertThat(rows).hasSize(1);
+            assertThat(rows.getFirst().get("user_id")).isNull();
+            assertThat(rows.getFirst().get("error_code")).isEqualTo("UNAUTHENTICATED");
+        });
+    }
+
+    @Test
+    void forbiddenRequestIsAuditedExactlyOnceWithUserId() throws Exception {
+        String email = "audit-forbidden@example.com";
+        String accessToken = registerAndLogin(email);
+        Long userId = jdbcTemplate.queryForObject(
+            "select id from users where email = ?", Long.class, email);
+        long beforeId = latestAuditId();
+
+        mockMvc.perform(get("/api/admin/dashboard/summary")
+                .header("Authorization", "Bearer " + accessToken))
+            .andExpect(status().isForbidden());
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            List<Map<String, Object>> rows = auditRowsAfter(
+                beforeId, "/api/admin/dashboard/summary", 403);
+            assertThat(rows).hasSize(1);
+            assertThat(rows.getFirst().get("user_id")).isEqualTo(userId);
+            assertThat(rows.getFirst().get("error_code")).isEqualTo("ACCESS_DENIED");
+        });
+    }
+
+    @Test
     void anonymousRequestIsAuditedWithoutUserId() throws Exception {
         mockMvc.perform(get("/api/flash-sales"))
             .andExpect(status().isOk());
@@ -102,15 +139,7 @@ class ApiAuditFilterIT extends AbstractIntegrationTest {
 
     @Test
     void authenticatedRequestIsAuditedWithUserId() throws Exception {
-        mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
-                .content(requestBody("audit-user@example.com", "secret123")))
-            .andExpect(status().isCreated());
-
-        String loginResponse = mockMvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                .content(requestBody("audit-user@example.com", "secret123")))
-            .andExpect(status().isOk())
-            .andReturn().getResponse().getContentAsString();
-        String accessToken = objectMapper.readTree(loginResponse).get("accessToken").asText();
+        String accessToken = registerAndLogin("audit-user@example.com");
 
         mockMvc.perform(get("/api/orders/me").header("Authorization", "Bearer " + accessToken))
             .andExpect(status().isOk());
@@ -169,5 +198,30 @@ class ApiAuditFilterIT extends AbstractIntegrationTest {
 
     private String requestBody(String email, String password) throws Exception {
         return objectMapper.writeValueAsString(Map.of("email", email, "password", password));
+    }
+
+    private String registerAndLogin(String email) throws Exception {
+        mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
+                .content(requestBody(email, "secret123")))
+            .andExpect(status().isCreated());
+
+        String loginResponse = mockMvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
+                .content(requestBody(email, "secret123")))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(loginResponse).get("accessToken").asText();
+    }
+
+    private long latestAuditId() {
+        Long id = jdbcTemplate.queryForObject(
+            "select coalesce(max(id), 0) from api_audit_logs", Long.class);
+        return id == null ? 0L : id;
+    }
+
+    private List<Map<String, Object>> auditRowsAfter(long id, String path, int responseStatus) {
+        return jdbcTemplate.queryForList(
+            "select * from api_audit_logs " +
+                "where id > ? and path_template = ? and status = ? order by id",
+            id, path, responseStatus);
     }
 }

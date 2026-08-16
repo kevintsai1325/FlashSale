@@ -6,8 +6,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.boot.autoconfigure.security.SecurityProperties;
-import org.springframework.core.annotation.Order;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -22,13 +20,11 @@ import java.io.IOException;
  * {@code filterChain.doFilter} unconditionally and lets exceptions propagate through untouched;
  * it never handles them.
  *
- * <p>Registered to run <b>after</b> Spring Security's filter chain so {@code SecurityContextHolder}
- * is populated by the time this filter's {@code finally} block reads it. Spring Boot registers the
- * security filter chain at {@code SecurityProperties.DEFAULT_FILTER_ORDER} — despite the name, this
- * is <b>not</b> {@code Ordered.HIGHEST_PRECEDENCE + 100} (that would be {@code Integer.MIN_VALUE +
- * 100}); its actual value is {@code OrderedFilter.REQUEST_WRAPPER_FILTER_MAX_ORDER - 100}, i.e.
- * {@code -100}. This filter uses one more than that ({@code -99}) so it always runs later in the
- * chain (lower order = earlier).
+ * <p>Registered inside Spring Security's filter chain immediately after
+ * {@code SecurityContextHolderFilter}. That position lets this filter wrap bearer-token
+ * authentication, authorization, and MVC dispatch, so it also observes requests that Spring
+ * Security ends with 401 or 403. Its standalone Servlet registration is disabled separately to
+ * guarantee exactly one audit row per request.
  *
  * <p>Never captures Authorization headers, passwords, JWT contents, or request/response bodies —
  * by construction: nothing here reads the Authorization header, the request/response body streams
@@ -40,7 +36,6 @@ import java.io.IOException;
  * is on the classpath) rather than a bespoke filter — see design spec §5.2.
  */
 @Component
-@Order(SecurityProperties.DEFAULT_FILTER_ORDER + 1)
 public class ApiAuditFilter extends OncePerRequestFilter {
 
     private static final String TRACE_ID_HEADER = "X-Trace-Id";
