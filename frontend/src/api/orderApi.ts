@@ -1,10 +1,18 @@
 import { apiFetch } from './httpClient'
 
+export interface OrderItemView {
+  productId: number
+  productName: string
+  quantity: number
+  unitPrice: number
+}
+
 export interface OrderSummary {
   id: number
   orderNo: string
   totalAmount: number
   status: string
+  items: OrderItemView[]
 }
 
 export interface OrderDetail extends OrderSummary {

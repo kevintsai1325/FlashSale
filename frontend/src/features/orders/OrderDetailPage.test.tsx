@@ -21,10 +21,25 @@ function renderPage() {
   )
 }
 
-const pendingOrder = { id: 1, orderNo: 'ORD-1', totalAmount: 9.99, status: 'PENDING_PAYMENT', paymentDueAt: new Date().toISOString() }
+const pendingOrder = {
+  id: 1,
+  orderNo: 'ORD-1',
+  totalAmount: 9.99,
+  status: 'PENDING_PAYMENT',
+  paymentDueAt: new Date().toISOString(),
+  items: [{ productId: 2, productName: '限量鍵盤', quantity: 3, unitPrice: 499 }],
+}
 const paidOrder = { ...pendingOrder, status: 'PAID' }
 
 describe('OrderDetailPage', () => {
+  it('shows each purchased product with its quantity and order-time unit price', async () => {
+    vi.spyOn(orderApi, 'getOrder').mockResolvedValue(pendingOrder)
+    renderPage()
+
+    expect(await screen.findByText('限量鍵盤')).toBeInTheDocument()
+    expect(screen.getByText(/3\s*×\s*\$499\.00/)).toBeInTheDocument()
+  })
+
   it('shows payment and cancel actions while PENDING_PAYMENT', async () => {
     vi.spyOn(orderApi, 'getOrder').mockResolvedValue(pendingOrder)
     renderPage()

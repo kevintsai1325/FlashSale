@@ -30,6 +30,40 @@
   font-weight: 700;
 }
 
+.order-items {
+  width: 100%;
+}
+
+.order-items h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.order-items ul {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+}
+
+.order-items li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.order-item-quantity {
+  flex: none;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
 .countdown-strip {
   width: 100%;
   margin: 0;

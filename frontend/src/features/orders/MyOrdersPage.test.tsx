@@ -22,10 +22,18 @@ function renderPage() {
 describe('MyOrdersPage', () => {
   it('renders fetched orders', async () => {
     vi.spyOn(orderApi, 'listMyOrders').mockResolvedValue([
-      { id: 1, orderNo: 'ORD-1', totalAmount: 9.99, status: 'PAID' },
+      {
+        id: 1,
+        orderNo: 'ORD-1',
+        totalAmount: 9.99,
+        status: 'PAID',
+        items: [{ productId: 2, productName: '限量鍵盤', quantity: 3, unitPrice: 499 }],
+      },
     ])
     renderPage()
     await waitFor(() => expect(screen.getByText(/ORD-1/)).toBeInTheDocument())
+    expect(await screen.findByText('限量鍵盤')).toBeInTheDocument()
+    expect(screen.getByText(/3\s*×\s*\$499\.00/)).toBeInTheDocument()
   })
 
   it('shows an empty state when there are no orders', async () => {

@@ -27,6 +27,14 @@ export function MyOrdersPage() {
               <Link className="order-card-link" to={`/orders/${order.id}`}>
                 <span className="order-card-no">{order.orderNo}</span>
                 <StatusPill status={order.status} />
+                <ul className="order-card-items" aria-label="訂購商品">
+                  {order.items.map((item) => (
+                    <li key={item.productId}>
+                      <span>{item.productName}</span>
+                      <span className="order-card-item-quantity">{item.quantity} × ${item.unitPrice.toFixed(2)}</span>
+                    </li>
+                  ))}
+                </ul>
                 <span className="order-card-amount">${order.totalAmount.toFixed(2)}</span>
               </Link>
             </li>

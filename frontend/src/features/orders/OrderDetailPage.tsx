@@ -45,6 +45,17 @@ export function OrderDetailPage() {
         <p><Link to="/orders">← 我的訂單</Link></p>
         <h2>{data.orderNo}</h2>
         <StatusPill status={data.status} />
+        <section className="order-items" aria-labelledby="order-items-heading">
+          <h3 id="order-items-heading">訂購商品</h3>
+          <ul>
+            {data.items.map((item) => (
+              <li key={item.productId}>
+                <span>{item.productName}</span>
+                <span className="order-item-quantity">{item.quantity} × ${item.unitPrice.toFixed(2)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
         <div className="amount-strip">
           <span>訂單金額</span>
           <span className="amount-value">${data.totalAmount.toFixed(2)}</span>
