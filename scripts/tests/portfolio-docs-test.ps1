@@ -1,7 +1,10 @@
 ﻿# FlashSale 作品集文件契約測試 / portfolio documentation contract test.
 #
 # 執行方式 (Windows PowerShell 5.1):
-#   powershell.exe -File scripts/tests/portfolio-docs-test.ps1
+#   powershell.exe -ExecutionPolicy Bypass -File scripts/tests/portfolio-docs-test.ps1
+# (若本機的 execution policy 允許執行未簽章腳本,-ExecutionPolicy Bypass 可以省略。)
+#
+# 檢查對象:docs/portfolio/ 底下的四份深入文件,以及根目錄的 README.md。
 #
 # 相容性備註：本檔案刻意只使用 Windows PowerShell 5.1 支援的語法
 # (不使用 ternary、null-coalescing、null-conditional 或 '&&' / '||' 串接)，
@@ -166,6 +169,27 @@ $documents = [ordered]@{
         '## 備援方案',
         '## 收尾'
     )
+    'README.md'        = @(
+        '# FlashSale',
+        '## 現況與證據',
+        '## 畫面',
+        '## 系統全貌',
+        '## 核心搶購資料流',
+        '## 快速開始',
+        '## Demo 資料',
+        '## 深入文件',
+        '## 詳細設定',
+        '## 已知限制',
+        '## CI'
+    )
+}
+
+function Get-DocumentPath {
+    param([string]$Name)
+    if ($Name -eq 'README.md') {
+        return (Join-Path $repoRoot 'README.md')
+    }
+    return (Join-Path $portfolioDir $Name)
 }
 
 $forbiddenSecretPatterns = [ordered]@{
@@ -189,6 +213,24 @@ $forbiddenStaleClaims = @(
     '同步版本'
 )
 
+# README 專屬的舊敘述：Week 7 進度、舊測試數字、已被修正的 nginx / outbox trace 說明。
+$forbiddenReadmeClaims = @(
+    '未開始',
+    '131 個',
+    '沒有 `/actuator/` 的 location 規則',
+    '不是同一條',
+    'out of scope for Week 1',
+    'will be expanded in a later week'
+)
+
+# 只出現在簡體中文的字形；作品集文件與 README 一律使用繁體中文。
+$simplifiedOnlyCharacters = @(
+    '说', '设', '务', '构', '统', '资', '产', '请', '应', '买', '单', '数', '据',
+    '测', '试', '证', '现', '时', '间', '网', '页', '库', '户', '认', '术', '语',
+    '处', '权', '载', '转', '递', '连', '释', '义', '车', '边', '见', '觉', '讲',
+    '读', '写', '错', '误', '态', '级', '标', '题', '类', '样', '总', '结', '态'
+)
+
 $allowedEmailDomains = @('example.test', 'example.com')
 $verifiableHosts = @('localhost:8443', '127.0.0.1:8443', 'localhost:8080', 'backend:8080')
 
@@ -208,9 +250,9 @@ if ($allTemplates.Count -lt 10) {
 $metricsSource = Read-TextFile -Path (Join-Path $repoRoot 'backend\src\main\java\com\flashsale\common\metrics\PurchaseMetrics.java')
 
 foreach ($documentName in $documents.Keys) {
-    $documentPath = Join-Path $portfolioDir $documentName
+    $documentPath = Get-DocumentPath -Name $documentName
     if (-not (Test-Path -LiteralPath $documentPath)) {
-        Add-Failure ('missing document: docs/portfolio/{0}' -f $documentName)
+        Add-Failure ('missing document: {0}' -f $documentName)
         continue
     }
 
@@ -249,8 +291,8 @@ foreach ($documentName in $documents.Keys) {
     if ($openFence) {
         Add-Failure ('{0}: unbalanced code fence (a ``` block is never closed)' -f $documentName)
     }
-    if ($documentName -eq 'architecture.md' -and $mermaidBlocks -lt 2) {
-        Add-Failure ('architecture.md: expected at least 2 mermaid diagrams, found {0}' -f $mermaidBlocks)
+    if (($documentName -eq 'architecture.md' -or $documentName -eq 'README.md') -and $mermaidBlocks -lt 2) {
+        Add-Failure ('{0}: expected at least 2 mermaid diagrams, found {1}' -f $documentName, $mermaidBlocks)
     }
 
     # 3. 相對連結必須可解析
@@ -291,6 +333,24 @@ foreach ($documentName in $documents.Keys) {
     foreach ($claim in $forbiddenStaleClaims) {
         if ($text.Contains($claim)) {
             Add-Failure ('{0}: stale claim present: "{1}"' -f $documentName, $claim)
+        }
+    }
+    if ($documentName -eq 'README.md') {
+        foreach ($claim in $forbiddenReadmeClaims) {
+            if ($text.Contains($claim)) {
+                Add-Failure ('{0}: stale claim present: "{1}"' -f $documentName, $claim)
+            }
+        }
+    }
+
+    # 6b. 敘述必須是繁體中文（技術名詞保留英文）
+    $cjkCount = [regex]::Matches($text, '[一-鿿]').Count
+    if ($cjkCount -lt 600) {
+        Add-Failure ('{0}: prose does not look like Traditional Chinese (only {1} CJK characters)' -f $documentName, $cjkCount)
+    }
+    foreach ($simplified in $simplifiedOnlyCharacters) {
+        if ($text.Contains($simplified)) {
+            Add-Failure ('{0}: simplified Chinese character present: "{1}"' -f $documentName, $simplified)
         }
     }
 
@@ -372,6 +432,200 @@ if (Test-Path -LiteralPath $apiExamplesPath) {
     }
     if (-not $apiExamplesText.Contains('demo.user@example.test')) {
         Add-Failure 'api-examples.md: expected the documented demo user identifier demo.user@example.test'
+    }
+}
+
+# 10. README 專屬契約：作品集的公開入口
+$readmePath = Join-Path $repoRoot 'README.md'
+if (-not (Test-Path -LiteralPath $readmePath)) {
+    Add-Failure 'missing README.md'
+} else {
+    $readmeText = Read-TextFile -Path $readmePath
+    $readmeLines = $readmeText -split "`r?`n"
+
+    # 10.1 CI badge 必須是連到 workflow 的即時狀態，而不是截圖
+    if (-not $readmeText.Contains('![CI](https://github.com/kevintsai1325/FlashSale/actions/workflows/ci.yml/badge.svg)')) {
+        Add-Failure 'README.md: missing the live CI status badge image'
+    }
+    if (-not $readmeText.Contains('(https://github.com/kevintsai1325/FlashSale/actions/workflows/ci.yml)')) {
+        Add-Failure 'README.md: CI badge is not linked to the workflow page'
+    }
+
+    # 10.2 證據先行：證據段落要在第一屏，且排在安裝/啟動說明之前
+    $evidenceLine = -1
+    $quickStartLine = -1
+    for ($i = 0; $i -lt $readmeLines.Count; $i++) {
+        $trimmedLine = $readmeLines[$i].Trim()
+        if ($evidenceLine -lt 0 -and $trimmedLine -eq '## 現況與證據') { $evidenceLine = $i }
+        if ($quickStartLine -lt 0 -and $trimmedLine -eq '## 快速開始') { $quickStartLine = $i }
+    }
+    if ($evidenceLine -lt 0) {
+        Add-Failure 'README.md: missing the evidence-first section "## 現況與證據"'
+    } else {
+        if ($evidenceLine -gt 20) {
+            Add-Failure ('README.md: evidence section starts at line {0}; it must stay on the first screen (line 20 or earlier)' -f ($evidenceLine + 1))
+        }
+        if ($quickStartLine -ge 0 -and $quickStartLine -lt $evidenceLine) {
+            Add-Failure 'README.md: setup instructions appear before the evidence section'
+        }
+    }
+
+    # 10.3 真實測試數字（後端 169 / 前端 70），並且標示為「最後已知」而非本次重跑
+    if (-not $readmeText.Contains('169 個測試')) {
+        Add-Failure 'README.md: missing the real backend test count (169 個測試)'
+    }
+    if (-not $readmeText.Contains('70 個測試')) {
+        Add-Failure 'README.md: missing the real frontend test count (70 個測試)'
+    }
+    if (-not $readmeText.Contains('最後已知')) {
+        Add-Failure 'README.md: test counts must be qualified as last-known-verified ("最後已知")'
+    }
+
+    # 10.4 真實服務數與健康度項目數
+    if (-not $readmeText.Contains('8 個服務')) {
+        Add-Failure 'README.md: missing the real Compose service count (8 個服務)'
+    }
+    if (-not $readmeText.Contains('8 項健康度')) {
+        Add-Failure 'README.md: missing the real system-health item count (8 項健康度)'
+    }
+
+    # 10.5 兩張 Mermaid 圖：系統全貌 flowchart 與搶購 sequenceDiagram
+    if (-not $readmeText.Contains('flowchart')) {
+        Add-Failure 'README.md: missing the system-overview mermaid flowchart'
+    }
+    if (-not $readmeText.Contains('sequenceDiagram')) {
+        Add-Failure 'README.md: missing the purchase-flow mermaid sequenceDiagram'
+    }
+
+    # 10.6 可直接複製的啟動指令
+    if (-not $readmeText.Contains('docker compose up --build -d')) {
+        Add-Failure 'README.md: missing the copy-paste startup command'
+    }
+
+    # 10.7 Demo 資料指令
+    if (-not $readmeText.Contains('scripts/demo-data.sh seed')) {
+        Add-Failure 'README.md: missing the demo seed command (scripts/demo-data.sh seed)'
+    }
+    if (-not $readmeText.Contains('scripts/demo-data.sh cleanup')) {
+        Add-Failure 'README.md: missing the demo cleanup command (scripts/demo-data.sh cleanup)'
+    }
+
+    # 10.8 六張截圖必須以圖片語法嵌入，且檔案真的存在
+    $screenshots = @('storefront', 'purchase-result', 'my-orders', 'admin-dashboard', 'system-health', 'zipkin-trace')
+    foreach ($screenshot in $screenshots) {
+        $relative = 'docs/portfolio/assets/{0}.png' -f $screenshot
+        if ($readmeText -notmatch ('!\[[^\]]*\]\(' + [regex]::Escape($relative) + '\)')) {
+            Add-Failure ('README.md: missing embedded screenshot: {0}' -f $relative)
+        }
+        $screenshotPath = Join-Path $repoRoot ($relative -replace '/', '\')
+        if (-not (Test-Path -LiteralPath $screenshotPath)) {
+            Add-Failure ('README.md: referenced screenshot file does not exist: {0}' -f $relative)
+        }
+    }
+
+    # 10.9 壓測摘要數字必須來自結果文件，不能是自己編出來的
+    $benchmarkPath = Join-Path $portfolioDir 'data\benchmark-results.json'
+    if (-not (Test-Path -LiteralPath $benchmarkPath)) {
+        Add-Failure 'missing docs/portfolio/data/benchmark-results.json'
+    } else {
+        $benchmark = (Read-TextFile -Path $benchmarkPath) | ConvertFrom-Json
+        $runs = @($benchmark.runs)
+        $soakRun = $null
+        foreach ($run in $runs) {
+            if ($run.kind -eq 'soak') {
+                $soakRun = $run
+                break
+            }
+        }
+        if ($null -eq $soakRun) {
+            Add-Failure 'benchmark-results.json: no soak run found'
+        }
+
+        function Get-MedianValue {
+            param([double[]]$Values)
+            $sorted = @($Values | Sort-Object)
+            return $sorted[[int](($sorted.Count - 1) / 2)]
+        }
+
+        function Test-ReadmeNumber {
+            param([string]$Label, [double]$Value)
+            $oneDecimal = [string]::Format([System.Globalization.CultureInfo]::InvariantCulture, '{0:0.0}', $Value)
+            $trimmed = [string]::Format([System.Globalization.CultureInfo]::InvariantCulture, '{0:0.###}', $Value)
+            if ((-not $readmeText.Contains($oneDecimal)) -and (-not $readmeText.Contains($trimmed))) {
+                Add-Failure ('README.md: benchmark number missing or not sourced from benchmark-results.json: {0} (expected {1})' -f $Label, $oneDecimal)
+            }
+        }
+
+        $tier30 = @()
+        $tier100 = @()
+        foreach ($run in $runs) {
+            if ($run.kind -ne 'contention') { continue }
+            if ($run.vus -eq 30) { $tier30 += [double]$run.metrics.acceptedLatencyMs.p95 }
+            if ($run.vus -eq 100) { $tier100 += [double]$run.metrics.acceptedLatencyMs.p95 }
+        }
+        if ($tier30.Count -lt 5 -or $tier100.Count -lt 5) {
+            Add-Failure 'benchmark-results.json: expected 5 runs each for the 30-VU and 100-VU contention tiers'
+        } else {
+            Test-ReadmeNumber -Label '30 VU accepted p95 median' -Value (Get-MedianValue -Values $tier30)
+            Test-ReadmeNumber -Label '100 VU accepted p95 median' -Value (Get-MedianValue -Values $tier100)
+        }
+
+        if ($null -ne $soakRun) {
+            Test-ReadmeNumber -Label 'soak accepted median' -Value ([double]$soakRun.metrics.acceptedLatencyMs.med)
+            Test-ReadmeNumber -Label 'soak completed median' -Value ([double]$soakRun.metrics.completedLatencyMs.med)
+            $soakOrders = [int]$soakRun.invariants.ordersCreated
+            $groupedOrders = $soakOrders.ToString('N0', [System.Globalization.CultureInfo]::InvariantCulture)
+            if ((-not $readmeText.Contains($groupedOrders)) -and (-not $readmeText.Contains($soakOrders.ToString()))) {
+                Add-Failure ('README.md: soak order count not sourced from benchmark-results.json (expected {0})' -f $groupedOrders)
+            }
+        }
+
+        $expectedRuns = [int]$benchmark.summary.expectedRuns
+        if (-not $readmeText.Contains(('{0} 次' -f $expectedRuns))) {
+            Add-Failure ('README.md: missing the real benchmark run count ({0} 次)' -f $expectedRuns)
+        }
+
+        # 引用 300 VU 的數字時必須把資料品質警語一起帶上
+        if ($readmeText.Contains('300 個買家') -or $readmeText.Contains('474.1')) {
+            if (-not $readmeText.Contains('212')) {
+                Add-Failure 'README.md: cites a 300-VU number without carrying the ~212 effective buyers caveat'
+            }
+        }
+    }
+
+    # 10.10 必須連到每一份作品集文件
+    $portfolioDocuments = @(
+        'docs/portfolio/architecture.md',
+        'docs/portfolio/api-examples.md',
+        'docs/portfolio/trade-offs.md',
+        'docs/portfolio/demo-script.md',
+        'docs/portfolio/performance-report.md'
+    )
+    foreach ($portfolioDocument in $portfolioDocuments) {
+        if ($readmeText -notmatch ('\]\(' + [regex]::Escape($portfolioDocument) + '(?:#[^)]*)?\)')) {
+            Add-Failure ('README.md: missing link to {0}' -f $portfolioDocument)
+        }
+    }
+
+    # 10.11 誠實揭露限制，且不得宣稱 production 容量
+    if (-not $readmeText.Contains('自簽')) {
+        Add-Failure 'README.md: limitations must mention the local self-signed TLS certificate'
+    }
+    if (-not $readmeText.Contains('SLA')) {
+        Add-Failure 'README.md: limitations must state that the numbers are not a production capacity/SLA claim'
+    }
+    if (-not $readmeText.Contains('沒有做飽和測試')) {
+        Add-Failure 'README.md: limitations must state that no saturation test was performed'
+    }
+
+    # 10.12 深入設定要收在 <details> 裡，維持第一屏精簡
+    $detailsOpen = [regex]::Matches($readmeText, '<details>').Count
+    $detailsClose = [regex]::Matches($readmeText, '</details>').Count
+    if ($detailsOpen -lt 1) {
+        Add-Failure 'README.md: expected the detailed setup content to live in collapsible <details> sections'
+    }
+    if ($detailsOpen -ne $detailsClose) {
+        Add-Failure ('README.md: unbalanced <details> tags ({0} open, {1} close)' -f $detailsOpen, $detailsClose)
     }
 }
 
