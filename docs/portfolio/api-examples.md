@@ -264,7 +264,8 @@ curl -k -s "$BASE_URL/actuator/health/readiness" | jq
 ## 錯誤格式
 
 所有由應用程式丟出的錯誤都是 RFC 7807 `application/problem+json`,並額外帶 `code` 與 `traceId`
-兩個屬性;每個回應也都有 `X-Trace-Id` 標頭,可以拿去 Zipkin 或後台的 API 稽核頁比對。
+兩個屬性。注意 body 裡的 `traceId` 只是這一筆回應各自產生的隨機識別碼,並不是 tracing 的 trace id,
+無法拿去 Zipkin 查詢;要跟 Zipkin 或後台的 API 稽核頁比對,請用每個回應都會帶的 `X-Trace-Id` 標頭。
 
 ```json
 {
