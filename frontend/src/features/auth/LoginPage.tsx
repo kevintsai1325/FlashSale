@@ -17,7 +17,11 @@ export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { login } = useAuth()
-  const from = (location.state as { from?: string } | null)?.from ?? '/'
+  const requestedFrom = (location.state as { from?: string } | null)?.from
+  const from = typeof requestedFrom === 'string' &&
+    requestedFrom.startsWith('/') && !requestedFrom.startsWith('//')
+    ? requestedFrom
+    : '/'
   const prefillEmail = (location.state as { email?: string } | null)?.email ?? ''
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),

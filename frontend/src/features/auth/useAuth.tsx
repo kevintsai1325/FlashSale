@@ -1,5 +1,7 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import * as authApi from '../../api/authApi'
+import { configureAuthRecovery, setAccessToken } from '../../api/httpClient'
+import { SESSION_EXPIRED_EVENT } from './sessionEvents'
 
 interface AuthContextValue {
   isAuthenticated: boolean
@@ -44,16 +46,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsRestoring(false)
   }, [])
 
+  const clearAuthentication = useCallback(() => {
+    setAccessToken(null)
+    setIsAuthenticated(false)
+    setRole(null)
+  }, [])
+
   const login = useCallback(async (email: string, password: string) => {
     const data = await authApi.login(email, password)
     markAuthenticated(data)
   }, [markAuthenticated])
 
   const logout = useCallback(async () => {
-    await authApi.logout()
-    setIsAuthenticated(false)
-    setRole(null)
-  }, [])
+    try {
+      await authApi.logout()
+    } finally {
+      clearAuthentication()
+    }
+  }, [clearAuthentication])
+
+  useEffect(() => {
+    configureAuthRecovery({
+      refresh: async () => {
+        const data = await authApi.refresh()
+        markAuthenticated(data)
+      },
+      onSessionExpired: () => {
+        clearAuthentication()
+        window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
+      },
+    })
+    return () => configureAuthRecovery(null)
+  }, [clearAuthentication, markAuthenticated])
 
   return (
     <AuthContext.Provider
