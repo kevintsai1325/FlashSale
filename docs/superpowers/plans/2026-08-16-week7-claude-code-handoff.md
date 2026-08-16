@@ -122,7 +122,7 @@ git diff -- backend/src/main/java/com/flashsale/common/web scripts
 
 - 正常 Compose stack 在 repository root `C:\SideProject\FlashSale` 啟動；交接時 8/8 healthy。
 - Week 7 worktree 自己沒有完整秘密 env；從該目錄直接執行普通 `docker compose ps` 會看到 JWT key 未設定警告。
-- Windows PATH 沒有一般 Node/npm；bundled Node 位於 `C:\Users\kevin\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin`。
+- Windows PATH 沒有一般 Node/npm；bundled Node 位於 `%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin`。
 - Git Bash：`C:\Program Files\Git\bin\bash.exe`。
 - `stash@{0}: On main: pre-merge untracked docs 2026-08-16` 必須保留；只有 technical-debt roadmap blob 已精確恢復，其他 divergent stash docs 不可擅自覆寫。
 - 既有完整驗證基線是 backend 159/159、frontend 70/70、使用者回報 GitHub CI success；Week 7 目前未重跑完整 regression。

@@ -437,7 +437,10 @@ function Invoke-BenchmarkRun {
 
     $tokensFile = Join-Path $SessionDir "tokens-$RunId.json"
     $k6SummaryFile = Join-Path $SessionDir "k6-$RunId.json"
-    $run.k6.summaryFile = $k6SummaryFile
+    # Record only the file name: results.json is a publishable artifact, so it must
+    # never carry the absolute path of the machine that produced it. The file always
+    # lives next to results.json in the same session directory.
+    $run.k6.summaryFile = Split-Path -Leaf $k6SummaryFile
 
     try {
         Reset-BenchmarkData -Stock $Stock
@@ -498,7 +501,7 @@ function Invoke-BenchmarkRun {
         }
         else {
             $run.status = 'failed'
-            $run.errors += "k6 wrote no summary to $k6SummaryFile"
+            $run.errors += "k6 wrote no summary to $($run.k6.summaryFile)"
         }
 
         $run['invariants'] = Get-DbInvariants

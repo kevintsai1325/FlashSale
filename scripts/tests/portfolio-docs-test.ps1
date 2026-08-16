@@ -528,7 +528,18 @@ if (-not (Test-Path -LiteralPath $readmePath)) {
     if (-not (Test-Path -LiteralPath $benchmarkPath)) {
         Add-Failure 'missing docs/portfolio/data/benchmark-results.json'
     } else {
-        $benchmark = (Read-TextFile -Path $benchmarkPath) | ConvertFrom-Json
+        $benchmarkText = Read-TextFile -Path $benchmarkPath
+
+        # 結果文件跟著 repo 一起公開，所以不能帶上產生它的那台機器的本機絕對路徑
+        # （檔名本身沒問題，k6 summary 一律跟 results.json 放在同一個 session 目錄）。
+        foreach ($pathPattern in @('[A-Za-z]:\\', '/(home|Users|mnt)/')) {
+            $pathMatch = [regex]::Match($benchmarkText, $pathPattern)
+            if ($pathMatch.Success) {
+                Add-Failure ('benchmark-results.json: 可公開的結果文件內含本機絕對路徑: {0}' -f $pathMatch.Value)
+            }
+        }
+
+        $benchmark = $benchmarkText | ConvertFrom-Json
         $runs = @($benchmark.runs)
         $soakRun = $null
         foreach ($run in $runs) {

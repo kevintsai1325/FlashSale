@@ -34,7 +34,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-30x10-1.json"
+                                "summaryFile":  "k6-contention-30x10-1.json"
                             },
                      "errors":  [
 
@@ -152,7 +152,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-30x10-2.json"
+                                "summaryFile":  "k6-contention-30x10-2.json"
                             },
                      "errors":  [
 
@@ -270,7 +270,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-30x10-3.json"
+                                "summaryFile":  "k6-contention-30x10-3.json"
                             },
                      "errors":  [
 
@@ -388,7 +388,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-30x10-4.json"
+                                "summaryFile":  "k6-contention-30x10-4.json"
                             },
                      "errors":  [
 
@@ -506,7 +506,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-30x10-5.json"
+                                "summaryFile":  "k6-contention-30x10-5.json"
                             },
                      "errors":  [
 
@@ -624,7 +624,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-100x30-1.json"
+                                "summaryFile":  "k6-contention-100x30-1.json"
                             },
                      "errors":  [
 
@@ -742,7 +742,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-100x30-2.json"
+                                "summaryFile":  "k6-contention-100x30-2.json"
                             },
                      "errors":  [
 
@@ -860,7 +860,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-100x30-3.json"
+                                "summaryFile":  "k6-contention-100x30-3.json"
                             },
                      "errors":  [
 
@@ -978,7 +978,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-100x30-4.json"
+                                "summaryFile":  "k6-contention-100x30-4.json"
                             },
                      "errors":  [
 
@@ -1096,7 +1096,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-100x30-5.json"
+                                "summaryFile":  "k6-contention-100x30-5.json"
                             },
                      "errors":  [
 
@@ -1214,7 +1214,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-300x100-1.json"
+                                "summaryFile":  "k6-contention-300x100-1.json"
                             },
                      "errors":  [
 
@@ -1332,7 +1332,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-300x100-2.json"
+                                "summaryFile":  "k6-contention-300x100-2.json"
                             },
                      "errors":  [
 
@@ -1450,7 +1450,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-300x100-3.json"
+                                "summaryFile":  "k6-contention-300x100-3.json"
                             },
                      "errors":  [
 
@@ -1568,7 +1568,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-300x100-4.json"
+                                "summaryFile":  "k6-contention-300x100-4.json"
                             },
                      "errors":  [
 
@@ -1686,7 +1686,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-contention-300x100-5.json"
+                                "summaryFile":  "k6-contention-300x100-5.json"
                             },
                      "errors":  [
 
@@ -1804,7 +1804,7 @@
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
-                                "summaryFile":  "C:\\SideProject\\FlashSale\\.worktrees\\week7-portfolio\\load-tests\\benchmark\\results\\full-20260816-121645\\k6-soak-1.json"
+                                "summaryFile":  "k6-soak-1.json"
                             },
                      "errors":  [
 
