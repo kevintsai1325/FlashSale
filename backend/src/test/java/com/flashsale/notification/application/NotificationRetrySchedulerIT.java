@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.test.context.TestPropertySource;
 
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
@@ -19,6 +20,7 @@ import static org.mockito.Mockito.when;
 // row to assert against. management.health.mail.enabled=false works around Actuate's
 // MailHealthContributorAutoConfiguration otherwise failing context startup when JavaMailSender
 // isn't a real JavaMailSenderImpl.
+@TestPropertySource(properties = "management.health.mail.enabled=false")
 class NotificationRetrySchedulerIT extends AbstractIntegrationTest {
 
     @MockBean
