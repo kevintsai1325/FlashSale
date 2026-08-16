@@ -2,14 +2,14 @@
   padding: 24px;
 }
 
-.admin-form {
+.admin-products-page .admin-form {
   display: flex;
   gap: 16px;
   align-items: flex-end;
   margin-bottom: 24px;
 }
 
-.admin-form label {
+.admin-products-page .admin-form label {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -17,7 +17,7 @@
   color: var(--muted);
 }
 
-.admin-form input {
+.admin-products-page .admin-form input {
   padding: 8px 10px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;

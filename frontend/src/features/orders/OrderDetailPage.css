@@ -30,6 +30,15 @@
   font-weight: 700;
 }
 
+.countdown-strip {
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 4px solid var(--wait);
+  background: var(--wait-tint);
+  font-family: var(--font-mono);
+}
+
 .order-actions {
   display: flex;
   flex-wrap: wrap;

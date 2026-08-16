@@ -4,10 +4,18 @@ import {
   listAdminFlashSales,
   listProducts,
   createFlashSale,
+  updateFlashSale,
   type AdminFlashSaleSummary,
 } from '../../api/adminApi'
 import { AdminNav } from './AdminNav'
 import './AdminFlashSalesPage.css'
+
+function toDatetimeLocal(iso: string) {
+  const date = new Date(iso)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 
 export function AdminFlashSalesPage() {
   const queryClient = useQueryClient()
@@ -17,6 +25,7 @@ export function AdminFlashSalesPage() {
   const [endsAt, setEndsAt] = useState('')
   const [purchaseLimitPerUser, setPurchaseLimitPerUser] = useState('1')
   const [totalQuantity, setTotalQuantity] = useState('')
+  const [editingSaleId, setEditingSaleId] = useState<number | null>(null)
 
   const salesQuery = useQuery({
     queryKey: ['admin', 'flash-sales'],
@@ -29,8 +38,8 @@ export function AdminFlashSalesPage() {
   })
 
   const mutation = useMutation({
-    mutationFn: () => createFlashSale({
-      productId: Number(productId),
+    mutationFn: () => {
+      const editable = {
       salePrice: Number(salePrice),
       // The <input type="datetime-local"> value has no timezone info and is interpreted as
       // local wall-clock time — new Date(...) parses it the same way, so .toISOString()
@@ -39,12 +48,13 @@ export function AdminFlashSalesPage() {
       endsAt: new Date(endsAt).toISOString(),
       purchaseLimitPerUser: Number(purchaseLimitPerUser),
       totalQuantity: Number(totalQuantity),
-    }),
+      }
+      return editingSaleId === null
+        ? createFlashSale({ productId: Number(productId), ...editable })
+        : updateFlashSale(editingSaleId, editable)
+    },
     onSuccess: () => {
-      setSalePrice('')
-      setStartsAt('')
-      setEndsAt('')
-      setTotalQuantity('')
+      resetForm()
       queryClient.invalidateQueries({ queryKey: ['admin', 'flash-sales'] })
     },
   })
@@ -52,6 +62,27 @@ export function AdminFlashSalesPage() {
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
     mutation.mutate()
+  }
+
+  function resetForm() {
+    setEditingSaleId(null)
+    setProductId('')
+    setSalePrice('')
+    setStartsAt('')
+    setEndsAt('')
+    setPurchaseLimitPerUser('1')
+    setTotalQuantity('')
+    mutation.reset()
+  }
+
+  function editSale(sale: AdminFlashSaleSummary) {
+    setEditingSaleId(sale.id)
+    setProductId(String(sale.productId))
+    setSalePrice(String(sale.salePrice))
+    setStartsAt(toDatetimeLocal(sale.startsAt))
+    setEndsAt(toDatetimeLocal(sale.endsAt))
+    setPurchaseLimitPerUser(String(sale.purchaseLimitPerUser))
+    setTotalQuantity(String(sale.totalQuantity))
   }
 
   const products = productsQuery.data ?? []
@@ -67,7 +98,8 @@ export function AdminFlashSalesPage() {
         <form className="admin-form" onSubmit={handleSubmit}>
           <label htmlFor="flash-sale-product">
             商品
-            <select id="flash-sale-product" value={productId} onChange={(e) => setProductId(e.target.value)} required>
+            <select id="flash-sale-product" value={productId} onChange={(e) => setProductId(e.target.value)}
+              required disabled={editingSaleId !== null || mutation.isPending}>
               <option value="" disabled>請選擇商品</option>
               {products.map((product) => (
                 <option key={product.id} value={product.id}>{product.name}</option>
@@ -94,7 +126,13 @@ export function AdminFlashSalesPage() {
             庫存數量
             <input id="flash-sale-quantity" type="number" min="1" value={totalQuantity} onChange={(e) => setTotalQuantity(e.target.value)} required />
           </label>
-          <button type="submit" className="btn btn-primary" disabled={products.length === 0}>新增搶購活動</button>
+          <button type="submit" className="btn btn-primary"
+            disabled={(products.length === 0 && editingSaleId === null) || mutation.isPending}>
+            {editingSaleId === null ? '新增搶購活動' : '儲存修改'}
+          </button>
+          {editingSaleId !== null && (
+            <button type="button" className="btn" onClick={resetForm} disabled={mutation.isPending}>取消</button>
+          )}
           {mutation.isError && <p role="alert">{(mutation.error as Error).message}</p>}
         </form>
 
@@ -111,11 +149,12 @@ export function AdminFlashSalesPage() {
                 <th>開始</th>
                 <th>結束</th>
                 <th>狀態</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {salesQuery.data.length === 0 ? (
-                <tr><td colSpan={5} className="admin-table-empty">尚無搶購活動</td></tr>
+                <tr><td colSpan={6} className="admin-table-empty">尚無搶購活動</td></tr>
               ) : (
                 salesQuery.data.map((sale: AdminFlashSaleSummary) => (
                   <tr key={sale.id}>
@@ -124,6 +163,8 @@ export function AdminFlashSalesPage() {
                     <td>{new Date(sale.startsAt).toLocaleString()}</td>
                     <td>{new Date(sale.endsAt).toLocaleString()}</td>
                     <td>{sale.status}</td>
+                    <td><button type="button" className="btn" aria-label={`編輯 ${sale.productName}`}
+                      onClick={() => editSale(sale)} disabled={mutation.isPending}>編輯</button></td>
                   </tr>
                 ))
               )}

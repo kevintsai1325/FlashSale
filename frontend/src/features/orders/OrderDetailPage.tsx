@@ -51,7 +51,9 @@ export function OrderDetailPage() {
         </div>
         {data.status === 'PENDING_PAYMENT' && (
           <>
-            {data.paymentDueAt && <p>付款期限：{new Date(data.paymentDueAt).toLocaleString()}</p>}
+            {data.paymentDueAt && (
+              <p className="countdown-strip">付款期限：{new Date(data.paymentDueAt).toLocaleString()}</p>
+            )}
             <div className="order-actions">
               <button className="btn btn-outline-go" onClick={() => payMutation.mutate('SUCCESS')} disabled={payMutation.isPending}>
                 模擬付款成功

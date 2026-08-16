@@ -35,9 +35,14 @@ export function PurchaseStatusPage() {
       <AppNav />
       <article className="purchase-status-card">
         {data.status === 'PENDING' && <div className="ring spin" role="status" aria-label="處理中" />}
-        {data.status === 'SUCCEEDED' && <div className="stamp go" aria-hidden="true">PASS</div>}
-        {NON_SUCCESS_TERMINAL_STATUSES.has(data.status) && <div className="stamp stop" aria-hidden="true">STOP</div>}
+        {data.status === 'SUCCEEDED' && <div className="stamp go" aria-hidden="true">搶購成功</div>}
+        {data.status === 'SOLD_OUT' && <div className="stamp stop" aria-hidden="true">已售完</div>}
+        {data.status === 'REJECTED' && <div className="stamp stop" aria-hidden="true">未通過</div>}
+        {data.status === 'FAILED' && <div className="stamp stop" aria-hidden="true">處理失敗</div>}
         <p className="status-message">{STATUS_MESSAGES[data.status] ?? data.status}</p>
+        {data.status === 'PENDING' && requestId && (
+          <p className="purchase-request-id">請求編號：<code>{requestId}</code></p>
+        )}
         {data.status === 'SUCCEEDED' && data.orderId != null && (
           <Link to={`/orders/${data.orderId}`}>查看訂單</Link>
         )}

@@ -40,4 +40,36 @@ describe('AdminProductsPage', () => {
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledWith('New Product', 'desc'))
   })
+
+  it('loads a row into the form and submits an update', async () => {
+    vi.spyOn(adminApi, 'listProducts').mockResolvedValue([
+      { id: 7, name: 'Old name', description: 'Old description' },
+    ])
+    const updateSpy = vi.spyOn(adminApi, 'updateProduct').mockResolvedValue({
+      id: 7, name: 'New name', description: 'Old description',
+    })
+
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: '編輯 Old name' }))
+    expect(screen.getByLabelText('名稱')).toHaveValue('Old name')
+    fireEvent.change(screen.getByLabelText('名稱'), { target: { value: 'New name' } })
+    fireEvent.click(screen.getByRole('button', { name: '儲存修改' }))
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledWith(7, 'New name', 'Old description'))
+  })
+
+  it('cancels editing without calling the update API', async () => {
+    vi.spyOn(adminApi, 'listProducts').mockResolvedValue([
+      { id: 7, name: 'Old name', description: null },
+    ])
+    const updateSpy = vi.spyOn(adminApi, 'updateProduct')
+
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: '編輯 Old name' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '新增商品' })).toBeInTheDocument()
+  })
 })

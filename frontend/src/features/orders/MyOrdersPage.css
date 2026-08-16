@@ -55,6 +55,9 @@
   color: var(--muted);
 }
 
+.orders-empty p { margin: 0; }
+.orders-empty-subtitle { font-size: .9rem; }
+
 .ticket-icon {
   width: 64px;
   height: 44px;

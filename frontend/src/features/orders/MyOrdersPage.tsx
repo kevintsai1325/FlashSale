@@ -18,6 +18,7 @@ export function MyOrdersPage() {
         <div className="orders-empty">
           <div className="ticket-icon" aria-hidden="true" />
           <p>尚無訂單</p>
+          <p className="orders-empty-subtitle">搶購成功後會出現在這裡</p>
         </div>
       ) : (
         <ul className="order-grid">

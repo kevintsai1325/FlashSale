@@ -26,18 +26,21 @@ describe('PurchaseStatusPage', () => {
     vi.spyOn(purchaseApi, 'getPurchaseRequest').mockResolvedValue({ requestId: 'req-1', status: 'PENDING', orderId: null })
     renderPage()
     await waitFor(() => expect(screen.getByText(/處理中/)).toBeInTheDocument())
+    expect(screen.getByText(/請求編號：/)).toHaveTextContent('req-1')
   })
 
   it('shows a success message with a link to the order when succeeded', async () => {
     vi.spyOn(purchaseApi, 'getPurchaseRequest').mockResolvedValue({ requestId: 'req-1', status: 'SUCCEEDED', orderId: 42 })
     renderPage()
-    await waitFor(() => expect(screen.getByText(/搶購成功/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('搶購成功！')).toBeInTheDocument())
+    expect(screen.getByText('搶購成功')).toHaveClass('stamp', 'go')
     expect(screen.getByRole('link', { name: /查看訂單/ })).toHaveAttribute('href', '/orders/42')
   })
 
   it('shows a sold-out message', async () => {
     vi.spyOn(purchaseApi, 'getPurchaseRequest').mockResolvedValue({ requestId: 'req-1', status: 'SOLD_OUT', orderId: null })
     renderPage()
-    await waitFor(() => expect(screen.getByText(/已售完/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('很抱歉，商品已售完')).toBeInTheDocument())
+    expect(screen.getByText('已售完')).toHaveClass('stamp', 'stop')
   })
 })

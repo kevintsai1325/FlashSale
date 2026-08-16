@@ -7,6 +7,11 @@
   gap: 14px;
 }
 
+.sale-group h2 {
+  margin: 24px 16px 0;
+  font-family: var(--font-display);
+}
+
 @media (min-width: 900px) {
   .sale-grid {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -48,6 +53,9 @@
 }
 
 .stub-edge {
-  width: 12px;
+  width: 36px;
   border-left: 1px dashed var(--line-strong);
+  display: grid;
+  place-items: center;
+  color: var(--stub);
 }

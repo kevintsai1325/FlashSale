@@ -19,7 +19,7 @@ function renderPage() {
 describe('AdminFlashSalesPage', () => {
   it('lists existing flash sales and prompts to create a product when none exist', async () => {
     vi.spyOn(adminApi, 'listAdminFlashSales').mockResolvedValue([
-      { id: 1, productName: 'Limited Sneakers', salePrice: 9.99, startsAt: '2026-08-15T10:00:00Z', endsAt: '2026-08-15T12:00:00Z', status: 'ENDED' },
+      { id: 1, productId: 5, productName: 'Limited Sneakers', salePrice: 9.99, startsAt: '2026-08-15T10:00:00Z', endsAt: '2026-08-15T12:00:00Z', purchaseLimitPerUser: 1, totalQuantity: 50, status: 'ENDED' },
     ])
     vi.spyOn(adminApi, 'listProducts').mockResolvedValue([])
 
@@ -64,5 +64,26 @@ describe('AdminFlashSalesPage', () => {
     expect(new Date(input.endsAt).toISOString()).toBe(input.endsAt)
     expect(input.purchaseLimitPerUser).toBe(1)
     expect(input.totalQuantity).toBe(50)
+  })
+
+  it('edits an existing activity without sending productId', async () => {
+    vi.spyOn(adminApi, 'listAdminFlashSales').mockResolvedValue([{
+      id: 7, productId: 5, productName: 'Limited Sneakers', salePrice: 9.99,
+      startsAt: '2026-08-20T10:00:00Z', endsAt: '2026-08-20T12:00:00Z',
+      purchaseLimitPerUser: 2, totalQuantity: 50, status: 'SCHEDULED',
+    }])
+    vi.spyOn(adminApi, 'listProducts').mockResolvedValue([
+      { id: 5, name: 'Limited Sneakers', description: null },
+    ])
+    const updateSpy = vi.spyOn(adminApi, 'updateFlashSale').mockResolvedValue({ id: 7, status: 'SCHEDULED' })
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: '編輯 Limited Sneakers' }))
+    expect(screen.getByLabelText('商品')).toBeDisabled()
+    expect(screen.getByLabelText('每人限購')).toHaveValue(2)
+    expect(screen.getByLabelText('庫存數量')).toHaveValue(50)
+    fireEvent.click(screen.getByRole('button', { name: '儲存修改' }))
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledWith(7, expect.not.objectContaining({ productId: 5 })))
   })
 })

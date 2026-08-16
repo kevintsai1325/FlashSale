@@ -4,5 +4,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 public record FlashSaleSummary(
-    Long id, String productName, BigDecimal salePrice, Instant startsAt, Instant endsAt, String status
+    Long id, Long productId, String productName, BigDecimal salePrice, Instant startsAt, Instant endsAt,
+    int purchaseLimitPerUser, int totalQuantity, String status
 ) {}

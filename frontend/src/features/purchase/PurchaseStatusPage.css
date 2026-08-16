@@ -43,6 +43,13 @@
   font-size: 1.3rem;
   letter-spacing: .12em;
   transform: rotate(-8deg);
+  min-width: 8em;
+  white-space: nowrap;
+}
+
+.purchase-request-id code {
+  font-family: var(--font-mono);
+  user-select: text;
 }
 
 .stamp.go {

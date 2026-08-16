@@ -31,8 +31,11 @@ public class FlashSaleQueryService {
         return flashSaleRepository.findAll().stream()
             .map(sale -> {
                 Product product = productFor(sale);
-                return new FlashSaleSummary(sale.getId(), product.getName(), sale.getSalePrice(),
-                    sale.getStartsAt(), sale.getEndsAt(), sale.effectiveStatus(Instant.now()).name());
+                int totalQuantity = inventoryRepository.findByFlashSaleId(sale.getId())
+                    .map(Inventory::getTotalQuantity).orElse(0);
+                return new FlashSaleSummary(sale.getId(), sale.getProductId(), product.getName(), sale.getSalePrice(),
+                    sale.getStartsAt(), sale.getEndsAt(), sale.getPurchaseLimitPerUser(), totalQuantity,
+                    sale.effectiveStatus(Instant.now()).name());
             })
             .toList();
     }
