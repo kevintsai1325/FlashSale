@@ -2,6 +2,7 @@ package com.flashsale.admin.application.health;
 
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.actuate.health.HealthComponent;
 import org.springframework.boot.actuate.health.HealthEndpoint;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ public class SystemHealthService {
     private final ExecutorService probeExecutor = Executors.newFixedThreadPool(4);
     private final List<NamedProbe> probes;
 
+    @Autowired
     public SystemHealthService(
             HealthEndpoint healthEndpoint,
             @Value("${app.health.mailpit-url:}") String mailpitUrl,
