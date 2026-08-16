@@ -27,7 +27,7 @@ spec+plan 檔案，檔名都是 `YYYY-MM-DD-flash-sale-weekN-<主題>-design.md`
 `...weekN-<主題>.md`。**這些檔案本身就是最詳細的技術文件**，如果要深入了解某個功能為什麼這樣
 設計，先去讀對應那週的 spec，比重新問一輪還快。
 
-## 目前進度（做到 Week 6，Week 7 未開始）
+## 目前進度（技術債六批已完成，Week 7 進行中）
 
 - **Week 1**：同步版 MVP（搶購核心、Redis 原子扣庫存、下單、付款模擬）。
 - **Week 2-3**：搶購核心非同步化（RabbitMQ + outbox pattern）、使用者前台頁面。
@@ -39,12 +39,17 @@ spec+plan 檔案，檔名都是 `YYYY-MM-DD-flash-sale-weekN-<主題>-design.md`
   活動的功能，測不下去）+ 幾個真實 bug 修復 + 視覺設計落差稽核 + 技術債處理。詳見
   `docs/superpowers/plans/2026-08-15-flash-sale-week6-admin-crud.md` 與這份文件下面「上一個
   session 做了什麼」。
-- **Week 7（未開始）**：原本的 Week 6 範圍——README 補強、架構圖、API 使用範例、demo 帳號
-  文件、同步 vs 非同步效能比較、設計取捨（trade-offs）說明文件。這是目前最主要的「下一步」。
+- **Week 7（進行中）**：作品集包裝——README 補強、架構圖、API 使用範例、安全 demo 資料、目前系統
+  的可重現負載特性、設計取捨、截圖與交接文件。已完成設計與 implementation plan（`d04590d`、
+  `f7afaa3`）；尚未把這些作品集交付全部實作完成。
 
-程式碼目前狀態：`main` branch，已經 push 到 GitHub（`origin/main`）。後端測試 131 個全綠
-（48 個測試類別），前端測試在有安裝 `recharts`/`@tanstack/react-table` 套件的環境下應該全綠
-（開發機上這兩個套件目前沒裝，見下方「環境備忘」）。
+程式碼目前狀態：後端 159 個測試、前端 70 個測試皆為綠燈；CI 成功。上述測試與 CI 結果是 Week 7
+implementation plan 指定同步的既有驗證基線；本次僅更新歷史文件，未重新執行完整套件或觸發 CI。
+
+技術債 roadmap 的六批均已完成並保有對應 commit：Security 401／403 稽核（`74507fd`）、前端
+401／403 處理（`bfa1a2c`）、整合測試背景任務隔離（`453ad2d`）、outbox trace context 與 Redis
+失敗 metric（`5c94ee8`、`7098988`）、後台編輯與視覺打磨（`7b7b1ef`）、全服務健康度 dashboard
+（`3da36a3`）。此外，訂單項目商品快照已完成（`b455374`、`a14a8a0`、`1a7cab4`、`62b0bec`）。
 
 ## 上一個 session 做了什麼（2026-08-15 晚間 ～ 2026-08-16 凌晨）
 
@@ -90,48 +95,26 @@ spec+plan 檔案，檔名都是 `YYYY-MM-DD-flash-sale-weekN-<主題>-design.md`
 以上 4 件事都已經 commit、merge 回本地 `main`，並且已經 **push 到 `origin/main`**
 （`e6387d0..91fea13`）。
 
-## 已知問題／技術債清單（尚未處理，依重要性大致排序）
+## 已完成技術債與目前限制
 
-1. **`docs/superpowers/plans/2026-08-15-flash-sale-week6-visual-audit-findings.md`**：對照原始
-   UI 設計稿（一份 claude.ai artifact，「搶購票根」主題）逐畫面核對後列出的 5 個視覺落差，最明顯
-   的一項是 `frontend/src/features/purchase/PurchaseStatusPage.tsx` 的搶購結果印章文字目前是
-   英文「PASS」/「STOP」，設計稿是中文「搶購成功」/「已售完」，跟頁面其他地方全中文的呈現不一致
-   （其餘 4 項是次要的視覺打磨，該文件裡有詳細說明跟建議）。
-2. **`ApiAuditFilter` 稽核不到 401/403**：這個 filter 註冊在 Spring Security filter chain
-   之後，所以認證/授權失敗的請求（被 `AuthenticationEntryPoint`/`AccessDeniedHandler` 攔下的）
-   永遠不會被稽核到。要修好需要重新設計 filter 註冊順序（可能要放到 Security chain 之前，但這樣
-   會拿不到 `SecurityContextHolder` 的 userId），是架構決策，不是機械式修改。這是稽核記錄漏掉的
-   剛好是事故排查時最想看的「失敗的登入/授權嘗試」，優先度不低。
-3. **`outbox_events` 沒有 trace-context 欄位**：導致一次搶購請求的 Zipkin trace 在 RabbitMQ
-   outbox 這個 hop 會斷成兩段不連續的 trace（HTTP 請求一段、`OutboxPublisher`→consumer 又是
-   一段），不是真正端到端的分散式追蹤。README/spec 原本宣稱端到端追蹤，已經改成如實描述現況。
-   要修好需要在 `outbox_events` 加一個欄位存 trace context，並在寫入/發布時傳遞。
-4. **剩下 9 個 IT 測試類別還沒轉換成共用 container**（見上一節），根本問題是背景 listener/
-   scheduler 互相干擾，需要先想清楚隔離策略才能繼續做。
-5. **Week 6 final review 留下的幾個 Minor 問題**：`updateProduct` 這個 API client 函式前端目前
-   沒有任何地方呼叫（只有 `createProduct`/`listProducts` 有用到）、`FlashSale` 後台管理頁面缺
-   一個「編輯」的 UI（後端 API 已經有 `PUT` 端點，前端只做了新增+列表）、一個 CSS scoping 外漏
-   的小問題、幾個測試斷言寫得比較弱。都不影響功能，優先度低。
-6. **`PurchaseMetrics` 的失效路徑沒有指標**：Redis 掛掉時完全不會產生任何 metric 訊號，等於
-   「靜默失敗」，事故發生時不容易第一時間從監控面板看出來。
-7. **nginx 沒有 `/actuator/` 的 proxy 規則**：Actuator 端點目前只能從 Docker network 內部連到，
-   從 host 打 `https://localhost:8443` 是連不到的。README 已經如實記錄這個限制，如果之後想從
-   外部（例如串接真正的監控系統）存取 Actuator，需要補這條 nginx 規則（要考慮驗證機制，不能公開
-   裸露）。
+上述 roadmap 的六批與訂單項目商品快照均已完成；不得再把 401／403 稽核、前端授權錯誤、背景任務
+隔離、outbox trace context、Redis 失敗 metric、後台視覺缺口、服務健康度或訂單商品快照列為未處理
+限制。
 
-## 下一步建議：Week 7
+目前應如實對外揭露的限制如下：
 
-按照這個專案一直以來的慣例（先寫 spec、使用者確認、再寫 plan、依 plan 實作），Week 7 應該涵蓋：
+1. **本機自簽 TLS**：nginx 使用 localhost 的 self-signed certificate；瀏覽器與 `curl` 會顯示
+   憑證警告，僅適合本機展示。
+2. **僅 Docker Compose 示範**：系統以本機 Compose 環境提供可重現的展示，未建立公開 production
+   部署、HA、監控告警或正式維運流程。
+3. **不宣稱 production capacity**：後續 Week 7 只量測特定本機與 Docker 資源下的目前系統負載
+   特性；結果不可解讀為 production SLA、RPS 或容量承諾。
 
-- README 補強（架構圖、API 使用範例、demo 帳號說明——部分內容其實已經在這次 session 過程中口頭
-  或文件裡累積了一些素材，例如管理後台操作步驟已經在 README 裡了，但架構圖跟 API 範例還沒有）。
-- 同步 vs 非同步效能比較（`load-tests/` 底下已經有 k6 壓測腳本，可以用來產生量化數據）。
-- 設計取捨（trade-offs）/限制（limitations）說明文件——把上面「已知問題／技術債」這份清單，
-  用比較正式、對外的方式寫成一篇文件，這對作品集本身是加分的（誠實揭露限制比假裝沒有問題更有
-  說服力）。
+## 下一步：持續 Week 7 作品集包裝
 
-如果要先處理技術債而不是 Week 7，優先度建議：**`ApiAuditFilter` 401/403 稽核缺口** >
-**PASS/STOP 印章文字中文化**（很小的修改，見上面清單第 1 項）> 其餘。
+依已確認的 Week 7 設計與 implementation plan，接續完成安全且可重複的 demo 資料工具、架構／API／
+trade-off 文件、隔離 benchmark harness 與實測證據、已清理敏感資訊的畫面截圖、README，以及最終
+Week 7 handoff。負載報告只描述目前非同步系統，不比較歷史同步版本，也不主張 production capacity。
 
 ## 開發慣例（給接手的人/AI 看）
 
