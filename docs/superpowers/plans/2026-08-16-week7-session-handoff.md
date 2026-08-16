@@ -153,8 +153,9 @@ repo 之外的暫存目錄擷取(不要把 Playwright 加進 `frontend/package.j
 
 ## 測試證據(以及 Task 8 的權威複查)
 
-- **後端**:169 個測試通過。本 session 內驗證過兩次,最近一次在 Task 2 修正輪次之後
-  (commit 到 `aba1209` 為止);Task 3~7 沒有再動過 backend Java 程式碼。
+- **後端**:169 個測試通過。本 session 內驗證過兩次,最後一次完整重跑是在 Task 2 的最後一輪修正
+  (commit `9551e99`);之後 Task 3~7 都沒有再動過 backend 程式碼
+  (`git diff --name-only 9551e99..HEAD -- backend frontend` 為空)。
 - **前端**:70 個測試通過,是 Week 7 開始前的**最後已知**基線;Task 4~7 沒有動過前端程式碼。
 - **文件契約測試**:`powershell.exe -ExecutionPolicy Bypass -File scripts/tests/portfolio-docs-test.ps1`
   → PASS(5 份文件:四份 `docs/portfolio/*.md` 加上根目錄 `README.md`)。
