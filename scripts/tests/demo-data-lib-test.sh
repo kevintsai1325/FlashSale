@@ -159,6 +159,7 @@ assert_output_equals \
     flashsale \
     'C:\SideProject\FlashSale\compose.yaml' \
     'C:\SideProject\FlashSale' \
+    'C:\SideProject\FlashSale\.env' \
     'C:/SideProject/FlashSale'
 
 assert_failure_contains \
@@ -168,6 +169,7 @@ assert_failure_contains \
     flashsale \
     'C:\Other\compose.yaml' \
     'C:\SideProject\FlashSale' \
+    'C:\SideProject\FlashSale\.env' \
     'C:/SideProject/FlashSale'
 
 assert_failure_contains \
@@ -177,7 +179,47 @@ assert_failure_contains \
     flashsale \
     'C:\SideProject\FlashSale\compose.yaml' \
     'C:\Other' \
+    'C:\SideProject\FlashSale\.env' \
     'C:/SideProject/FlashSale'
+
+assert_output_equals \
+  'canonical Compose and env targets are accepted' \
+  '' \
+  require_canonical_compose_targets \
+    'C:/SideProject/FlashSale/compose.yaml' \
+    'C:/SideProject/FlashSale/.env' \
+    'C:/SideProject/FlashSale'
+
+assert_failure_contains \
+  'foreign Compose file override is rejected' \
+  'refusing foreign Compose file override' \
+  require_canonical_compose_targets \
+    'C:/Other/compose.yaml' \
+    'C:/SideProject/FlashSale/.env' \
+    'C:/SideProject/FlashSale'
+
+assert_failure_contains \
+  'foreign env file override is rejected' \
+  'refusing foreign env file override' \
+  require_canonical_compose_targets \
+    'C:/SideProject/FlashSale/compose.yaml' \
+    'C:/Other/.env' \
+    'C:/SideProject/FlashSale'
+
+assert_output_equals \
+  'audit predicate includes authenticated users and exact traces' \
+  "(user_id IN (12,13) OR trace_id IN ('d3e0f001000000000000000000000001','d3e0f002000000000000000000000002'))" \
+  demo_audit_predicate '12,13'
+
+assert_failure_contains \
+  'audit predicate rejects non-numeric user ids' \
+  'refusing invalid demo user ids' \
+  demo_audit_predicate '12,admin'
+
+assert_output_equals \
+  'registration audit sweep SQL uses only exact trace literals' \
+  "DELETE FROM api_audit_logs WHERE trace_id IN ('d3e0f001000000000000000000000001','d3e0f002000000000000000000000002');" \
+  registration_audit_delete_sql
 
 assert_output_equals \
   'SQL literals escape single quotes' \

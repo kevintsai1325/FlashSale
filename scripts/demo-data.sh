@@ -1,20 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd -P)"
 
 # shellcheck source=lib/demo-data-lib.sh
 source "${SCRIPT_DIR}/lib/demo-data-lib.sh"
 
 DEMO_BASE_URL="${DEMO_BASE_URL:-https://localhost:8443}"
 DEMO_COMPOSE_FILE="${DEMO_COMPOSE_FILE:-${REPO_ROOT}/compose.yaml}"
-readonly DEMO_BASE_URL DEMO_COMPOSE_FILE
+DEMO_ENV_FILE="${DEMO_ENV_FILE:-${REPO_ROOT}/.env}"
+readonly DEMO_BASE_URL DEMO_COMPOSE_FILE DEMO_ENV_FILE REPO_ROOT
 
-COMPOSE=(docker compose -f "$DEMO_COMPOSE_FILE")
-if [[ -n "${DEMO_ENV_FILE:-}" ]]; then
-  COMPOSE+=(--env-file "$DEMO_ENV_FILE")
-fi
+COMPOSE=(docker compose -f "${REPO_ROOT}/compose.yaml" --env-file "${REPO_ROOT}/.env")
 
 compose() {
   "${COMPOSE[@]}" "$@"
@@ -32,6 +30,7 @@ db_scalar() {
 require_runtime_target_settings() {
   require_demo_base_url "$DEMO_BASE_URL"
   require_compose_project_name "${COMPOSE_PROJECT_NAME:-}"
+  require_canonical_compose_targets "$DEMO_COMPOSE_FILE" "$DEMO_ENV_FILE" "$REPO_ROOT"
 }
 
 require_healthy_stack() {
@@ -55,10 +54,10 @@ require_healthy_stack() {
 }
 
 require_stack_identity() {
-  local service container_id labels project config_file working_dir expected_root
+  local service container_id labels project config_file working_dir env_file expected_root
   local services=(postgres redis rabbitmq mailpit zipkin backend frontend nginx)
 
-  expected_root="$(cd "$(dirname "$DEMO_COMPOSE_FILE")" && pwd)"
+  expected_root="$REPO_ROOT"
   if command -v cygpath >/dev/null 2>&1; then
     expected_root="$(cygpath -am "$expected_root")"
   fi
@@ -69,15 +68,79 @@ require_stack_identity() {
       printf 'cannot verify Compose identity for missing service: %s\n' "$service" >&2
       return 1
     fi
-    labels="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.project.config_files"}}|{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$container_id")"
-    IFS='|' read -r project config_file working_dir <<<"$labels"
-    require_compose_identity "$project" "$config_file" "$working_dir" "$expected_root" || {
+    labels="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.project.config_files"}}|{{index .Config.Labels "com.docker.compose.project.working_dir"}}|{{index .Config.Labels "com.docker.compose.project.environment_file"}}' "$container_id")"
+    IFS='|' read -r project config_file working_dir env_file <<<"$labels"
+    require_compose_identity "$project" "$config_file" "$working_dir" "$env_file" "$expected_root" || {
       printf 'Compose identity check failed for service: %s\n' "$service" >&2
       return 1
     }
   done
 
   printf 'Compose identity verified for project flashsale.\n'
+}
+
+demo_audit_sleep() {
+  sleep 0.25
+}
+
+audit_target_count() {
+  local predicate
+  predicate="$(demo_audit_predicate "${1:-}")" || return 1
+  db_scalar "SELECT count(*) FROM api_audit_logs WHERE ${predicate};"
+}
+
+wait_for_demo_audit_executor_quiet() {
+  local user_ids="${1:-}" previous='' current stable=0 attempt
+  for ((attempt = 1; attempt <= 20; attempt++)); do
+    current="$(audit_target_count "$user_ids")" || return 1
+    if [[ ! "$current" =~ ^[0-9]+$ ]]; then
+      printf 'invalid demo audit count while waiting for executor: %s\n' "$current" >&2
+      return 1
+    fi
+    if [[ "$current" == "$previous" ]]; then
+      stable=$((stable + 1))
+    else
+      previous="$current"
+      stable=1
+    fi
+    if (( stable >= 3 )); then
+      return 0
+    fi
+    demo_audit_sleep
+  done
+  printf 'timed out waiting for demo audit executor quiet period\n' >&2
+  return 1
+}
+
+delete_registration_audits_exact() {
+  psql_exec -q -c "$(registration_audit_delete_sql)" >/dev/null
+}
+
+count_registration_audits_exact() {
+  db_scalar "SELECT count(*) FROM api_audit_logs WHERE trace_id IN ('${DEMO_USER_TRACE_ID}', '${DEMO_ADMIN_TRACE_ID}');"
+}
+
+sweep_registration_audits_until_quiet() {
+  local remaining quiet=0 attempt
+  for ((attempt = 1; attempt <= 20; attempt++)); do
+    delete_registration_audits_exact || return 1
+    remaining="$(count_registration_audits_exact)" || return 1
+    if [[ ! "$remaining" =~ ^[0-9]+$ ]]; then
+      printf 'invalid exact registration audit count during sweep: %s\n' "$remaining" >&2
+      return 1
+    fi
+    if [[ "$remaining" == '0' ]]; then
+      quiet=$((quiet + 1))
+      if (( quiet >= 3 )); then
+        return 0
+      fi
+    else
+      quiet=0
+    fi
+    demo_audit_sleep
+  done
+  printf 'timed out sweeping exact registration audit traces\n' >&2
+  return 1
 }
 
 redis_delete_exact_stock() {
@@ -298,12 +361,12 @@ UNION ALL SELECT 'refresh_tokens=' || (SELECT count(*) FROM refresh_tokens WHERE
 UNION ALL SELECT 'notification_deliveries=' || (SELECT count(*) FROM notification_deliveries WHERE user_id IN (SELECT id FROM demo_users))
 UNION ALL SELECT 'outbox_events=' || (SELECT count(*) FROM demo_outbox)
 UNION ALL SELECT 'consumed_messages=' || (SELECT count(*) FROM consumed_messages WHERE ${message_predicate} OR message_id IN (SELECT id::text FROM demo_outbox))
-UNION ALL SELECT 'api_audit_logs=' || (SELECT count(*) FROM api_audit_logs WHERE trace_id IN (:'demo_user_trace_id', :'demo_admin_trace_id'));
+UNION ALL SELECT 'api_audit_logs=' || (SELECT count(*) FROM api_audit_logs WHERE user_id IN (SELECT id FROM demo_users) OR trace_id IN (:'demo_user_trace_id', :'demo_admin_trace_id'));
 SQL
 }
 
 cleanup_demo_data() {
-  local database_name sale_ids sale_id
+  local database_name sale_ids sale_id demo_user_ids
   local order_predicate idempotency_predicate message_predicate aggregate_predicate
 
   require_runtime_target_settings
@@ -333,6 +396,10 @@ cleanup_demo_data() {
       redis_delete_exact_stock "$sale_id" || return 1
     done
   fi
+
+  demo_user_ids="$(db_scalar "SELECT string_agg(id::text, ',' ORDER BY id) FROM users WHERE email IN ('$(sql_escape_literal "$DEMO_USER_EMAIL")', '$(sql_escape_literal "$DEMO_ADMIN_EMAIL")');")"
+  demo_audit_predicate "$demo_user_ids" >/dev/null || return 1
+  wait_for_demo_audit_executor_quiet "$demo_user_ids" || return 1
 
   psql_exec \
     -v demo_user_email="$DEMO_USER_EMAIL" \
@@ -375,7 +442,8 @@ WHERE ${message_predicate}
    OR message_id IN (SELECT id::text FROM demo_outbox_ids);
 DELETE FROM outbox_events WHERE id IN (SELECT id FROM demo_outbox_ids);
 DELETE FROM api_audit_logs
-WHERE trace_id IN (:'demo_user_trace_id', :'demo_admin_trace_id');
+WHERE user_id IN (SELECT id FROM demo_user_ids)
+   OR trace_id IN (:'demo_user_trace_id', :'demo_admin_trace_id');
 DELETE FROM payment_records WHERE order_id IN (SELECT id FROM demo_order_ids);
 DELETE FROM order_status_history WHERE order_id IN (SELECT id FROM demo_order_ids);
 DELETE FROM purchase_requests WHERE id IN (SELECT id FROM demo_purchase_request_ids);
@@ -392,6 +460,8 @@ DELETE FROM users WHERE id IN (SELECT id FROM demo_user_ids);
 
 COMMIT;
 SQL
+
+  sweep_registration_audits_until_quiet || return 1
 
   printf 'Demo cleanup complete. Running it again is safe.\n'
 }

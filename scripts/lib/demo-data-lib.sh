@@ -83,16 +83,21 @@ normalize_compose_path() {
   local value="${1:-}"
   value="${value//\\//}"
   value="${value%/}"
+  if [[ "$value" =~ ^([A-Za-z]):/(.*)$ ]]; then
+    value="/${BASH_REMATCH[1],,}/${BASH_REMATCH[2]}"
+  fi
   printf '%s\n' "$value"
 }
 
 require_compose_identity() {
   local project="$1"
-  local config_file working_dir expected_root expected_config
+  local config_file working_dir env_file expected_root expected_config expected_env
   config_file="$(normalize_compose_path "$2")"
   working_dir="$(normalize_compose_path "$3")"
-  expected_root="$(normalize_compose_path "$4")"
+  env_file="$(normalize_compose_path "$4")"
+  expected_root="$(normalize_compose_path "$5")"
   expected_config="${expected_root}/compose.yaml"
+  expected_env="${expected_root}/.env"
 
   if [[ "$project" != 'flashsale' ]]; then
     printf 'refusing unexpected Compose project label: %s\n' "$project" >&2
@@ -106,6 +111,45 @@ require_compose_identity() {
     printf 'refusing unexpected Compose working directory: %s\n' "$working_dir" >&2
     return 1
   fi
+  if [[ "$env_file" != "$expected_env" ]]; then
+    printf 'refusing unexpected Compose env file: %s\n' "$env_file" >&2
+    return 1
+  fi
+}
+
+require_canonical_compose_targets() {
+  local compose_file env_file expected_root
+  compose_file="$(normalize_compose_path "$1")"
+  env_file="$(normalize_compose_path "$2")"
+  expected_root="$(normalize_compose_path "$3")"
+  if [[ "$compose_file" != "${expected_root}/compose.yaml" ]]; then
+    printf 'refusing foreign Compose file override: %s\n' "$compose_file" >&2
+    return 1
+  fi
+  if [[ "$env_file" != "${expected_root}/.env" ]]; then
+    printf 'refusing foreign env file override: %s\n' "$env_file" >&2
+    return 1
+  fi
+}
+
+demo_audit_predicate() {
+  local user_ids="${1:-}" user_predicate
+  if [[ -n "$user_ids" && ! "$user_ids" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
+    printf 'refusing invalid demo user ids: %s\n' "$user_ids" >&2
+    return 1
+  fi
+  if [[ -n "$user_ids" ]]; then
+    user_predicate="user_id IN (${user_ids})"
+  else
+    user_predicate='FALSE'
+  fi
+  printf "(%s OR trace_id IN ('%s','%s'))\n" \
+    "$user_predicate" "$DEMO_USER_TRACE_ID" "$DEMO_ADMIN_TRACE_ID"
+}
+
+registration_audit_delete_sql() {
+  printf "DELETE FROM api_audit_logs WHERE trace_id IN ('%s','%s');\n" \
+    "$DEMO_USER_TRACE_ID" "$DEMO_ADMIN_TRACE_ID"
 }
 
 sql_escape_literal() {
