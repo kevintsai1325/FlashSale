@@ -2,8 +2,13 @@ package com.flashsale.order.adapter.messaging;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flashsale.common.config.RabbitConfig;
+import com.flashsale.common.messaging.OutboxPublisher;
+import com.flashsale.testsupport.AbstractIntegrationTest;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,20 +33,7 @@ import static org.awaitility.Awaitility.await;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("integration-test")
-@Testcontainers
-class OrderPurchaseConsumerIT {
-
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
-
-    @Container
-    static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
-
-    @Container
-    static RabbitMQContainer rabbitmq = new RabbitMQContainer("rabbitmq:3.13-management-alpine");
+class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
 
     // Test-only RSA key pair (same literal as every other web IT — see PurchaseControllerIT),
     // needed only because JwtKeyConfig requires JWT_PRIVATE_KEY/JWT_PUBLIC_KEY to build the app
@@ -90,27 +82,20 @@ class OrderPurchaseConsumerIT {
         -----END PUBLIC KEY-----
         """;
 
-    @DynamicPropertySource
-    static void props(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-        registry.add("spring.rabbitmq.host", rabbitmq::getHost);
-        registry.add("spring.rabbitmq.port", rabbitmq::getAmqpPort);
-        registry.add("spring.rabbitmq.username", rabbitmq::getAdminUsername);
-        registry.add("spring.rabbitmq.password", rabbitmq::getAdminPassword);
-        registry.add("spring.mail.host", () -> "localhost");
-        registry.add("spring.mail.port", () -> "2525");
-        registry.add("JWT_PRIVATE_KEY", () -> TEST_PRIVATE_KEY);
-        registry.add("JWT_PUBLIC_KEY", () -> TEST_PUBLIC_KEY);
-    }
-
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired MeterRegistry meterRegistry;
+    @Autowired OutboxPublisher outboxPublisher;
+    @Autowired RabbitTemplate rabbitTemplate;
+    @Autowired OrderPurchaseConsumer consumer;
+
+    private void publishAndConsumeNextOrderRequest() throws Exception {
+        outboxPublisher.publishPending();
+        Message message = rabbitTemplate.receive(RabbitConfig.CREATE_ORDER_QUEUE, 5_000);
+        assertThat(message).isNotNull();
+        consumer.handle(message);
+    }
 
     private String requestBody(String email, String password) throws Exception {
         return objectMapper.writeValueAsString(new HashMap<>() {{
@@ -142,16 +127,15 @@ class OrderPurchaseConsumerIT {
         JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
         assertThat(body.get("status").asText()).isEqualTo("PENDING");
         String requestId = body.get("requestId").asText();
+        publishAndConsumeNextOrderRequest();
 
-        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-            MvcResult poll = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                    .get("/api/purchase-requests/" + requestId)
-                    .header("Authorization", "Bearer " + token))
-                .andReturn();
-            JsonNode polled = objectMapper.readTree(poll.getResponse().getContentAsString());
-            assertThat(polled.get("status").asText()).isEqualTo("SUCCEEDED");
-            assertThat(polled.get("orderId").isNull()).isFalse();
-        });
+        MvcResult poll = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .get("/api/purchase-requests/" + requestId)
+                .header("Authorization", "Bearer " + token))
+            .andReturn();
+        JsonNode polled = objectMapper.readTree(poll.getResponse().getContentAsString());
+        assertThat(polled.get("status").asText()).isEqualTo("SUCCEEDED");
+        assertThat(polled.get("orderId").isNull()).isFalse();
 
         Integer orderCount = jdbcTemplate.queryForObject("select count(*) from orders", Integer.class);
         assertThat(orderCount).isEqualTo(1);
@@ -191,8 +175,8 @@ class OrderPurchaseConsumerIT {
                 .header("Idempotency-Key", "consumer-metrics-key-1")
                 .contentType(APPLICATION_JSON)
                 .content("{\"quantity\":1}"));
+        publishAndConsumeNextOrderRequest();
 
-        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
-            assertThat(meterRegistry.get("purchase.order.created").counter().count()).isGreaterThan(before));
+        assertThat(meterRegistry.get("purchase.order.created").counter().count()).isGreaterThan(before);
     }
 }

@@ -1,25 +1,17 @@
 package com.flashsale.notification.application;
 
+import com.flashsale.testsupport.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
-import java.time.Duration;
 import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.when;
 
 // Same JavaMailSender @MockBean rationale as NotificationRetryServiceIT: real Mailpit isn't
@@ -27,29 +19,16 @@ import static org.mockito.Mockito.when;
 // row to assert against. management.health.mail.enabled=false works around Actuate's
 // MailHealthContributorAutoConfiguration otherwise failing context startup when JavaMailSender
 // isn't a real JavaMailSenderImpl.
-@SpringBootTest
-@ActiveProfiles("integration-test")
-@Testcontainers
-class NotificationRetrySchedulerIT {
-
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
-
-    @DynamicPropertySource
-    static void props(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.mail.host", () -> "localhost");
-        registry.add("spring.mail.port", () -> "2525");
-        registry.add("management.health.mail.enabled", () -> "false");
-    }
+class NotificationRetrySchedulerIT extends AbstractIntegrationTest {
 
     @MockBean
     JavaMailSender mailSender;
 
     @Autowired
     JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    NotificationRetryScheduler scheduler;
 
     @Test
     void dueRowRetriedNotDueAndAtCapRowsUntouched() {
@@ -83,11 +62,11 @@ class NotificationRetrySchedulerIT {
             "values (6003, 'EMAIL', 'registration-success', 'atcap@example.com', 'FAILED', 3, now() - interval '1 day') returning id",
             Long.class);
 
-        await().atMost(Duration.ofSeconds(65)).untilAsserted(() -> {
-            String status = jdbcTemplate.queryForObject(
-                "select status from notification_deliveries where id = ?", String.class, dueId);
-            assertThat(status).isEqualTo("SENT");
-        });
+        scheduler.retryDueNotifications();
+
+        String dueStatus = jdbcTemplate.queryForObject(
+            "select status from notification_deliveries where id = ?", String.class, dueId);
+        assertThat(dueStatus).isEqualTo("SENT");
 
         String notDueStatus = jdbcTemplate.queryForObject(
             "select status from notification_deliveries where id = ?", String.class, notDueId);

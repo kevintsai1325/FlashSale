@@ -32,15 +32,11 @@ import org.testcontainers.containers.RabbitMQContainer;
  * *before* this class's own {@code @BeforeEach} methods would run — a {@code @BeforeEach} reset
  * here would wipe out the fixture data a test just asked for.
  *
- * <p><b>Not every IT extends this class.</b> Classes that assert on eventual outcomes produced by
- * a real {@code @RabbitListener} or {@code @Scheduled} background job (consumers, DLQ handlers,
- * schedulers) were deliberately left on the old per-class isolated-container pattern. Once
- * containers are shared, a cached context's listener/scheduler beans keep running as live
- * background threads for the rest of the suite — even while a *different* cached context is the
- * one under test — so they can race a test's manual poll for a message meant only for it, or
- * process another test's leftover rows. That was measured causing real, reproducible failures
- * (a manual {@code rabbitTemplate.receive()} returning null because a live listener from another
- * cached context had already consumed the message) before those classes were excluded here.
+ * <p>The integration-test profile disables annotation-driven scheduling and Rabbit listener
+ * auto-startup. Scheduler and consumer beans remain available, so tests explicitly invoke each
+ * asynchronous step and can safely share these containers without cached contexts racing for
+ * messages or modifying another test's rows. Production keeps both background mechanisms enabled
+ * by default.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

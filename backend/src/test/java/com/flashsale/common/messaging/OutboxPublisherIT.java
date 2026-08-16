@@ -1,64 +1,23 @@
 package com.flashsale.common.messaging;
 
+import com.flashsale.testsupport.AbstractIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.containers.RabbitMQContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
-
-@SpringBootTest
-@ActiveProfiles("integration-test")
-@Testcontainers
-class OutboxPublisherIT {
-
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
-
-    @Container
-    static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
-
-    @Container
-    static RabbitMQContainer rabbitmq = new RabbitMQContainer("rabbitmq:3.13-management-alpine");
-
-    @DynamicPropertySource
-    static void props(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-        registry.add("spring.rabbitmq.host", rabbitmq::getHost);
-        registry.add("spring.rabbitmq.port", rabbitmq::getAmqpPort);
-        registry.add("spring.rabbitmq.username", rabbitmq::getAdminUsername);
-        registry.add("spring.rabbitmq.password", rabbitmq::getAdminPassword);
-        // This test asserts on messages by manually receive()-ing them off CREATE_ORDER_QUEUE /
-        // STOCK_RELEASE_QUEUE. Since Task 6 added a real @RabbitListener on CREATE_ORDER_QUEUE
-        // (OrderPurchaseConsumer), it would race this test's manual poll for the same message.
-        // Keep listener containers from auto-starting so this test's outbox-mechanics assertions
-        // stay isolated from consumer behavior, which has its own IT coverage.
-        registry.add("spring.rabbitmq.listener.simple.auto-startup", () -> "false");
-    }
+class OutboxPublisherIT extends AbstractIntegrationTest {
 
     @Autowired OutboxWriter outboxWriter;
     @Autowired RabbitTemplate rabbitTemplate;
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired OutboxEventJpaRepository outboxEventJpaRepository;
+    @Autowired OutboxPublisher outboxPublisher;
 
     record Dummy(String note) {}
 
@@ -80,14 +39,12 @@ class OutboxPublisherIT {
     @Test
     void writtenEventIsPublishedToRabbitAndMarkedPublished() {
         outboxWriter.write("Test", "1", EventTypes.CREATE_ORDER_REQUESTED, new Dummy("hello"));
+        outboxPublisher.publishPending();
 
-        // Extend timeout to 10s to account for initialDelay + refetch latency
-        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-            Message message = rabbitTemplate.receive(com.flashsale.common.config.RabbitConfig.CREATE_ORDER_QUEUE);
-            assertThat(message).isNotNull();
-            assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).contains("hello");
-            assertThat(message.getMessageProperties().getHeaders()).containsKey("outboxEventId");
-        });
+        Message message = rabbitTemplate.receive(com.flashsale.common.config.RabbitConfig.CREATE_ORDER_QUEUE, 5_000);
+        assertThat(message).isNotNull();
+        assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).contains("hello");
+        assertThat(message.getMessageProperties().getHeaders()).containsKey("outboxEventId");
     }
 
     @Test
@@ -101,33 +58,22 @@ class OutboxPublisherIT {
 
         // Insert valid event via normal writer
         outboxWriter.write("Test", "2", EventTypes.STOCK_RELEASE_REQUESTED, new Dummy("valid"));
+        outboxPublisher.publishPending();
 
-        // Verify that valid event was published despite the invalid one in the batch
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-            Message message = rabbitTemplate.receive(com.flashsale.common.config.RabbitConfig.STOCK_RELEASE_QUEUE);
-            assertThat(message).isNotNull();
-            assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).contains("valid");
-            assertThat(message.getMessageProperties().getHeaders()).containsKey("outboxEventId");
-        });
+        Message message = rabbitTemplate.receive(com.flashsale.common.config.RabbitConfig.STOCK_RELEASE_QUEUE, 5_000);
+        assertThat(message).isNotNull();
+        assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).contains("valid");
+        assertThat(message.getMessageProperties().getHeaders()).containsKey("outboxEventId");
 
-        // Verify database state: wrap in await to handle race condition where message arrives before DB commit
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-            // Verify invalid event remains unpublished (null published_at)
-            Long unpublishedCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND published_at IS NULL",
-                Long.class,
-                "UnknownEventType"
-            );
-            assertThat(unpublishedCount).isEqualTo(1L);
+        Long unpublishedCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND published_at IS NULL",
+            Long.class, "UnknownEventType");
+        assertThat(unpublishedCount).isEqualTo(1L);
 
-            // Verify valid event was marked published
-            Long publishedCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND published_at IS NOT NULL",
-                Long.class,
-                EventTypes.STOCK_RELEASE_REQUESTED
-            );
-            assertThat(publishedCount).isEqualTo(1L);
-        });
+        Long publishedCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND published_at IS NOT NULL",
+            Long.class, EventTypes.STOCK_RELEASE_REQUESTED);
+        assertThat(publishedCount).isEqualTo(1L);
 
         // Cleanup: delete the permanently-unpublishable event to prevent it from spamming ERROR logs
         // when the scheduler continues polling for the rest of the test suite

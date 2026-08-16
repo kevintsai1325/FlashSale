@@ -2,7 +2,13 @@ package com.flashsale.order.adapter.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flashsale.common.config.RabbitConfig;
+import com.flashsale.common.messaging.OutboxPublisher;
+import com.flashsale.order.adapter.messaging.OrderPurchaseConsumer;
+import com.flashsale.testsupport.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,12 +58,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * committed directly by {@code @Sql} and left in place; this class uses its own dedicated
  * Testcontainers Postgres instance, so there's nothing to clean up between runs.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("integration-test")
-@Testcontainers
 @Sql("/db/testdata/concurrency-fixtures.sql")
-class PurchaseConcurrencyIT {
+class PurchaseConcurrencyIT extends AbstractIntegrationTest {
 
     private static final int CONCURRENT_BUYERS = 5;
     private static final int STOCK = 1;
@@ -107,35 +109,14 @@ class PurchaseConcurrencyIT {
         -----END PUBLIC KEY-----
         """;
 
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
-
-    @Container
-    static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
-
-    @Container
-    static RabbitMQContainer rabbitmq = new RabbitMQContainer("rabbitmq:3.13-management-alpine");
-
-    @DynamicPropertySource
-    static void props(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-        registry.add("spring.rabbitmq.host", rabbitmq::getHost);
-        registry.add("spring.rabbitmq.port", rabbitmq::getAmqpPort);
-        registry.add("spring.rabbitmq.username", rabbitmq::getAdminUsername);
-        registry.add("spring.rabbitmq.password", rabbitmq::getAdminPassword);
-        registry.add("spring.mail.host", () -> "localhost");
-        registry.add("spring.mail.port", () -> "2525");
-        registry.add("JWT_PRIVATE_KEY", () -> TEST_PRIVATE_KEY);
-        registry.add("JWT_PUBLIC_KEY", () -> TEST_PUBLIC_KEY);
-    }
-
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired JdbcTemplate jdbcTemplate;
+    @Autowired OutboxPublisher outboxPublisher;
+    @Autowired RabbitTemplate rabbitTemplate;
+    @Autowired OrderPurchaseConsumer consumer;
+
+    record PurchaseSubmission(String token, String requestId, String status) {}
 
     private String requestBody(String email, String password) throws Exception {
         return objectMapper.writeValueAsString(new HashMap<>() {{
@@ -169,7 +150,7 @@ class PurchaseConcurrencyIT {
 
         ExecutorService executor = Executors.newFixedThreadPool(CONCURRENT_BUYERS);
         CyclicBarrier barrier = new CyclicBarrier(CONCURRENT_BUYERS);
-        List<Callable<String>> tasks = new ArrayList<>();
+        List<Callable<PurchaseSubmission>> tasks = new ArrayList<>();
 
         for (int i = 0; i < CONCURRENT_BUYERS; i++) {
             String token = tokens.get(i);
@@ -196,18 +177,27 @@ class PurchaseConcurrencyIT {
                 // consumer to resolve them to SUCCEEDED (or leave them stuck, which the test
                 // below will catch via the await timeout).
                 if (!"PENDING".equals(initialStatus)) {
-                    return initialStatus;
+                    return new PurchaseSubmission(token, requestId, initialStatus);
                 }
-                return pollUntilTerminal(token, requestId);
+                return new PurchaseSubmission(token, requestId, initialStatus);
             });
         }
 
-        List<Future<String>> futures = executor.invokeAll(tasks, 30, TimeUnit.SECONDS);
+        List<Future<PurchaseSubmission>> futures = executor.invokeAll(tasks, 30, TimeUnit.SECONDS);
         executor.shutdown();
 
         List<String> outcomes = new ArrayList<>();
-        for (Future<String> future : futures) {
-            outcomes.add(future.get());
+        for (Future<PurchaseSubmission> future : futures) {
+            PurchaseSubmission submission = future.get();
+            if ("PENDING".equals(submission.status())) {
+                outboxPublisher.publishPending();
+                Message message = rabbitTemplate.receive(RabbitConfig.CREATE_ORDER_QUEUE, 5_000);
+                assertThat(message).isNotNull();
+                consumer.handle(message);
+                outcomes.add(readStatus(submission.token(), submission.requestId()));
+            } else {
+                outcomes.add(submission.status());
+            }
         }
 
         Map<String, Long> counts = outcomes.stream()
@@ -228,18 +218,10 @@ class PurchaseConcurrencyIT {
         assertThat(orderCount).as("exactly one order must exist, matching the single unit of stock").isEqualTo(STOCK);
     }
 
-    private String pollUntilTerminal(String token, String requestId) throws Exception {
-        long deadline = System.currentTimeMillis() + 10_000;
-        while (System.currentTimeMillis() < deadline) {
-            MvcResult poll = mockMvc.perform(get("/api/purchase-requests/" + requestId)
-                    .header("Authorization", "Bearer " + token))
-                .andReturn();
-            String status = objectMapper.readTree(poll.getResponse().getContentAsString()).get("status").asText();
-            if (!"PENDING".equals(status)) {
-                return status;
-            }
-            Thread.sleep(200);
-        }
-        throw new AssertionError("Purchase request " + requestId + " never left PENDING within 10s");
+    private String readStatus(String token, String requestId) throws Exception {
+        MvcResult poll = mockMvc.perform(get("/api/purchase-requests/" + requestId)
+                .header("Authorization", "Bearer " + token))
+            .andReturn();
+        return objectMapper.readTree(poll.getResponse().getContentAsString()).get("status").asText();
     }
 }
