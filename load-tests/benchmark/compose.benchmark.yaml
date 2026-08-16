@@ -1,0 +1,118 @@
+# Isolated Compose project for the load harness.
+#
+# This file exists so a benchmark can never touch the stack you demo from. It is
+# only ever used with the literal project name `flashsale-benchmark`:
+#
+#   docker compose -p flashsale-benchmark -f load-tests/benchmark/compose.benchmark.yaml up -d
+#
+# Everything that could collide with the normal `flashsale` project is separated:
+#
+#   * project name  — `flashsale-benchmark`, which prefixes every container,
+#     network, image and volume Compose creates (`flashsale-benchmark_benchmark_postgres_data`
+#     is a different volume from `flashsale_postgres_data`, so `down -v` here can
+#     never drop your demo data).
+#   * ports         — exactly one published port, the backend on
+#     ${BENCHMARK_BACKEND_PORT:-18080}. The normal stack publishes 8443 (nginx) and
+#     9411 (zipkin); this file publishes neither, so both stacks can run at once.
+#   * services      — no frontend and no nginx. The load generator talks to the
+#     backend directly, because nginx rate-limits purchase requests per client IP
+#     (50r/s, burst 100) and a single-host load generator would be measuring that
+#     limiter rather than the application. See README.md, "What this measures".
+#
+# `starts_at`/`ends_at`, stock and buyer accounts all come from fixtures.sql and
+# prepare.js; nothing here seeds data.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: flashsale
+      POSTGRES_USER: flashsale
+      POSTGRES_PASSWORD: flashsale
+    volumes:
+      - benchmark_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flashsale"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8025/api/v1/info"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  zipkin:
+    image: openzipkin/zipkin:3
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9411/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build: ./backend
+    ports:
+      # Benchmark-only host port. The normal stack does not publish the backend at
+      # all, so this cannot collide with it.
+      - "${BENCHMARK_BACKEND_PORT:-18080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/flashsale
+      SPRING_DATASOURCE_USERNAME: flashsale
+      SPRING_DATASOURCE_PASSWORD: flashsale
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      GMAIL_USERNAME: ${GMAIL_USERNAME:-}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?JWT_PRIVATE_KEY must be set (see repo-root .env, README.md)}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be set (see repo-root .env, README.md)}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+      APP_HEALTH_MAILPIT_URL: http://mailpit:8025/api/v1/info
+      APP_HEALTH_ZIPKIN_URL: http://zipkin:9411/health
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  # Deliberately not named `postgres_data`: even a mistyped project name cannot
+  # resolve this to the volume the normal stack uses.
+  benchmark_postgres_data:
