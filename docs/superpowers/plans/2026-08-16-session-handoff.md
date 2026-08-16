@@ -46,6 +46,9 @@ spec+plan 檔案，檔名都是 `YYYY-MM-DD-flash-sale-weekN-<主題>-design.md`
 程式碼目前狀態：後端 159 個測試、前端 70 個測試皆為綠燈；CI 成功。上述測試與 CI 結果是 Week 7
 implementation plan 指定同步的既有驗證基線；本次僅更新歷史文件，未重新執行完整套件或觸發 CI。
 
+> 事後補註（Week 7 收尾）：Week 7 的 demo 資料工具替後端補了測試，收尾時的完整重跑是
+> 後端 169 個測試、前端 70 個測試全綠。上面的 159 是寫這份文件當下的數字，保留不改。
+
 技術債 roadmap 的六批均已完成並保有對應 commit：Security 401／403 稽核（`74507fd`）、前端
 401／403 處理（`bfa1a2c`）、整合測試背景任務隔離（`453ad2d`）、outbox trace context 與 Redis
 失敗 metric（`5c94ee8`、`7098988`）、後台編輯與視覺打磨（`7b7b1ef`）、全服務健康度 dashboard
