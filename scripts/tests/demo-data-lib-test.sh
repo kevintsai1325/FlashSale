@@ -153,6 +153,26 @@ assert_failure_contains \
   require_compose_project_name production
 
 assert_output_equals \
+  'local Docker Desktop engine endpoint is accepted' \
+  '' \
+  require_local_docker_endpoint 'npipe:////./pipe/dockerDesktopLinuxEngine'
+
+assert_failure_contains \
+  'remote Docker engine endpoint is rejected' \
+  'refusing non-local Docker engine endpoint' \
+  require_local_docker_endpoint 'tcp://remote.example.test:2376'
+
+assert_output_equals \
+  'verified nginx publishes host port 8443' \
+  '' \
+  require_nginx_8443_binding $'0.0.0.0:8443\n[::]:8443'
+
+assert_failure_contains \
+  'nginx without host port 8443 is rejected' \
+  'refusing nginx without verified host 8443 binding' \
+  require_nginx_8443_binding '127.0.0.1:9443'
+
+assert_output_equals \
   'matching Compose labels are accepted' \
   '' \
   require_compose_identity \

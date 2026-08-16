@@ -30,7 +30,16 @@ db_scalar() {
 require_runtime_target_settings() {
   require_demo_base_url "$DEMO_BASE_URL"
   require_compose_project_name "${COMPOSE_PROJECT_NAME:-}"
+  require_empty_docker_override DOCKER_HOST "${DOCKER_HOST:-}"
+  require_empty_docker_override DOCKER_CONTEXT "${DOCKER_CONTEXT:-}"
   require_canonical_compose_targets "$DEMO_COMPOSE_FILE" "$DEMO_ENV_FILE" "$REPO_ROOT"
+}
+
+require_local_docker_engine() {
+  local context endpoint
+  context="$(docker context show)" || return 1
+  endpoint="$(docker context inspect --format '{{.Endpoints.docker.Host}}' "$context")" || return 1
+  require_local_docker_endpoint "$endpoint"
 }
 
 require_healthy_stack() {
@@ -79,8 +88,17 @@ require_stack_identity() {
   printf 'Compose identity verified for project flashsale.\n'
 }
 
-demo_audit_sleep() {
-  sleep 0.25
+require_verified_nginx_api() {
+  local container_id bindings
+  container_id="$(compose ps -q nginx)"
+  [[ -n "$container_id" ]] || return 1
+  bindings="$(docker port "$container_id" 8443/tcp)" || return 1
+  require_nginx_8443_binding "$bindings" || return 1
+  curl --silent --show-error --insecure --fail --output /dev/null "${DEMO_BASE_URL}/actuator/health" || {
+    printf 'verified nginx container did not answer the loopback API endpoint\n' >&2
+    return 1
+  }
+  printf 'Loopback API verified against canonical nginx host binding.\n'
 }
 
 audit_target_count() {
@@ -89,58 +107,17 @@ audit_target_count() {
   db_scalar "SELECT count(*) FROM api_audit_logs WHERE ${predicate};"
 }
 
-wait_for_demo_audit_executor_quiet() {
-  local user_ids="${1:-}" previous='' current stable=0 attempt
-  for ((attempt = 1; attempt <= 20; attempt++)); do
-    current="$(audit_target_count "$user_ids")" || return 1
-    if [[ ! "$current" =~ ^[0-9]+$ ]]; then
-      printf 'invalid demo audit count while waiting for executor: %s\n' "$current" >&2
-      return 1
-    fi
-    if [[ "$current" == "$previous" ]]; then
-      stable=$((stable + 1))
-    else
-      previous="$current"
-      stable=1
-    fi
-    if (( stable >= 3 )); then
-      return 0
-    fi
-    demo_audit_sleep
-  done
-  printf 'timed out waiting for demo audit executor quiet period\n' >&2
-  return 1
+begin_audit_cleanup_barrier() {
+  local user_ids="${1:-}" payload
+  demo_audit_predicate "$user_ids" >/dev/null || return 1
+  payload="{\"userIds\":[${user_ids}],\"traceIds\":[\"${DEMO_USER_TRACE_ID}\",\"${DEMO_ADMIN_TRACE_ID}\"]}"
+  compose exec -T backend wget -qO- --header='Content-Type: application/json' \
+    --post-data="$payload" http://localhost:8080/internal/demo-data/audit-barrier/begin >/dev/null
 }
 
-delete_registration_audits_exact() {
-  psql_exec -q -c "$(registration_audit_delete_sql)" >/dev/null
-}
-
-count_registration_audits_exact() {
-  db_scalar "SELECT count(*) FROM api_audit_logs WHERE trace_id IN ('${DEMO_USER_TRACE_ID}', '${DEMO_ADMIN_TRACE_ID}');"
-}
-
-sweep_registration_audits_until_quiet() {
-  local remaining quiet=0 attempt
-  for ((attempt = 1; attempt <= 20; attempt++)); do
-    delete_registration_audits_exact || return 1
-    remaining="$(count_registration_audits_exact)" || return 1
-    if [[ ! "$remaining" =~ ^[0-9]+$ ]]; then
-      printf 'invalid exact registration audit count during sweep: %s\n' "$remaining" >&2
-      return 1
-    fi
-    if [[ "$remaining" == '0' ]]; then
-      quiet=$((quiet + 1))
-      if (( quiet >= 3 )); then
-        return 0
-      fi
-    else
-      quiet=0
-    fi
-    demo_audit_sleep
-  done
-  printf 'timed out sweeping exact registration audit traces\n' >&2
-  return 1
+end_audit_cleanup_barrier() {
+  compose exec -T backend wget -qO- --post-data='' \
+    http://localhost:8080/internal/demo-data/audit-barrier/end >/dev/null
 }
 
 redis_delete_exact_stock() {
@@ -218,8 +195,10 @@ seed_demo_data() {
   require_demo_email "$DEMO_ADMIN_EMAIL"
   require_demo_product_name "$DEMO_PRODUCT_NAME"
   require_demo_prefix "$DEMO_IDENTIFIER_PREFIX"
+  require_local_docker_engine
   require_healthy_stack
   require_stack_identity
+  require_verified_nginx_api
 
   register_user_if_absent "$DEMO_USER_EMAIL" "$DEMO_USER_PASSWORD"
   register_user_if_absent "$DEMO_ADMIN_EMAIL" "$DEMO_ADMIN_PASSWORD"
@@ -374,8 +353,10 @@ cleanup_demo_data() {
   require_demo_email "$DEMO_ADMIN_EMAIL"
   require_demo_product_name "$DEMO_PRODUCT_NAME"
   require_demo_prefix "$DEMO_IDENTIFIER_PREFIX"
+  require_local_docker_engine
   require_healthy_stack
   require_stack_identity
+  require_verified_nginx_api
 
   database_name="$(db_scalar 'SELECT current_database();')"
   require_flashsale_database "$database_name"
@@ -399,14 +380,15 @@ cleanup_demo_data() {
 
   demo_user_ids="$(db_scalar "SELECT string_agg(id::text, ',' ORDER BY id) FROM users WHERE email IN ('$(sql_escape_literal "$DEMO_USER_EMAIL")', '$(sql_escape_literal "$DEMO_ADMIN_EMAIL")');")"
   demo_audit_predicate "$demo_user_ids" >/dev/null || return 1
-  wait_for_demo_audit_executor_quiet "$demo_user_ids" || return 1
+  begin_audit_cleanup_barrier "$demo_user_ids" || return 1
 
+  local cleanup_status=0 remaining_audits
   psql_exec \
     -v demo_user_email="$DEMO_USER_EMAIL" \
     -v demo_admin_email="$DEMO_ADMIN_EMAIL" \
     -v demo_product_name="$DEMO_PRODUCT_NAME" \
     -v demo_user_trace_id="$DEMO_USER_TRACE_ID" \
-    -v demo_admin_trace_id="$DEMO_ADMIN_TRACE_ID" <<SQL
+    -v demo_admin_trace_id="$DEMO_ADMIN_TRACE_ID" <<SQL || cleanup_status=$?
 BEGIN;
 
 CREATE TEMP TABLE demo_user_ids ON COMMIT DROP AS
@@ -460,8 +442,15 @@ DELETE FROM users WHERE id IN (SELECT id FROM demo_user_ids);
 
 COMMIT;
 SQL
-
-  sweep_registration_audits_until_quiet || return 1
+  if (( cleanup_status == 0 )); then
+    remaining_audits="$(audit_target_count "$demo_user_ids")" || cleanup_status=$?
+    if [[ "$remaining_audits" != '0' ]]; then
+      printf 'demo audits remain after exact cleanup: %s\n' "$remaining_audits" >&2
+      cleanup_status=1
+    fi
+  fi
+  end_audit_cleanup_barrier || cleanup_status=$?
+  (( cleanup_status == 0 )) || return "$cleanup_status"
 
   printf 'Demo cleanup complete. Running it again is safe.\n'
 }

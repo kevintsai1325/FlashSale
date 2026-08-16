@@ -50,6 +50,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll()
+                .requestMatchers("/internal/demo-data/audit-barrier/**").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/api/admin/**", "/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/flash-sales/**").permitAll()

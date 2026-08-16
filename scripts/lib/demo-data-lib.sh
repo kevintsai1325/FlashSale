@@ -79,6 +79,32 @@ require_compose_project_name() {
   esac
 }
 
+require_empty_docker_override() {
+  local name="$1" value="${2:-}"
+  if [[ -n "$value" ]]; then
+    printf 'refusing non-empty %s\n' "$name" >&2
+    return 1
+  fi
+}
+
+require_local_docker_endpoint() {
+  case "${1:-}" in
+    'npipe:////./pipe/dockerDesktopLinuxEngine'|'npipe:////./pipe/docker_engine') return 0 ;;
+    *)
+      printf 'refusing non-local Docker engine endpoint: %s\n' "${1:-<empty>}" >&2
+      return 1
+      ;;
+  esac
+}
+
+require_nginx_8443_binding() {
+  local bindings="${1:-}"
+  if [[ "$bindings" != *':8443'* ]]; then
+    printf 'refusing nginx without verified host 8443 binding\n' >&2
+    return 1
+  fi
+}
+
 normalize_compose_path() {
   local value="${1:-}"
   value="${value//\\//}"

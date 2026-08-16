@@ -18,6 +18,11 @@ pass() {
   printf 'ok - %s\n' "$1"
 }
 
+# Keep orchestration tests at the Docker/API boundary; entrypoint subprocess tests above
+# still exercise fail-closed validation before these fakes exist.
+require_local_docker_engine() { :; }
+require_verified_nginx_api() { :; }
+
 invalid_url_fails_before_compose() {
   local output status
   if output="$(env DEMO_BASE_URL='https://localhost:8443/api' bash "$ENTRYPOINT" cleanup 2>&1)"; then
@@ -42,6 +47,26 @@ foreign_project_fails_before_compose() {
   fi
 }
 
+foreign_docker_host_fails_before_compose() {
+  local output status
+  if output="$(env DOCKER_HOST='tcp://remote.example.test:2376' bash "$ENTRYPOINT" cleanup 2>&1)"; then
+    status=0
+  else
+    status=$?
+  fi
+  (( status != 0 )) && [[ "$output" == *'refusing non-empty DOCKER_HOST'* ]]
+}
+
+foreign_docker_context_fails_before_compose() {
+  local output status
+  if output="$(env DOCKER_CONTEXT='remote-production' bash "$ENTRYPOINT" cleanup 2>&1)"; then
+    status=0
+  else
+    status=$?
+  fi
+  (( status != 0 )) && [[ "$output" == *'refusing non-empty DOCKER_CONTEXT'* ]]
+}
+
 foreign_compose_file_fails_before_compose() {
   local output status
   if output="$(env DEMO_COMPOSE_FILE='C:/Other/compose.yaml' bash "$ENTRYPOINT" cleanup 2>&1)"; then
@@ -60,46 +85,6 @@ foreign_env_file_fails_before_compose() {
     status=$?
   fi
   (( status != 0 )) && [[ "$output" == *'refusing foreign env file override'* ]]
-}
-
-delayed_registration_audit_is_swept_to_quiet() {
-  local state_file delete_calls
-  state_file="$(mktemp)"
-  printf '1|0\n' >"$state_file"
-  delete_registration_audits_exact() {
-    local calls remaining
-    IFS='|' read -r calls remaining <"$state_file"
-    calls=$((calls + 1))
-    if (( calls >= 2 )); then
-      remaining=0
-    else
-      remaining=1
-    fi
-    printf '%s|%s\n' "$calls" "$remaining" >"$state_file"
-  }
-  count_registration_audits_exact() {
-    local calls remaining
-    IFS='|' read -r calls remaining <"$state_file"
-    printf '%s\n' "$remaining"
-  }
-  demo_audit_sleep() { :; }
-
-  if ! sweep_registration_audits_until_quiet >/dev/null 2>&1; then
-    rm -f "$state_file"
-    return 1
-  fi
-  IFS='|' read -r delete_calls _remaining <"$state_file"
-  rm -f "$state_file"
-  (( delete_calls >= 4 ))
-}
-
-audit_sweep_timeout_is_reported() {
-  delete_registration_audits_exact() { :; }
-  count_registration_audits_exact() { printf '1\n'; }
-  demo_audit_sleep() { :; }
-  if sweep_registration_audits_until_quiet >/dev/null 2>&1; then
-    return 1
-  fi
 }
 
 concurrent_registration_accepts_an_exact_winner() {
@@ -177,6 +162,56 @@ seed_rebuilds_the_exact_redis_stock() {
   [[ "$redis_reset_id" == '42' ]]
 }
 
+cleanup_audit_barrier_begin_failure_prevents_database_delete() {
+  local database_delete_started=0
+
+  require_healthy_stack() { :; }
+  require_stack_identity() { :; }
+  db_scalar() {
+    case "$1" in
+      *current_database*) printf 'flashsale\n' ;;
+      *string_agg*) printf '42\n' ;;
+      *) return 1 ;;
+    esac
+  }
+  list_cleanup_counts() { :; }
+  redis_delete_exact_stock() { :; }
+  begin_audit_cleanup_barrier() { return 1; }
+  psql_exec() {
+    database_delete_started=1
+    return 0
+  }
+
+  if cleanup_demo_data >/dev/null 2>&1; then
+    return 1
+  fi
+  [[ "$database_delete_started" == '0' ]]
+}
+
+cleanup_always_ends_audit_barrier_even_after_delete_failure() {
+  local barrier_ended=0
+
+  require_healthy_stack() { :; }
+  require_stack_identity() { :; }
+  db_scalar() {
+    case "$1" in
+      *current_database*) printf 'flashsale\n' ;;
+      *string_agg*) printf '42\n' ;;
+      *) return 1 ;;
+    esac
+  }
+  list_cleanup_counts() { :; }
+  redis_delete_exact_stock() { :; }
+  begin_audit_cleanup_barrier() { :; }
+  psql_exec() { return 1; }
+  end_audit_cleanup_barrier() { barrier_ended=1; }
+
+  if cleanup_demo_data >/dev/null 2>&1; then
+    return 1
+  fi
+  [[ "$barrier_ended" == '1' ]]
+}
+
 seed_redis_failure_is_reported() {
   DEMO_USER_PASSWORD='local-user-password'
   DEMO_ADMIN_PASSWORD='local-admin-password'
@@ -206,6 +241,18 @@ else
   fail 'foreign project override fails before Compose access'
 fi
 
+if foreign_docker_host_fails_before_compose; then
+  pass 'foreign DOCKER_HOST fails before Compose access'
+else
+  fail 'foreign DOCKER_HOST fails before Compose access'
+fi
+
+if foreign_docker_context_fails_before_compose; then
+  pass 'foreign DOCKER_CONTEXT fails before Compose access'
+else
+  fail 'foreign DOCKER_CONTEXT fails before Compose access'
+fi
+
 if foreign_compose_file_fails_before_compose; then
   pass 'foreign Compose file override fails before Compose access'
 else
@@ -216,18 +263,6 @@ if foreign_env_file_fails_before_compose; then
   pass 'foreign env file override fails before Compose access'
 else
   fail 'foreign env file override fails before Compose access'
-fi
-
-if delayed_registration_audit_is_swept_to_quiet; then
-  pass 'delayed exact registration audit is swept through a quiet period'
-else
-  fail 'delayed exact registration audit is swept through a quiet period'
-fi
-
-if audit_sweep_timeout_is_reported; then
-  pass 'audit quiet-period timeout is reported'
-else
-  fail 'audit quiet-period timeout is reported'
 fi
 
 if concurrent_registration_accepts_an_exact_winner; then
@@ -246,6 +281,18 @@ if cleanup_redis_failure_prevents_database_delete; then
   pass 'Redis cleanup failure prevents database deletion'
 else
   fail 'Redis cleanup failure prevents database deletion'
+fi
+
+if cleanup_audit_barrier_begin_failure_prevents_database_delete; then
+  pass 'audit barrier begin failure prevents database deletion'
+else
+  fail 'audit barrier begin failure prevents database deletion'
+fi
+
+if cleanup_always_ends_audit_barrier_even_after_delete_failure; then
+  pass 'audit barrier end always runs, even after delete transaction failure'
+else
+  fail 'audit barrier end always runs, even after delete transaction failure'
 fi
 
 if seed_rebuilds_the_exact_redis_stock; then
