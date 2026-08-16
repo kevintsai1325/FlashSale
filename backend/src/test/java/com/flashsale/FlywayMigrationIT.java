@@ -25,4 +25,18 @@ class FlywayMigrationIT extends AbstractIntegrationTest {
             "api_audit_logs", "order_status_history", "flyway_schema_history"
         );
     }
+
+    @Test
+    void outboxTraceContextIsNullableJsonb() {
+        var column = jdbcTemplate.queryForMap("""
+            SELECT data_type, is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'outbox_events'
+              AND column_name = 'trace_context'
+            """);
+
+        assertThat(column.get("data_type")).isEqualTo("jsonb");
+        assertThat(column.get("is_nullable")).isEqualTo("YES");
+    }
 }

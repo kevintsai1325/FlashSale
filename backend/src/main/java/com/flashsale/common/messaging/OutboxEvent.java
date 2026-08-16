@@ -33,14 +33,20 @@ public class OutboxEvent {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "trace_context", columnDefinition = "jsonb")
+    private StoredTraceContext traceContext;
+
     protected OutboxEvent() {}
 
-    public static OutboxEvent create(String aggregateType, String aggregateId, String eventType, String payloadJson) {
+    public static OutboxEvent create(String aggregateType, String aggregateId, String eventType,
+                                     String payloadJson, StoredTraceContext traceContext) {
         OutboxEvent event = new OutboxEvent();
         event.aggregateType = aggregateType;
         event.aggregateId = aggregateId;
         event.eventType = eventType;
         event.payload = payloadJson;
+        event.traceContext = traceContext;
         event.createdAt = Instant.now();
         return event;
     }
@@ -53,4 +59,5 @@ public class OutboxEvent {
     public String getEventType() { return eventType; }
     public String getPayload() { return payload; }
     public Instant getPublishedAt() { return publishedAt; }
+    public StoredTraceContext getTraceContext() { return traceContext; }
 }
