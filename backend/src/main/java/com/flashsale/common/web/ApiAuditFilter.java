@@ -34,6 +34,11 @@ import java.io.IOException;
  * <p>Trace id comes from Micrometer Tracing's {@link Tracer} (Spring Boot auto-configures a span
  * around the whole request before this filter runs, once {@code micrometer-tracing-bridge-brave}
  * is on the classpath) rather than a bespoke filter — see design spec §5.2.
+ *
+ * <p>Skips {@code /internal/**} entirely: those are local tooling endpoints (e.g. the demo-data
+ * audit barrier), not part of the observable API surface, and auditing them would make every
+ * {@code demo-data.sh cleanup} run leave behind rows that cleanup's own exact-match delete
+ * predicate can never target.
  */
 @Component
 public class ApiAuditFilter extends OncePerRequestFilter {
@@ -41,6 +46,7 @@ public class ApiAuditFilter extends OncePerRequestFilter {
     private static final String TRACE_ID_HEADER = "X-Trace-Id";
     private static final String ERROR_CODE_ATTRIBUTE = "apiAuditErrorCode";
     private static final int MAX_USER_AGENT_LENGTH = 255;
+    private static final String UNAUDITED_PATH_PREFIX = "/internal/";
 
     private final ApiAuditWriter auditWriter;
     private final Tracer tracer;
@@ -53,6 +59,10 @@ public class ApiAuditFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+        if (request.getRequestURI().startsWith(UNAUDITED_PATH_PREFIX)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
         long startMillis = System.currentTimeMillis();
         Span currentSpan = tracer.currentSpan();
         String traceId = currentSpan != null ? currentSpan.context().traceId() : null;

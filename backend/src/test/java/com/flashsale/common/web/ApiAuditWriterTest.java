@@ -4,8 +4,14 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -58,6 +64,39 @@ class ApiAuditWriterTest {
 
         assertThat(persistence.submissionCount()).isEqualTo(1);
         writer.endDemoCleanup();
+    }
+
+    @Test
+    void beginDemoCleanupBlocksOnRealInFlightWritesFromConcurrentThreads() throws Exception {
+        int writeCount = 20;
+        CountDownLatch allSubmitted = new CountDownLatch(writeCount);
+        List<Runnable> completions = Collections.synchronizedList(new ArrayList<>());
+        ApiAuditWriter writer = new ApiAuditWriter((log, completion) -> {
+            completions.add(completion);
+            allSubmitted.countDown();
+        });
+
+        ExecutorService writers = Executors.newFixedThreadPool(8);
+        for (int i = 0; i < writeCount; i++) {
+            writers.submit(() -> writer.record(auditLog()));
+        }
+        assertThat(allSubmitted.await(5, TimeUnit.SECONDS)).isTrue();
+        writers.shutdown();
+
+        // beginDemoCleanup runs on its own thread since it must block until every one of the
+        // writeCount writes above (submitted from real, separate threads) actually completes.
+        ExecutorService barrierRunner = Executors.newSingleThreadExecutor();
+        Future<Boolean> drained = barrierRunner.submit(() ->
+            writer.beginDemoCleanup(Set.of(42L), Set.of("trace"), Duration.ofSeconds(5)));
+
+        Thread.sleep(50);
+        assertThat(drained.isDone()).isFalse();
+
+        completions.forEach(Runnable::run);
+
+        assertThat(drained.get(5, TimeUnit.SECONDS)).isTrue();
+        writer.endDemoCleanup();
+        barrierRunner.shutdown();
     }
 
     private ApiAuditLog auditLog() {

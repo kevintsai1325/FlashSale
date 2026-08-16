@@ -19,7 +19,12 @@ pass() {
 }
 
 # Keep orchestration tests at the Docker/API boundary; entrypoint subprocess tests above
-# still exercise fail-closed validation before these fakes exist.
+# still exercise fail-closed validation before these fakes exist. Real bodies are preserved so
+# the two tests below can restore them and exercise the actual Docker-context/nginx-binding
+# wiring instead of a no-op.
+real_require_local_docker_engine="$(declare -f require_local_docker_engine)"
+real_require_verified_nginx_api="$(declare -f require_verified_nginx_api)"
+
 require_local_docker_engine() { :; }
 require_verified_nginx_api() { :; }
 
@@ -162,6 +167,69 @@ seed_rebuilds_the_exact_redis_stock() {
   [[ "$redis_reset_id" == '42' ]]
 }
 
+foreign_docker_context_metadata_fails_before_compose_access() {
+  local compose_called=0 output status
+
+  eval "$real_require_local_docker_engine"
+  docker() {
+    case "$1 $2" in
+      'context show') printf 'remote-ctx\n' ;;
+      'context inspect') printf 'tcp://remote.example.test:2376\n' ;;
+      *) return 1 ;;
+    esac
+  }
+  compose() { compose_called=1; return 1; }
+
+  if output="$(cleanup_demo_data 2>&1)"; then
+    status=0
+  else
+    status=$?
+  fi
+  unset -f docker
+  require_local_docker_engine() { :; }
+
+  (( status != 0 )) \
+    && [[ "$output" == *'refusing non-local Docker engine endpoint'* ]] \
+    && [[ "$compose_called" == '0' ]]
+}
+
+cleanup_nginx_binding_failure_prevents_database_delete() {
+  local database_delete_started=0
+
+  eval "$real_require_verified_nginx_api"
+  require_healthy_stack() { :; }
+  require_stack_identity() { :; }
+  compose() {
+    case "$1 $2 $3" in
+      'ps -q nginx') printf 'fake-nginx-container-id\n' ;;
+      *) return 1 ;;
+    esac
+  }
+  docker() {
+    case "$1" in
+      port) printf '127.0.0.1:9443\n' ;;
+      *) return 1 ;;
+    esac
+  }
+  psql_exec() {
+    database_delete_started=1
+    return 0
+  }
+
+  local output status
+  if output="$(cleanup_demo_data 2>&1)"; then
+    status=0
+  else
+    status=$?
+  fi
+  unset -f docker
+  require_verified_nginx_api() { :; }
+
+  (( status != 0 )) \
+    && [[ "$output" == *'refusing nginx without verified host 8443 binding'* ]] \
+    && [[ "$database_delete_started" == '0' ]]
+}
+
 cleanup_audit_barrier_begin_failure_prevents_database_delete() {
   local database_delete_started=0
 
@@ -263,6 +331,18 @@ if foreign_env_file_fails_before_compose; then
   pass 'foreign env file override fails before Compose access'
 else
   fail 'foreign env file override fails before Compose access'
+fi
+
+if foreign_docker_context_metadata_fails_before_compose_access; then
+  pass 'foreign Docker context metadata fails before Compose access'
+else
+  fail 'foreign Docker context metadata fails before Compose access'
+fi
+
+if cleanup_nginx_binding_failure_prevents_database_delete; then
+  pass 'nginx binding verification failure prevents database deletion'
+else
+  fail 'nginx binding verification failure prevents database deletion'
 fi
 
 if concurrent_registration_accepts_an_exact_winner; then

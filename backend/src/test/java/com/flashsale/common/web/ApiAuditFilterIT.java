@@ -138,6 +138,27 @@ class ApiAuditFilterIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void internalDemoDataEndpointsAreNotAudited() throws Exception {
+        long beforeCount = totalAuditCount();
+
+        mockMvc.perform(post("/internal/demo-data/audit-barrier/end"))
+            .andExpect(status().isNoContent());
+
+        // A second, definitely-audited request forces the async pipeline to catch up: by the
+        // time its row is visible, an audit row for the internal call above would already exist
+        // too, if the filter didn't skip it.
+        mockMvc.perform(get("/api/flash-sales")).andExpect(status().isOk());
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+            assertThat(totalAuditCount()).isEqualTo(beforeCount + 1));
+    }
+
+    private long totalAuditCount() {
+        Long count = jdbcTemplate.queryForObject("select count(*) from api_audit_logs", Long.class);
+        return count == null ? 0L : count;
+    }
+
+    @Test
     void authenticatedRequestIsAuditedWithUserId() throws Exception {
         String accessToken = registerAndLogin("audit-user@example.com");
 
