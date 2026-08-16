@@ -113,6 +113,73 @@ assert_failure_contains \
   require_flashsale_database postgres
 
 assert_output_equals \
+  'localhost demo URL is accepted' \
+  '' \
+  require_demo_base_url 'https://localhost:8443'
+
+assert_output_equals \
+  'loopback demo URL is accepted' \
+  '' \
+  require_demo_base_url 'https://127.0.0.1:8443'
+
+assert_failure_contains \
+  'demo URL rejects userinfo' \
+  'refusing non-local demo base URL' \
+  require_demo_base_url 'https://user@localhost:8443'
+
+assert_failure_contains \
+  'demo URL rejects paths' \
+  'refusing non-local demo base URL' \
+  require_demo_base_url 'https://localhost:8443/api'
+
+assert_failure_contains \
+  'demo URL rejects other hosts' \
+  'refusing non-local demo base URL' \
+  require_demo_base_url 'https://example.test:8443'
+
+assert_output_equals \
+  'empty Compose project override is accepted' \
+  '' \
+  require_compose_project_name ''
+
+assert_output_equals \
+  'flashsale Compose project override is accepted' \
+  '' \
+  require_compose_project_name flashsale
+
+assert_failure_contains \
+  'foreign Compose project override is rejected' \
+  'refusing Compose project override' \
+  require_compose_project_name production
+
+assert_output_equals \
+  'matching Compose labels are accepted' \
+  '' \
+  require_compose_identity \
+    flashsale \
+    'C:\SideProject\FlashSale\compose.yaml' \
+    'C:\SideProject\FlashSale' \
+    'C:/SideProject/FlashSale'
+
+assert_failure_contains \
+  'foreign Compose config label is rejected' \
+  'refusing unexpected Compose config file' \
+  require_compose_identity \
+    flashsale \
+    'C:\Other\compose.yaml' \
+    'C:\SideProject\FlashSale' \
+    'C:/SideProject/FlashSale'
+
+assert_failure_contains \
+  'foreign Compose working directory is rejected' \
+  'refusing unexpected Compose working directory' \
+  require_compose_identity \
+    flashsale \
+    'C:\SideProject\FlashSale\compose.yaml' \
+    'C:\Other' \
+    'C:/SideProject/FlashSale'
+
+assert_output_equals \
   'SQL literals escape single quotes' \
   "O''Reilly" \
   sql_escape_literal "O'Reilly"
@@ -136,6 +203,36 @@ assert_output_equals \
   'activity seed predicate rejects an existing product activity' \
   'NOT EXISTS (SELECT 1 FROM flash_sales WHERE product_id = products.id)' \
   demo_activity_absence_predicate
+
+assert_output_equals \
+  'seed transaction uses a fixed advisory lock' \
+  'SELECT pg_advisory_xact_lock(748395021);' \
+  demo_seed_advisory_lock_sql
+
+assert_output_equals \
+  'demo user gets a fixed valid traceparent' \
+  '00-d3e0f001000000000000000000000001-d3e0f00100000001-01' \
+  demo_traceparent_for_email "$DEMO_USER_EMAIL"
+
+assert_output_equals \
+  'demo admin gets a distinct fixed valid traceparent' \
+  '00-d3e0f002000000000000000000000002-d3e0f00200000002-01' \
+  demo_traceparent_for_email "$DEMO_ADMIN_EMAIL"
+
+assert_failure_contains \
+  'Redis delete rejects error replies' \
+  'Redis DEL failed' \
+  require_redis_del_reply ERR
+
+assert_output_equals \
+  'Redis delete accepts a missing exact key' \
+  '' \
+  require_redis_del_reply 0
+
+assert_output_equals \
+  'Redis SET accepts OK' \
+  '' \
+  require_redis_set_reply OK
 
 if (( failures > 0 )); then
   printf '%d test(s) failed\n' "$failures" >&2
