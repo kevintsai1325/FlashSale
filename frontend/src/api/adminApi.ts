@@ -4,6 +4,26 @@
 
 import { apiFetch } from './httpClient'
 
+export type ServiceHealthStatus = 'UP' | 'DOWN' | 'UNKNOWN'
+
+export interface ServiceHealthView {
+  name: string
+  status: ServiceHealthStatus
+  checkedAt: string
+  reason: string
+}
+
+export interface SystemHealthView {
+  overallStatus: ServiceHealthStatus
+  checkedAt: string
+  services: ServiceHealthView[]
+}
+
+export async function getSystemHealth(): Promise<SystemHealthView> {
+  const response = await apiFetch('/api/admin/system-health')
+  return response.json()
+}
+
 /** Mirrors the backend's `PagedResult<T>` response envelope for admin list endpoints. */
 export interface PagedResult<T> {
   content: T[]

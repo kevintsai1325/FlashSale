@@ -41,6 +41,12 @@ services:
     image: openzipkin/zipkin:3
     ports:
       - "9411:9411"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9411/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   backend:
     build: ./backend
@@ -62,6 +68,10 @@ services:
       SPRING_RABBITMQ_USERNAME: guest
       SPRING_RABBITMQ_PASSWORD: guest
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+      APP_HEALTH_MAILPIT_URL: http://mailpit:8025/api/v1/info
+      APP_HEALTH_ZIPKIN_URL: http://zipkin:9411/health
+      APP_HEALTH_FRONTEND_URL: http://frontend/internal-health
+      APP_HEALTH_NGINX_URL: http://nginx:8080/internal-health
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,6 +93,12 @@ services:
     build: ./frontend
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/internal-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   nginx:
     build: ./nginx
@@ -93,6 +109,12 @@ services:
     depends_on:
       - backend
       - frontend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/internal-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
 volumes:
   postgres_data:

@@ -28,6 +28,9 @@ export function AdminNav() {
         <NavLink to="/admin/notifications" className={navLinkClassName}>
           通知中心
         </NavLink>
+        <NavLink to="/admin/system-health" className={navLinkClassName}>
+          系統健康度
+        </NavLink>
         <Link to="/" className="admin-nav-link">
           回前台
         </Link>

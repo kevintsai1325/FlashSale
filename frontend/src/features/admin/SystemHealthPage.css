@@ -1,0 +1,11 @@
+.system-health-page { padding: 24px; }
+.system-health-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.system-health-header h1, .system-health-header p { margin: 0 0 6px; }
+.health-overall { padding: 12px; border-left: 5px solid currentColor; background: var(--paper-raised); }
+.health-grid { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.health-card { padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper-raised); }
+.health-card h2 { margin: 0 0 10px; font-size: 1rem; }
+.health-status { font-family: var(--font-mono); font-weight: 700; }
+.health-up { color: var(--go); }
+.health-down { color: var(--stop); }
+.health-unknown { color: var(--wait); }

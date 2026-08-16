@@ -41,6 +41,11 @@ spring:
 app:
   audit:
     retention-days: 30
+  health:
+    mailpit-url: ${APP_HEALTH_MAILPIT_URL:}
+    zipkin-url: ${APP_HEALTH_ZIPKIN_URL:}
+    frontend-url: ${APP_HEALTH_FRONTEND_URL:}
+    nginx-url: ${APP_HEALTH_NGINX_URL:}
 
 server:
   port: 8080
@@ -56,6 +61,11 @@ management:
         enabled: true
       show-details: when-authorized
       roles: ADMIN
+      group:
+        readiness:
+          include: readinessState,db,redis,rabbit
+        liveness:
+          include: livenessState
   health:
     readinessstate:
       enabled: true
