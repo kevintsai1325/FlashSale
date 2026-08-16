@@ -1,6 +1,7 @@
 package com.flashsale.payment.adapter.web;
 
 import com.flashsale.order.application.dto.OrderDetail;
+import com.flashsale.order.application.dto.OrderDtoMapper;
 import com.flashsale.order.domain.Order;
 import com.flashsale.payment.adapter.web.dto.SubmitPaymentRequest;
 import com.flashsale.payment.application.SubmitPaymentService;
@@ -23,6 +24,6 @@ public class PaymentController {
                                @AuthenticationPrincipal Jwt jwt) {
         Long userId = jwt.getClaim("userId");
         Order order = submitPaymentService.submit(orderId, userId, request.result());
-        return new OrderDetail(order.getId(), order.getOrderNo(), order.getTotalAmount(), order.getStatus().name(), order.getPaymentDueAt());
+        return OrderDtoMapper.toDetail(order);
     }
 }
