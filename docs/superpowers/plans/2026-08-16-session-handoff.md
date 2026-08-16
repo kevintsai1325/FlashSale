@@ -83,14 +83,13 @@ implementation plan 指定同步的既有驗證基線；本次僅更新歷史文
    context 裡的背景執行緒（listener/scheduler）會在背景持續跑，跟這些測試手動輪詢訊息佇列的邏輯
    互搶訊息，導致間歇性測試失敗（實際重現過：`OutboxPublisherIT` 手動 `receive()` 拿到
    `null`，因為訊息已經被另一個 context 裡活著的 `OrderPurchaseConsumer` listener 搶走了）。
-   最後的做法是：22 個「純 HTTP/service 層」的測試類別改用共用 container，這 9 個涉及真實非同步
-   背景處理的測試類別刻意保留原本「各自獨立 container」的寫法，不勉強套用。結果：完整套件從
-   12-16 分鐘降到穩定的 6-7 分鐘（跑了兩次確認結果一致、沒有 flaky）。這件事的完整脈絡寫在
-   `AbstractIntegrationTest.java` 的 class-level javadoc 裡，之後如果想繼續把剩下 9 個也轉換
-   過去，**必須先解決「共用 container 下背景任務互相干擾」這個根本問題**（可能的方向：測試專用
-   的 profile 把 listener/scheduler 全部關掉，讓每個測試手動觸發要測的那個消費者/排程器，而不是
-   依賴背景執行緒自動跑），不是單純的機械式改寫可以解決的，這也是為什麼這次選擇「部分轉換 +
-   誠實記錄限制」而不是硬做完 31 個。
+   當時的暫時做法是：22 個「純 HTTP/service 層」的測試類別改用共用 container，這 9 個涉及真實
+   非同步背景處理的測試類別則暫時保留各自獨立 container；當時完整套件從 12-16 分鐘降到穩定的
+   6-7 分鐘（跑了兩次確認結果一致、沒有 flaky）。
+
+   這個歷史限制已由後續技術債批次 3 解決（`453ad2d`）：integration-test profile 關閉非受控的
+   scheduling 與 Rabbit listener auto-startup，測試顯式驅動要驗證的 scheduler、outbox publisher
+   或 consumer，並把剩餘 9 個 IT 類別納入共用 container。這不是目前的已知限制。
 
 以上 4 件事都已經 commit、merge 回本地 `main`，並且已經 **push 到 `origin/main`**
 （`e6387d0..91fea13`）。
