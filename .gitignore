@@ -8,3 +8,7 @@ frontend/node_modules/
 frontend/dist/
 .worktrees/
 .superpowers/
+# Benchmark output: holds live access tokens for every prepared account, and an
+# untracked results/ directory would make collect.ps1 record gitDirty: true for
+# every run it just produced.
+load-tests/benchmark/results/

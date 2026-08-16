@@ -3,7 +3,13 @@
 # This file exists so a benchmark can never touch the stack you demo from. It is
 # only ever used with the literal project name `flashsale-benchmark`:
 #
-#   docker compose -p flashsale-benchmark -f load-tests/benchmark/compose.benchmark.yaml up -d
+#   docker compose -p flashsale-benchmark --project-directory . \
+#     -f load-tests/benchmark/compose.benchmark.yaml up -d
+#
+# Run it from the repository root, and do not drop `--project-directory .`: Compose
+# resolves both `build: ./backend` below and the `.env` lookup against the project
+# directory, so without it the build context points at load-tests/benchmark/backend
+# and JWT_PRIVATE_KEY cannot be found.
 #
 # Everything that could collide with the normal `flashsale` project is separated:
 #
