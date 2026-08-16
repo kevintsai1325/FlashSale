@@ -153,18 +153,22 @@ repo 之外的暫存目錄擷取(不要把 Playwright 加進 `frontend/package.j
 
 ## 測試證據(以及 Task 8 的權威複查)
 
-- **後端**:169 個測試通過。本 session 內驗證過兩次,最後一次完整重跑是在 Task 2 的最後一輪修正
-  (commit `9551e99`);之後 Task 3~7 都沒有再動過 backend 程式碼
-  (`git diff --name-only 9551e99..HEAD -- backend frontend` 為空)。
-- **前端**:70 個測試通過,是 Week 7 開始前的**最後已知**基線;Task 4~7 沒有動過前端程式碼。
+- **後端**:169 個測試通過,0 failures、0 errors、0 skipped(61 份 test-result XML)。Task 2 最後一輪
+  修正(commit `9551e99`)驗證過一次;**Task 8 收尾實測**又從 `backend/` 乾淨重跑一次
+  `./gradlew clean test`,結果相同,並由兩位不同的複查者各自獨立確認過。
+- **前端**:70 個測試通過。Task 8 同樣重新完整跑過 `npm run test`,6 次完整套件執行中有 4 次全綠;
+  另外 2 次在 `AdminFlashSalesPage.test.tsx` 出現 `waitFor` 逾時,經獨立確認是**既有的 flaky
+  測試**——`main` 分支上原封不動存在同一個問題,不是 Week 7 造成的迴歸
+  (`git diff main..HEAD -- frontend/` 為空,這個分支沒有改過任何前端檔案)。`npm run build`、
+  `npm run lint` 也都通過(lint 有 2 個既有警告,與本次改動無關)。
 - **文件契約測試**:`powershell.exe -ExecutionPolicy Bypass -File scripts/tests/portfolio-docs-test.ps1`
   → PASS(5 份文件:四份 `docs/portfolio/*.md` 加上根目錄 `README.md`)。
 - **壓測結果驗證**:`node load-tests/benchmark/verify-results.mjs docs/portfolio/data/benchmark-results.json`
   → 16 次執行全部 `valid`。
 
-> **Task 8 才是權威的最終複查。** 上面的後端/前端數字是本 session 已取得的證據,不是在寫這份文件時
-> 重新執行的。Week 7 的 Task 8 會做一次完整的端到端回歸(後端完整套件、前端套件、文件契約測試、
-> 壓測結果驗證),以那一次的輸出為最終數字;如果 Task 8 的結果與這裡不同,以 Task 8 為準。
+> **Task 8 是權威的最終複查,已經完成。** Task 8 對後端(`./gradlew clean test`)、前端(`npm run
+> test`/`build`/`lint`)、文件契約測試與壓測結果驗證都各自重新跑過一次,上面列出的數字就是 Task 8
+> 的實際輸出,不是本 session 較早階段的紀錄。
 
 ## 目前的工作區狀態
 
@@ -209,4 +213,6 @@ outbox trace context、Redis 預扣失敗 metric、後台編輯與視覺缺口�
   runner,或把它改寫成跨平台的實作。
 - **環境備註**:這台機器沒有 `pwsh`,只有 Windows PowerShell 5.1,所以 repo 內的 `.ps1` 一律以
   `powershell.exe` 執行,並且只使用 5.1 相容語法(不用 ternary、`??`、`?.`、`&&`/`||` 串接);
-  `node`/`npm` 也不在 PATH 上,前端相關指令要透過 Docker 執行。
+  Week 7 期間已經把完整的 Node v22.14.0 + npm 10.9.2 裝進 `C:\Users\kevin\bin`(在 Bash 的 PATH
+  上),Task 8 就是直接執行 `npm ci`/`npm run test`/`npm run build`/`npm run lint`,不再需要透過
+  Docker 跑前端指令。
