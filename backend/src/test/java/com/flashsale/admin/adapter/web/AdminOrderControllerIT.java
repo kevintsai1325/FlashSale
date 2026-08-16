@@ -90,7 +90,7 @@ class AdminOrderControllerIT extends AbstractIntegrationTest {
         Long orderId = jdbcTemplate.queryForObject("select id from orders where order_no = 'ORD-ADMIN-1'", Long.class);
 
         jdbcTemplate.update(
-            "insert into order_items (order_id, product_id, quantity, unit_price) values (?, 601, 2, 12.50)", orderId);
+            "insert into order_items (order_id, product_id, product_name, quantity, unit_price) values (?, 601, 'Admin Order Product', 2, 12.50)", orderId);
 
         jdbcTemplate.update(
             "insert into purchase_requests (request_id, idempotency_key, user_id, flash_sale_id, order_id, status, created_at) " +

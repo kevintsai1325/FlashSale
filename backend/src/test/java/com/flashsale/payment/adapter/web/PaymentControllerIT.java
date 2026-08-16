@@ -40,7 +40,7 @@ class PaymentControllerIT extends AbstractIntegrationTest {
         jdbcTemplate.update(
             "insert into orders (id, order_no, user_id, total_amount, status, payment_due_at) " +
             "values (881, 'ORD-881', (select id from users where email = 'pay-success@example.com'), 9.99, 'PENDING_PAYMENT', now() + interval '15 minutes')");
-        jdbcTemplate.update("insert into order_items (order_id, product_id, quantity, unit_price) values (881, 2, 1, 9.99)");
+        jdbcTemplate.update("insert into order_items (order_id, product_id, product_name, quantity, unit_price) values (881, 2, 'Payment Test Product', 1, 9.99)");
 
         mockMvc.perform(post("/api/orders/881/payments").contentType(APPLICATION_JSON)
                 .header("Authorization", "Bearer " + token)
@@ -65,7 +65,7 @@ class PaymentControllerIT extends AbstractIntegrationTest {
         jdbcTemplate.update(
             "insert into orders (id, order_no, user_id, total_amount, status, payment_due_at) " +
             "values (882, 'ORD-882', (select id from users where email = 'pay-fail@example.com'), 9.99, 'PENDING_PAYMENT', now() + interval '15 minutes')");
-        jdbcTemplate.update("insert into order_items (order_id, product_id, quantity, unit_price) values (882, 1, 1, 9.99)");
+        jdbcTemplate.update("insert into order_items (order_id, product_id, product_name, quantity, unit_price) values (882, 1, 'Payment Failure Test Product', 1, 9.99)");
         jdbcTemplate.update(
             "insert into purchase_requests (request_id, idempotency_key, user_id, flash_sale_id, order_id, status) " +
             "values (gen_random_uuid(), 'pay-fail-key', (select id from users where email = 'pay-fail@example.com'), 1, 882, 'SUCCEEDED')");

@@ -20,7 +20,7 @@ class PaymentTimeoutSchedulerIT extends AbstractIntegrationTest {
         jdbcTemplate.update(
             "insert into orders (id, order_no, user_id, total_amount, status, payment_due_at) " +
             "values (883, 'ORD-883', 997, 9.99, 'PENDING_PAYMENT', now() - interval '1 minute')");
-        jdbcTemplate.update("insert into order_items (order_id, product_id, quantity, unit_price) values (883, 1, 1, 9.99)");
+        jdbcTemplate.update("insert into order_items (order_id, product_id, product_name, quantity, unit_price) values (883, 1, 'Payment Timeout Test Product', 1, 9.99)");
         jdbcTemplate.update(
             "insert into purchase_requests (request_id, idempotency_key, user_id, flash_sale_id, order_id, status) " +
             "values (gen_random_uuid(), 'timeout-key', 997, 1, 883, 'SUCCEEDED')");
