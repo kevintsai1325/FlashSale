@@ -5,6 +5,8 @@ spring:
     url: jdbc:postgresql://localhost:5432/flashsale
     username: flashsale
     password: flashsale
+    hikari:
+      maximum-pool-size: 30
   jpa:
     hibernate:
       ddl-auto: validate
@@ -29,6 +31,7 @@ spring:
       observation-enabled: true
     listener:
       simple:
+        concurrency: 5
         observation-enabled: true
         retry:
           enabled: true
@@ -49,6 +52,10 @@ app:
 
 server:
   port: 8080
+  tomcat:
+    threads:
+      max: 400
+    accept-count: 300
 
 management:
   endpoints:

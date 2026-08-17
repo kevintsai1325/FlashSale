@@ -21,7 +21,7 @@ import java.util.List;
 public class OutboxPublisher {
 
     private static final Logger logger = LoggerFactory.getLogger(OutboxPublisher.class);
-    private static final int BATCH_SIZE = 50;
+    private static final int BATCH_SIZE = 200;
 
     private final OutboxEventJpaRepository repository;
     private final RabbitTemplate rabbitTemplate;
