@@ -145,7 +145,7 @@ export DEMO_ADMIN_PASSWORD='<另一組自訂的示範密碼>'
 ./scripts/demo-data.sh cleanup
 ```
 
-照著念的展示流程(3~5 分鐘)在 [Demo 腳本](docs/portfolio/demo-script.md)。
+Demo的展示流程(3~5 分鐘)在 [Demo 腳本](docs/portfolio/demo-script.md)。
 
 ## 深入文件
 
