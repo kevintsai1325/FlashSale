@@ -52,4 +52,7 @@ tasks.withType<Test> {
     useJUnitPlatform()
     maxHeapSize = "2g"
     systemProperty("spring.test.context.cache.maxSize", "10")
+    testLogging {
+        events("passed", "skipped", "failed")
+    }
 }
