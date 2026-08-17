@@ -289,6 +289,24 @@ function New-AdminToken {
     return $login.accessToken
 }
 
+# A fixed, known-password ADMIN account for a human to log into the frontend with
+# (see load-tests/benchmark/README.md, "Browsing a kept stack") — distinct from
+# New-AdminToken's per-run throwaway accounts, which nobody ever needs to log into by
+# hand. Idempotent: reruns against a kept stack just re-promote the same account.
+function Ensure-DefaultAdmin {
+    $email = 'admin@test.com'
+    $password = 'admin1234'
+    $body = (@{ email = $email; password = $password } | ConvertTo-Json -Compress)
+    try {
+        Invoke-RestMethod -Uri "$BaseUrl/api/auth/register" -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 30 | Out-Null
+    }
+    catch {
+        # already registered from a previous run against a kept stack
+    }
+    Invoke-Psql -Sql "UPDATE users SET role = 'ADMIN' WHERE email = '$email';" | Out-Null
+    Write-Host "default admin ready: $email / $password"
+}
+
 function Wait-ForDrain {
     param([int]$TimeoutSeconds = 120)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -648,6 +666,12 @@ try {
 
     foreach ($planned in $plan) {
         $runs += Invoke-BenchmarkRun -RunId $planned.RunId -Kind $planned.Kind -Users $planned.Users -Stock $planned.Stock -SessionDir $sessionDir
+    }
+
+    if ($KeepStack) {
+        # Every run's Reset-BenchmarkData truncates `users`, so this only makes sense
+        # once no more runs are coming — otherwise the very next reset would wipe it.
+        Ensure-DefaultAdmin
     }
 }
 finally {

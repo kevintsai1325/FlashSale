@@ -58,8 +58,10 @@ Windows PowerShell 5.1 即可,`collect.ps1` 不需要 PowerShell 7。
 - volume 名稱是 `benchmark_postgres_data`(完整名稱為
   `flashsale-benchmark_benchmark_postgres_data`),所以這裡的 `down -v` 碰不到
   `flashsale_postgres_data`。
-- 只對外開一個 port:backend 的 `18080`(可用 `BENCHMARK_BACKEND_PORT` 覆寫)。一般的那套
-  服務開的是 `8443` 與 `9411`,而且不會對外開 backend,因此兩套可以同時跑。
+- 對外開的 port 跟一般那套服務不會衝突:backend `18080`(`BENCHMARK_BACKEND_PORT`)、
+  postgres `15432`(`BENCHMARK_POSTGRES_PORT`)、nginx `8444`(`BENCHMARK_NGINX_PORT`)、
+  zipkin `9412`(`BENCHMARK_ZIPKIN_PORT`)。一般那套服務開的是 `8443` 與 `9411`,兩套可以
+  同時跑。
 - 清理時一律只指名 `flashsale-benchmark`。
 
 ## 怎麼跑
@@ -70,12 +72,12 @@ Windows PowerShell 5.1 即可,`collect.ps1` 不需要 PowerShell 7。
 # 完整矩陣:30/10、100/30、300/100 各跑五次,接著跑 soak。會花不少時間。
 powershell -ExecutionPolicy Bypass -File load-tests/benchmark/collect.ps1 -Mode full
 
-# 冒煙測試:只跑一次小規模,用來確認整套工具能從頭到尾動起來。
-powershell -ExecutionPolicy Bypass -File load-tests/benchmark/collect.ps1 -Mode smoke -SmokeVus 3 -SmokeStock 1
+# 冒煙測試:只跑一次 300 VU / 100 件庫存,並保留環境方便事後檢查。
+powershell -ExecutionPolicy Bypass -File load-tests/benchmark/collect.ps1 -Mode smoke -SmokeVus 300 -SmokeStock 100 -KeepStack
 ```
 
 其他常用參數:`-OutDir <path>`(預設 `load-tests/benchmark/results`)、`-KeepStack`(跑完保留
-環境,方便檢查)。
+環境,方便檢查,見下方「保留環境看畫面」)。
 
 `collect.ps1` 會先把環境啟動起來、驗證隔離,接著對每一次執行依序做:重置並重新灌入資料
 (`fixtures.sql`)、清掉 Redis 的預扣計數、清空佇列、建立這次要用的買家帳號(`prepare.js`)、
@@ -93,6 +95,33 @@ docker compose -p flashsale-benchmark --project-directory . -f load-tests/benchm
 `--project-directory .` 是必要的,不是可選的:Compose 會以 project directory 為基準解析
 backend 的相對 build context 與 `.env` 的位置,少了它就會從錯誤的路徑建置,也找不到 JWT
 金鑰。上面這些指令一律要在 repo 根目錄執行。
+
+## 保留環境看畫面
+
+`compose.benchmark.yaml` 也帶了 frontend 與 nginx,但**量測本身完全不受影響**:k6 一律直接打
+backend 的 `18080`,不會經過 nginx,frontend/nginx 純粹是給人事後瀏覽用的,不在被量測的路徑上
+(nginx 對搶購請求有限流,量測刻意排除它,見上方「這裡量的是什麼」)。
+
+用 `-KeepStack` 跑完,收集流程會在所有 run 結束、確定要保留之後,自動建立一組固定帳密的
+ADMIN 帳號並印在主控台:
+
+```
+default admin ready: admin@test.com / admin1234
+```
+
+拿這組去 `https://localhost:8444/` 登入(自簽憑證,瀏覽器會跳警告,點過去即可),就能進
+`/admin` 看這次執行留下的訂單、庫存、健康度等畫面。這個帳號是在所有 run 跑完後才建立的——每個
+run 開始前都會 truncate `users` 表(`fixtures.sql`),提早建立會被下一個 run 洗掉;重跑同一個
+保留的環境也沒事,會重新註冊/重新升級成 ADMIN,冪等的。
+
+想直接查資料庫,DB 開在 `localhost:15432`(帳密都是 `flashsale`);想看 trace,Zipkin 在
+`http://localhost:9412/zipkin/`。
+
+看完別忘了清掉,不然這套隔離環境會一直占資源:
+
+```powershell
+docker compose -p flashsale-benchmark --project-directory . -f load-tests/benchmark/compose.benchmark.yaml down -v
+```
 
 ## 執行的內容
 
@@ -167,7 +196,7 @@ node load-tests/benchmark/verify-results.mjs load-tests/benchmark/results/<sessi
 
 | 檔案 | 職責 |
 |---|---|
-| `compose.benchmark.yaml` | 獨立環境:Postgres、Redis、RabbitMQ、Mailpit、Zipkin、backend。 |
+| `compose.benchmark.yaml` | 獨立環境:Postgres、Redis、RabbitMQ、Mailpit、Zipkin、backend、frontend、nginx(後兩者只給人瀏覽用,不在量測路徑上)。 |
 | `fixtures.sql` | 每次執行前的破壞性重置,並灌入一場帶有 `:stock` 件庫存的進行中活動。 |
 | `prepare.js` | 在量測範圍外建立該次執行專用的買家帳號與 token。 |
 | `purchase-load.js` | 競爭情境(`VUS` 個買家、`STOCK` 件庫存,每人送出一次)。 |
