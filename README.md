@@ -13,8 +13,8 @@
 | 面向 | 目前量到什麼 | 出處 |
 |---|---|---|
 | 自動化測試 | 後端 169 個測試、前端 70 個測試,最後已知全部通過 | [CI](#ci) |
-| 穩態負載 | 10 分鐘 soak:6,000 筆訂單全部成立、沒有超賣、沒有 5xx;同步回應中位數 7.6 ms,可觀察到的完成中位數 511 ms | [負載特性報告](docs/portfolio/performance-report.md) |
-| 競爭負載 | 30 個買家搶 10 件:同步回應 p95 中位數 45.0 ms;100 個買家搶 30 件:80.9 ms(各跑五次取中位數) | [負載特性報告](docs/portfolio/performance-report.md) |
+| 穩態負載 | 10 分鐘 soak:6,000 筆訂單全部成立、沒有超賣、沒有 5xx;同步回應中位數 9.5 ms,可觀察到的完成中位數 515 ms | [負載特性報告](docs/portfolio/performance-report.md) |
+| 競爭負載 | 30 個買家搶 10 件:同步回應 p95 中位數 58.4 ms;100 個買家搶 30 件:104.1 ms;300 個買家搶 100 件:188.1 ms,連線全數送達、無 TCP 拒絕(各跑五次取中位數) | [負載特性報告](docs/portfolio/performance-report.md) |
 | 正確性不變量 | 壓測共 16 次執行、0 次失敗:沒有超賣、沒有重複下單、沒有殘留 `PENDING`、outbox 全部發佈完成、兩條 DLQ 全空 | [結果文件](docs/portfolio/data/benchmark-results.json) |
 | 可觀測性 | 一條 trace 串起「HTTP 搶購 → outbox 發佈 → consumer 建單」;後台以 8 項健康度呈現整套環境狀態 | [畫面](#畫面) |
 
@@ -266,8 +266,8 @@ node load-tests/benchmark/verify-results.mjs docs/portfolio/data/benchmark-resul
 - **只交付 Docker Compose**:沒有公開部署環境、沒有水平擴充、沒有滾動更新與自動修復,也沒有 Prometheus /
   Grafana 這類集中式監控與告警。所有「多實例才會遇到」的問題(排程重複執行、節點層級限流)在這個交付形式下無法驗證。
 - **量測邊界**:數字來自一台開發機、一次收集,壓測直接打 backend 而不經過 Nginx 與 TLS,而且**沒有做飽和測試**,
-  所以沒有任何一個數字可以當成吞吐量上限,更不是 production 容量或 SLA。300 個買家那一組另有已知的資料品質問題
-  (每次約 88 筆請求在建立 TCP 連線階段就被拒絕,實際只有約 212 個有效買家),解讀方式見
+  所以沒有任何一個數字可以當成吞吐量上限,更不是 production 容量或 SLA。soak 有偶發的尾端延遲離群值
+  (accepted p95 仍在 12.3 ms,但 max 到 130 ms),原因未查,解讀方式見
   [負載特性報告](docs/portfolio/performance-report.md#離群值與資料品質)。
 - **沒有做任何比較**:報告只描述目前這套系統在這些條件下量到什麼,沒有跟早期實作、其他專案或其他系統對比。
 - **付款是模擬的**:由請求指定成功或失敗,沒有串接任何金流服務;通知只有 email 一種通道,本機由 Mailpit 攔截。

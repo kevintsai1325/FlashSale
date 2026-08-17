@@ -85,6 +85,13 @@ $ContentionProfiles = @(
 )
 $RepeatsPerProfile = 5
 
+# Runs before the measured matrix, discarded from the result document. Exercises the
+# same hot path (Lua reservation, Postgres tx, JWT filter chain) so the JVM has JITted
+# it and HikariCP's pool is established before runs[0] is measured — see the ~4x
+# slower first run in docs/portfolio/performance-report.md ("暖機離群值").
+$WarmupProfile = @{ Vus = 20; Stock = 5 }
+$WarmupRepeats = 2
+
 # Soak contract - kept in lockstep with soak.js and verify-results.mjs.
 $SoakUsers = 6000
 $SoakScenario = [ordered]@{
@@ -630,6 +637,14 @@ try {
     Invoke-Compose -Arguments @('up', '-d', '--build', '--wait')
     Assert-ComposeIdentity
     Wait-BackendReady
+
+    if ($Mode -eq 'full') {
+        Write-Host ""
+        Write-Host "=== warm-up: $WarmupRepeats x (vus=$($WarmupProfile.Vus), stock=$($WarmupProfile.Stock)), discarded ==="
+        for ($repeat = 1; $repeat -le $WarmupRepeats; $repeat++) {
+            Invoke-BenchmarkRun -RunId "warmup-$repeat" -Kind 'contention' -Users $WarmupProfile.Vus -Stock $WarmupProfile.Stock -SessionDir $sessionDir | Out-Null
+        }
+    }
 
     foreach ($planned in $plan) {
         $runs += Invoke-BenchmarkRun -RunId $planned.RunId -Kind $planned.Kind -Users $planned.Users -Stock $planned.Stock -SessionDir $sessionDir

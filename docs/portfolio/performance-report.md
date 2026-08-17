@@ -40,25 +40,40 @@
 
 | 項目 | 值 | JSON 路徑 |
 |---|---|---|
-| Git commit | `aba12097c3e76b6dbbb366d7bc48bdc1154d610e` | `environment.gitSha` |
-| Git 分支 | `codex/week7-portfolio` | `environment.gitBranch` |
-| 工作區是否有未提交變更 | 否 | `environment.gitDirty` |
-| 作業系統 | Microsoft Windows 11 家用版 10.0.26200 | `environment.os` |
-| CPU | Intel(R) Core(TM) i7-14650HX,24 個邏輯核心 | `environment.cpu` |
-| 記憶體 | 31.6 GB | `environment.memoryGb` |
-| Docker Engine | 29.6.2 | `environment.dockerVersion` |
+| Git commit | `c943756cd391d337111ec1488ef5d152efeea8a7` | `environment.gitSha` |
+| Git 分支 | `main` | `environment.gitBranch` |
+| 工作區是否有未提交變更 | 是 | `environment.gitDirty` |
+| 作業系統 | Microsoft Windows 11 專業版 10.0.26200 | `environment.os` |
+| CPU | 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz,16 個邏輯核心 | `environment.cpu` |
+| 記憶體 | 31.7 GB | `environment.memoryGb` |
+| Docker Engine | 29.7.2 | `environment.dockerVersion` |
 | Docker Compose | 5.3.1 | `environment.dockerComposeVersion` |
 | k6 | v2.2.0 (go1.26.5, windows/amd64) | `environment.k6Version` |
 | Compose 專案 | `flashsale-benchmark` | `environment.composeProject` |
 | 壓力進入點 | `http://127.0.0.1:18080` | `environment.backendBaseUrl` |
-| 開始 / 結束 | 2026-08-16T12:16:45Z / 2026-08-16T12:33:57Z(UTC) | `environment.startedAt`、`environment.finishedAt` |
+| 開始 / 結束 | 2026-08-17T02:21:25Z / 2026-08-17T02:38:13Z(UTC) | `environment.startedAt`、`environment.finishedAt` |
 
 共 16 次執行,全部完成,沒有任何一次失敗(`summary.expectedRuns` 為 `16`、
 `summary.failedRuns` 為 `0`,`runs` 陣列長度為 16)。
 
-**同機干擾:** 收集這份資料時,這台機器上同時還跑著一般的 `flashsale` Compose 專案(8 個
-服務,閒置但在執行中)。壓測用的是完全隔離的 `flashsale-benchmark` 專案(獨立 volume、
-獨立 port),資料不會互相污染,但 CPU 與 I/O 是共用的。這對延遲數字的影響沒有被量化。
+**這次收集換了一台機器**,CPU 型號與核心數跟最早一版收集不同,所以不能把這份數字拿去跟更早的
+版本逐項比對速度快慢——兩者本來就是不同硬體。
+
+**工作區有未提交變更:** `gitDirty` 是 `是`。這份數字量的是四個尚未提交的改動一起生效之後的
+行為,commit `c943756` 本身的原始碼並不包含它們:
+
+- `server.tomcat.accept-count` / `threads.max`(見下方[離群值](#離群值與資料品質)第 2 點)
+- `load-tests/benchmark/collect.ps1` 新增的 warm-up 階段(見第 1 點)
+- `spring.datasource.hikari.maximum-pool-size`(10 → 30)
+- `OutboxPublisher.BATCH_SIZE`(50 → 200)與 `spring.rabbitmq.listener.simple.concurrency`(1 → 5)
+
+後兩項是排查 300 VU 為什麼「明明只有 300 人卻要等超過 1 秒」時加的,細節見
+[瓶頸觀察](#瓶頸觀察)與[離群值](#離群值與資料品質)第 4 點。
+
+**收集這份資料時沒有同機干擾。** 早期收集時這台機器上同時跑著一般的 `flashsale` Compose 專案
+(8 個服務,閒置但在執行中),CPU 與 I/O 是共用的。這次收集前先把那套停掉了,所以這份數字沒有
+那層干擾——這也是下面能拿到「300 VU 五次全部零失敗」這種乾淨結果的原因之一,細節見離群值
+第 2 點。
 
 ## 量測方法
 
@@ -104,44 +119,47 @@
 
 | 執行 | accepted med | accepted p95 | accepted min | accepted max | completed med | completed p95 | completed max | req/s |
 |---|---|---|---|---|---|---|---|---|
-| `contention-30x10-1` | 156.2 | 174.9 | 145.4 | 176.5 | 171.5 | 682.0 | 684.0 | 70.9 |
-| `contention-30x10-2` | 37.8 | 51.3 | 22.5 | 53.5 | 52.5 | 293.0 | 293.0 | 131.5 |
-| `contention-30x10-3` | 37.0 | 44.8 | 28.5 | 44.8 | 47.0 | 551.6 | 552.0 | 84.0 |
-| `contention-30x10-4` | 36.0 | 45.0 | 25.0 | 45.0 | 46.0 | 541.0 | 541.0 | 89.4 |
-| `contention-30x10-5` | 31.2 | 38.7 | 23.0 | 39.0 | 39.0 | 538.6 | 540.0 | 78.9 |
-| **五次中位數** | **37.0** | **45.0** | **25.0** | **45.0** | **47.0** | **541.0** | **541.0** | **84.0** |
+| `contention-30x10-1` | 55.8 | 58.4 | 42.9 | 58.4 | 61.0 | 575.0 | 575.0 | 82.7 |
+| `contention-30x10-2` | 56.0 | 62.7 | 46.2 | 63.9 | 61.5 | 581.0 | 581.0 | 81.5 |
+| `contention-30x10-3` | 44.9 | 47.9 | 39.0 | 49.0 | 48.0 | 304.7 | 306.0 | 119.9 |
+| `contention-30x10-4` | 52.8 | 66.7 | 45.4 | 68.4 | 56.0 | 580.0 | 582.0 | 81.6 |
+| `contention-30x10-5` | 41.9 | 42.9 | 27.8 | 42.9 | 45.0 | 294.0 | 300.0 | 121.3 |
+| **五次中位數** | **52.8** | **58.4** | **42.9** | **58.4** | **56.0** | **575.0** | **575.0** | **82.7** |
 
-五次都是 10 筆成功、20 筆 `SOLD_OUT`、0 筆 5xx(`runs[0..4].outcomes`)。
-第一次執行明顯偏慢,見下方[離群值](#離群值與資料品質)。
+五次都是 10 筆成功、20 筆 `SOLD_OUT`、0 筆 5xx(`runs[0..4].outcomes`)。這次收集在正式量測前
+加了 warm-up(見下方[離群值](#離群值與資料品質)第 1 點),第一次執行不再是 4-5 倍的離群值。
 
 ### 100 個買家搶 30 件(`runs[5]`–`runs[9]`)
 
 | 執行 | accepted med | accepted p95 | accepted min | accepted max | completed med | completed p95 | completed max | req/s |
 |---|---|---|---|---|---|---|---|---|
-| `contention-100x30-1` | 69.3 | 110.6 | 21.5 | 117.7 | 101.0 | 812.0 | 816.0 | 224.1 |
-| `contention-100x30-2` | 54.5 | 80.7 | 14.9 | 84.4 | 74.0 | 549.0 | 551.0 | 273.2 |
-| `contention-100x30-3` | 81.5 | 108.4 | 18.2 | 112.9 | 100.0 | 556.1 | 561.0 | 276.4 |
-| `contention-100x30-4` | 51.9 | 80.9 | 15.7 | 85.9 | 71.5 | 545.0 | 547.0 | 261.7 |
-| `contention-100x30-5` | 43.1 | 63.1 | 15.6 | 71.4 | 57.5 | 286.0 | 301.0 | 407.3 |
-| **五次中位數** | **54.5** | **80.9** | **15.7** | **85.9** | **74.0** | **549.0** | **551.0** | **273.2** |
+| `contention-100x30-1` | 74.5 | 109.6 | 31.8 | 120.6 | 104.5 | 829.0 | 837.0 | 209.6 |
+| `contention-100x30-2` | 75.8 | 104.1 | 27.9 | 107.7 | 97.0 | 321.1 | 581.0 | 214.2 |
+| `contention-100x30-3` | 57.4 | 80.1 | 33.5 | 85.2 | 83.0 | 821.0 | 834.0 | 191.5 |
+| `contention-100x30-4` | 81.3 | 111.8 | 33.4 | 118.1 | 108.0 | 317.0 | 323.0 | 353.7 |
+| `contention-100x30-5` | 64.1 | 83.3 | 33.1 | 85.9 | 80.0 | 557.0 | 569.0 | 251.9 |
+| **五次中位數** | **74.5** | **104.1** | **33.1** | **107.7** | **97.0** | **557.0** | **581.0** | **214.2** |
 
 五次都是 30 筆成功、70 筆 `SOLD_OUT`、0 筆 5xx。
 
 ### 300 個買家搶 100 件(`runs[10]`–`runs[14]`)
 
-**這五次執行的數字有已知污染,請先讀[離群值](#離群值與資料品質)再看這張表。**
+這五次執行的請求**全部送達**,沒有連線被拒(見下方[離群值](#離群值與資料品質)第 2 點——
+這是調過三次才拿到的乾淨結果,過程並不平順)。
 
-| 執行 | accepted med | accepted p95 | accepted max | completed med | completed p95 | completed max | req/s | 送達 | 連線被拒 |
-|---|---|---|---|---|---|---|---|---|---|
-| `contention-300x100-1` | 66.5 | 175.8 | 190.4 | 185.5 | 1373.0 | 1635.0 | 400.2 | 210 | 90 |
-| `contention-300x100-2` | 61.2 | 137.5 | 151.9 | 149.0 | 1101.6 | 1107.0 | 474.1 | 210 | 90 |
-| `contention-300x100-3` | 57.0 | 136.7 | 147.7 | 147.0 | 1091.9 | 1099.0 | 534.4 | 212 | 88 |
-| `contention-300x100-4` | 82.8 | 181.1 | 205.8 | 198.0 | 1124.7 | 1389.0 | 440.7 | 214 | 86 |
-| `contention-300x100-5` | 55.4 | 130.0 | 142.0 | 139.0 | 1348.0 | 1358.0 | 492.6 | 212 | 88 |
-| **五次中位數** | **61.2** | **137.5** | **151.9** | **149.0** | **1124.7** | **1358.0** | **474.1** | **212** | **88** |
+| 執行 | accepted med | accepted p95 | accepted min | accepted max | completed med | completed p95 | completed max | req/s |
+|---|---|---|---|---|---|---|---|---|
+| `contention-300x100-1` | 118.9 | 188.1 | 40.0 | 240.4 | 201.5 | 1145.0 | 1164.0 | 522.8 |
+| `contention-300x100-2` | 124.3 | 183.9 | 33.9 | 229.7 | 197.5 | 867.1 | 912.0 | 540.9 |
+| `contention-300x100-3` | 143.9 | 215.2 | 43.8 | 231.9 | 234.0 | 929.1 | 968.0 | 540.9 |
+| `contention-300x100-4` | 131.6 | 188.0 | 32.0 | 232.8 | 185.5 | 1126.0 | 1143.0 | 479.7 |
+| `contention-300x100-5` | 210.8 | 275.7 | 37.0 | 332.3 | 268.5 | 954.0 | 974.0 | 557.6 |
+| **五次中位數** | **131.6** | **188.1** | **37.0** | **232.8** | **201.5** | **954.0** | **974.0** | **540.9** |
 
-「送達」是 `runs[n].outcomes.accepted`,「連線被拒」是 `runs[n].outcomes.failed`。五次都是
-100 筆成功、0 筆 5xx。
+五次都是 100 筆成功、200 筆 `SOLD_OUT`、0 筆 5xx、300 筆 `accepted`(`runs[10..14].outcomes`)。
+`contention-300x100-5` 明顯比其餘四次慢(accepted 中位數 210.8ms vs 118.9–143.9ms),原因
+沒有查——300 個真實連線同時打進來時,單次執行之間的變異本來就比 30/100 VU 情境大,這裡沒有
+再往下拆解去分辨是隨機變異還是有系統性原因。
 
 ## Soak:穩態十分鐘(`runs[15]`)
 
@@ -151,14 +169,14 @@
 
 | 指標 | min | med | p90 | p95 | max | avg |
 |---|---|---|---|---|---|---|
-| accepted | 0.5 | 7.6 | 11.8 | 12.6 | 35.0 | 8.1 |
-| completed | 254.0 | 511.0 | 520.0 | 523.0 | 784.0 | 405.2 |
-| orderCreated | 254.0 | 511.0 | 520.0 | 523.0 | 784.0 | 405.2 |
+| accepted | 6.3 | 9.5 | 11.3 | 12.3 | 130.0 | 9.8 |
+| completed | 259.0 | 515.0 | 521.0 | 769.0 | 882.0 | 432.7 |
+| orderCreated | 259.0 | 515.0 | 521.0 | 769.0 | 882.0 | 432.7 |
 
 其他觀測值:
 
-- 6,001 次 iteration(`runs[15].metrics.iterations`),15,369 次 HTTP 請求
-  (`runs[15].metrics.httpRequests`),平均 25.6 req/s(`runs[15].metrics.requestsPerSecond`,
+- 6,001 次 iteration(`runs[15].metrics.iterations`),16,003 次 HTTP 請求
+  (`runs[15].metrics.httpRequests`),平均 26.6 req/s(`runs[15].metrics.requestsPerSecond`,
   已包含輪詢請求)。
 - 6,000 筆成功、0 筆 `SOLD_OUT`、0 筆 5xx、0 筆輪詢逾時(`runs[15].outcomes`)。庫存足夠,
   所以每個買家都買得到,這一段量的是穩態延遲而不是競爭。
@@ -166,48 +184,57 @@
   所以兩列數字一致。
 
 **關於「有沒有隨時間劣化」:** 這套工具只記錄整段期間的彙總統計,沒有留下分時間區間的
-時序資料,所以這裡無法畫出趨勢線。能說的是分佈很窄——中位數 511ms、p95 523ms、最大值
-784ms,p95 只比中位數高 12ms——如果延遲在十分鐘內持續往上漂,尾端不會這麼貼近中位數。
-這是從分佈形狀做的推論,不是直接觀察到的時序證據。同樣地,6,001 次 iteration 全部完成,
-沒有任何一次被中斷。
+時序資料,所以這裡無法畫出趨勢線。把 Hikari 連線池從預設 10 調到 30 之後,這裡的極端離群值
+明顯收斂了——accepted max 從沒調之前的 1411ms 降到 130ms,completed max 從 2173ms 降到
+882ms,這個方向支持「連線池不夠、偶發排隊」是原本那個離群值的成因。但**沒有完全消失**:
+completed 的 p95(769ms)幾乎沒動(沒調之前是 768ms),代表還是有一小撮 iteration 比中位數
+慢了一大截,只是最壞情況不再那麼極端。細節與候選原因見下方[離群值](#離群值與資料品質)第 4 點。
+同樣地,6,001 次 iteration 全部完成,沒有任何一次被中斷或逾時。
 
 ## 離群值與資料品質
 
-驗證器只會用正確性不變量判定一次執行合格與否,所以「合格」不等於「乾淨」。以下三件事是逐筆
-檢查 `outcomes`、`queues` 與不變量之後自己挑出來的,即使驗證器把這三次執行都判為 `valid`:
+驗證器只會用正確性不變量判定一次執行合格與否,所以「合格」不等於「乾淨」。以下四件事是逐筆
+檢查 `outcomes`、`queues` 與不變量之後自己挑出來的,即使驗證器把每次執行都判為 `valid`。
+前兩件是上一版收集時發現、這次已經處理掉的問題,後兩件是這次仍然存在或新出現的:
 
-### 1. 第一次執行是暖機離群值(`runs[0]`)
+### 1. 第一次執行的暖機離群值,這次靠 warm-up 消掉了
 
-`contention-30x10-1` 的 accepted 中位數是 156.2ms,同情境其餘四次是 31.2–37.8ms,大約差
-四到五倍;completed p95 682ms 也是五次裡最高。這一次是 backend 啟動後第一個被量測的情境
-(`environment.startedAt` 12:16:45Z、`runs[0].startedAt` 12:17:12Z,相隔 27 秒)。
-最可能的原因是 JVM 尚未 JIT 暖機與各種連線池尚未建立——**這是推論,沒有額外證據佐證**。
-這一次執行照樣留在資料裡並計入上表的中位數,沒有被剔除。若只看第 2–5 次,accepted 中位數的
-中位數是 36.5ms。
+上一版收集時 `contention-30x10-1` 的 accepted 中位數是 156.2ms,同情境其餘四次是
+31.2–37.8ms,差四到五倍,推論是 JVM 尚未 JIT 暖機、連線池尚未建立。這次收集在
+`collect.ps1` 裡加了兩次 warm-up run(20 VU 搶 5 件,`warmup-1`、`warmup-2`,結果**不進
+`results.json`**),跑在 `Wait-BackendReady` 之後、第一個正式情境之前。
 
-### 2. 300 VU 情境有約三成的請求根本沒送達(`runs[10]`–`runs[14]`)
+warm-up 的結果印證了原本的推論:`warmup-1` 的 accepted 中位數是 203.5ms(冷啟動代價全部
+被它吸收),`warmup-2` 已經降到 42.9ms。緊接著的正式 `contention-30x10-1` 是 55.8ms,
+跟同組其餘四次(41.9–56.0ms)同一個量級,不再是離群值。
 
-每次執行有 86–90 筆(`runs[n].outcomes.failed`,五次中位數 88)請求沒有拿到任何 HTTP 回應。
-從壓測當下的 k6 主控台輸出可以看到這些請求的失敗原因是
-`dial tcp 127.0.0.1:18080: connectex: No connection could be made because the target machine actively refused it.`
-——也就是 TCP 連線在建立階段就被拒絕(`ECONNREFUSED`),不是應用程式回了錯誤碼。
-佐證:`runs[n].outcomes.unexpected5xx` 全部為 `0`,而這些請求在 k6 的紀錄裡狀態碼是 `0`。
-(失敗筆數本身在 JSON 裡;失敗原因的字串來自該次執行的主控台輸出,不在結果文件中。)
+### 2. 300 VU 情境的連線被拒絕,過程反覆試了三輪才穩定
 
-這件事有兩個後果:
+最早一版收集時每次執行有 86–90 筆請求在 TCP 連線建立階段就被拒絕(`ECONNREFUSED`),
+懷疑是 Spring Boot Tomcat 預設的 `accept-count=100` 撐不住 300 條瞬間新連線。中間試了三輪:
 
-- **這不是「300 個買家的行為」,而是「約 212 個買家的行為」。** 上表的 accepted / completed
-  延遲只涵蓋真正建立連線的那些請求。
-- **`acceptedLatencyMs.min` 在這五次都是 `0`**,因為連線失敗的樣本以 0ms 記進了同一條
-  trend。這代表 300 VU 那張表的 accepted `min`、`avg` 與 `med` 都被往下拉;
-  `p90`/`p95`/`max` 受影響較小。**要比較不同規模的 accepted 延遲時,請用 300 VU 的 p95,
-  不要用它的中位數。**
+1. **把 `accept-count` 調到 300、`threads.max` 調到 400。** 5 次裡有 4 次乾淨,但有 1 次
+   又出現 68 筆連線被拒——不是完全解決,只是機率降低。
+2. **把 `accept-count` 再加大到 512(給更多餘裕)。** 結果**更差**:5 次裡有 2 次連線被拒
+   (79、87 筆),soak 的尾端延遲也變得更不穩。這代表瓶頸不是(或不只是)Tomcat 自己的
+   accept backlog——加大它沒有帶來線性的改善,懷疑是 Windows 上 Docker Desktop 的 port
+   proxy 這一層有自己的佇列上限,跟 Tomcat 的設定是兩回事,單靠調 Tomcat 這邊碰不到它。
+3. **退回 `accept-count: 300`,同時把同機閒置的 `flashsale` Compose 專案停掉,再重跑。**
+   這次 5 次全部乾淨(見上表)。
 
-被拒絕的是誰,沒有直接證據。兩個尚未驗證的候選:Windows 上 Docker Desktop 的 port proxy
-在瞬間 300 條新連線下的 accept backlog,或是 Tomcat 的預設 listen backlog
-(專案沒有調整任何 `server.tomcat.*` 設定,所以套用 Spring Boot 預設的
-`threads.max=200`、`accept-count=100`)。兩者都會表現成連線建立階段的 `ECONNREFUSED`。
-**要分辨是哪一個需要另外設計實驗,這次沒有做。**
+| | 最早一版(預設值) | 調到 300(有同機干擾) | 調到 512(有同機干擾) | 這份報告(300,無同機干擾) |
+|---|---|---|---|---|
+| TCP 連線被拒的執行次數 | 5/5 | 1/5(68 筆) | 2/5(79、87 筆) | **0/5** |
+
+**結論比原本想的複雜:** 這個問題看起來同時受 Tomcat backlog 大小**和**同機資源競爭影響,
+把兩者都排除才拿到乾淨結果,單獨調大 `accept-count` 沒有可靠地解決它。也就是說,`accept-count`
+從 100 調到 300 這個動作本身有沒有必要、還是只是同機干擾恰好那幾次沒踩到,**沒有做隔離實驗
+分開驗證**——這次的乾淨結果不能簡單歸功於任何一個單一改動。
+
+`acceptedLatencyMs.min` 這份報告的 300 VU 五次都不再是 0ms(這次落在 32.0–43.8ms 之間,見
+上表),所以中位數可以直接跟 30/100 VU 比。副作用是**accepted 延遲本身比最早一版還高**——
+最早一版中位數 61.2ms(混了一堆 0ms 的失敗樣本,是失真的),這次是 131.6ms,量到的才是 300
+個真實連線同時打進應用程式時的實際同步延遲,細節見下方[瓶頸觀察](#瓶頸觀察)。
 
 ### 3. soak 有一次 iteration 沒有可用的帳號(`runs[15]`)
 
@@ -215,6 +242,28 @@
 iteration(`runs[15].metrics.iterations`),比預先準備的 6,000 個帳號多一次,第 6,001 次
 找不到對應帳號就直接跳過,沒有送出請求。這是壓測工具本身的邊界問題,不是系統行為;
 影響是 6,001 分之 1。
+
+### 4. soak 的尾端延遲離群值,靠加大 Hikari pool 減輕了大半,但沒有完全消失
+
+這個離群值第一次出現在只調了 Tomcat 設定的那一版:accepted `max` 衝到 1411.1ms(比對照組
+的 35.0ms 高了 40 倍),completed `max` 到 2173ms(對照組 784ms)。懷疑是 `spring.datasource.
+hikari.maximum-pool-size` 一直沿用 Spring Boot 預設值 10,300 VU 情境把連線池打滿之後,
+soak 接著跑時偶爾還沒完全恢復。把它調到 30 之後(細節見[瓶頸觀察](#瓶頸觀察)),這份報告的
+soak accepted `max` 降到 130.0ms、completed `max` 降到 882ms——極端值大幅收斂,支持原本的
+推論方向。
+
+但**沒有完全消失**,而且這個部分似乎跟 Hikari pool 大小無關:三個版本的 completed p95
+幾乎是同一個數字——最早未調整版 523ms、只調 Tomcat 那版 768ms、這份加大 Hikari pool 之後的
+版本 769ms。accepted 的 p95 三版也都貼在 12-13ms(12.6 / 12.8 / 12.3ms),p90 也都貼在
+520ms 上下,代表不是全面變慢,而是極少數 iteration(遠少於 6,000 筆的 5%,否則會反映在
+p95 上)被卡住,而且這個「極少數被卡住」的比例,加大連線池並沒有讓它變少——變小的只有
+「卡住的時候最多卡多久」(max 從 2173ms 降到 882ms),不是「多常卡住」。
+
+沒有查出原因。跟最早那版比,這次收集有兩個已知差異,都可能相關但都沒驗證:soak 是接在 15 次
+競爭情境(含 5 次 300 VU 重負載)之後跑的,backend 這段期間沒有重新啟動;`server.tomcat.
+threads.max` 這次是 400,是最早版本預設值 200 的兩倍。GC 暫停、連線池狀態、或單純是換了一台
+機器的雜訊,都是候選,但沒有一個被證實。**要分辨原因需要另外設計實驗(例如 soak 前重啟
+backend、或關掉 GC log 佐證),這次沒有做。**
 
 ### 佇列深度:16 次執行全部為零
 
@@ -232,43 +281,39 @@ iteration(`runs[15].metrics.iterations`),比預先準備的 6,000 個帳號多�
 
 | 情境 | req/s 五次中位數 | 五次原始值 |
 |---|---|---|
-| 30 買家 / 10 件 | 84.0 | 70.9、131.5、84.0、89.4、78.9 |
-| 100 買家 / 30 件 | 273.2 | 224.1、273.2、276.4、261.7、407.3 |
-| 300 買家 / 100 件 ⚠️ 見下方說明 | 474.1 | 400.2、474.1、534.4、440.7、492.6 |
+| 30 買家 / 10 件 | 82.7 | 82.7、81.5、119.9、81.6、121.3 |
+| 100 買家 / 30 件 | 214.2 | 209.6、214.2、191.5、353.7、251.9 |
+| 300 買家 / 100 件 | 540.9 | 522.8、540.9、540.9、479.7、557.6 |
 
-⚠️ **300 VU 這一列同時有兩個問題,不能當成「300 個買家打出 474.1 req/s」來讀**
-(背景見[離群值](#離群值與資料品質)第 2 點):
+300 買家這一列是乾淨的:`outcomes.accepted + outcomes.failed` 五次都是 `300 + 0`,
+`httpRequests` 全部來自真正跟 backend 完成往返的請求,沒有把被拒絕的連線算進分子
+(對照見[離群值](#離群值與資料品質)第 2 點)。
 
-1. **有效買家只有約 212 個,不是 300 個。** 每次執行有 86–90 筆請求在建立 TCP 連線階段就被
-   拒絕,從來沒有抵達應用程式(`runs[10..14].outcomes.failed` 為 90、90、88、86、88)。
-2. **這一列的 req/s 本身是被灌水的。** `requestsPerSecond` 是從 `httpRequests` 算出來的,
-   而 `httpRequests`(五次分別為 666、537、600、633、683)**把那些被拒絕的連線也算成了請求**
-   ——五次執行的 `outcomes.accepted + outcomes.failed` 都恰好等於 300,也就是 300 次 POST
-   嘗試裡有 86–90 次其實沒有跟 backend 完成任何往返。這些失敗的連線幾乎不花時間就結束
-   (它們正是把 `runs[10..14].metrics.acceptedLatencyMs.min` 壓成 `0` 的那批樣本),卻照樣
-   進了分子,所以**這個數字比 backend 實際服務掉的請求速率要高**,高多少沒有換算。
-
-soak 的 25.6 req/s 不能跟上面比較:那是刻意固定在 10 次搶購/秒的到達率下,加上輪詢流量之後
+soak 的 26.6 req/s 不能跟上面比較:那是刻意固定在 10 次搶購/秒的到達率下,加上輪詢流量之後
 的結果,是設定值而不是量到的上限。**這次壓測沒有做飽和測試,所以沒有任何一個數字可以拿來
 當作系統的吞吐量上限。**
 
 ## 瓶頸觀察
 
-**同步那一段很便宜,非同步那一段由兩個輪詢間隔主導。**
+**同步那一段很便宜,非同步那一段由兩個輪詢間隔主導——但 300 VU 情境下兩段都各自有自己的瓶頸,
+這次針對性地調了三個設定去驗證。**
 
-在 soak 的穩態下,accepted 中位數是 7.6ms,而 completed 中位數是 511ms——同一批請求,兩者
-差了大約 500ms。這個差距的組成可以直接對上兩個設定常數:
+### 穩態下的延遲組成
+
+在 soak 的穩態下,accepted 中位數是 9.5ms,而 completed 中位數是 515ms——同一批請求,兩者
+差了大約 505ms。這個差距的組成可以直接對上兩個設定常數:
 
 - `OutboxPublisher` 以 `@Scheduled(fixedDelay = 500)` 撈未發佈事件(見
   [工程取捨](./trade-offs.md#transactional-outbox)),所以一筆事件平均要等約 250ms 才會被送進
   RabbitMQ,最多 500ms。
 - 壓測腳本每 250ms 輪詢一次終態,所以平均再多約 125ms 才會「看到」完成。
 
-兩者相加約 375ms,加上 accepted 的平均 8.1ms(`runs[15].metrics.acceptedLatencyMs.avg`),
-約 383ms,與實際量到的 completed 平均 405.2ms
-(`runs[15].metrics.completedLatencyMs.avg`)同一個量級。觀察到的最小值 254ms
-(`runs[15].metrics.completedLatencyMs.min`)也符合「outbox 幾乎沒等到 + 一個輪詢週期」的
-下限。
+兩者相加約 375ms,加上 accepted 的平均 9.8ms(`runs[15].metrics.acceptedLatencyMs.avg`),
+約 384.8ms,比實際量到的 completed 平均 432.7ms
+(`runs[15].metrics.completedLatencyMs.avg`)低一些,主因是少數尾端離群值拉高了平均
+(見上方[離群值](#離群值與資料品質)第 4 點),不是輪詢模型本身失準。觀察到的最小值 259ms
+(`runs[15].metrics.completedLatencyMs.min`)仍然符合「outbox 幾乎沒等到 + 一個輪詢週期」的
+下限,中位數與 p90 也還是緊貼這個模型。
 
 這代表**在這些負載下,搶購完成延遲的主要成分是可設定的輪詢間隔,不是資料庫、Redis 或
 RabbitMQ 的處理能力**。要縮短它,調 `fixedDelay` 或改用 CDC 會比擴充硬體有效
@@ -276,11 +321,46 @@ RabbitMQ 的處理能力**。要縮短它,調 `fixedDelay` 或改用 CDC 會比�
 250ms 輪詢是壓測工具的產物,真實用戶端可以用不同的輪詢策略。
 
 至於 Redis 預扣本身,`runs[15].actuator["purchase.reservation.latency"]` 顯示 soak 結束時
-累計 7,708 次預扣、總耗時 9.23 秒(平均約 1.2ms/次),單次最大值 0.0027 秒。
-預扣不是瓶頸。(這是累計值,見[量測方法](#三個必須知道的量測偏差)第 3 點。)
+累計 8,190 次預扣(含這次收集裡 warm-up 與 15 次競爭情境留下的累計基數)、總耗時 27.22 秒
+(平均約 3.3ms/次),單次最大值 0.0023 秒。預扣不是瓶頸。(這是累計值,見
+[量測方法](#三個必須知道的量測偏差)第 3 點。)
 
-在 300 VU 情境下,最先撐不住的不是應用程式,而是**連線建立**——見上方離群值第 2 點。
-在那之前,應用程式沒有回過任何一個 5xx。
+### 300 VU 為什麼特別慢:三個沒配置過的預設值
+
+最早那版(只調 Tomcat)量到 300 VU 的 completed 中位數 197.5ms、p95 到 1110ms、accepted
+中位數 131.3ms,遠比 30/100 VU 不成比例地慢。追查之後,發現三個地方全部套用 Spring Boot
+的預設值,沒有人針對 300 併發的規模調過:
+
+1. **HikariCP 連線池只有 10 條**(`spring.datasource.hikari.maximum-pool-size` 沒設定過,
+   套用預設值 10)。`CreatePurchaseRequestService.createPurchaseRequest`
+   (`backend/src/main/java/com/flashsale/order/application/CreatePurchaseRequestService.java:34-69`)
+   整個方法在一個 `@Transactional` 裡,連呼叫 Redis Lua 預扣(第 58 行)都握著同一條 DB 連線,
+   300 個併發請求只能排隊搶這 10 條連線。
+2. **outbox 一批只發 50 筆**(`OutboxPublisher.BATCH_SIZE`,`OutboxPublisher.java:24`)搭配
+   `fixedDelay = 500ms`。300 VU / 100 件庫存的情境有 100 筆成功訂單,超過一批的上限,保證要
+   跑滿 2 輪 scheduler tick 才能全部發佈完,這正好解釋 completed p95/max 為什麼卡在
+   1100ms 以上這個量級。
+3. **RabbitMQ consumer 沒設定併發數**(`spring.rabbitmq.listener.simple.concurrency` 沒設定,
+   `OrderPurchaseConsumer.java:53` 的 `@RabbitListener` 也沒指定),預設只有 1 條執行緒依序
+   消費 `order.create.queue`,100 筆訂單建立要序列處理,而且同樣要搶前面那 10 條 DB 連線。
+
+把 Hikari pool 開到 30、`BATCH_SIZE` 提到 200、consumer `concurrency` 開到 5 之後重跑:
+
+| | 最早一版(全部預設值) | 這份報告(調整後) |
+|---|---|---|
+| 300 VU completed 中位數 | 197.5ms | 201.5ms(持平) |
+| 300 VU completed p95 | 1110.0ms | **954.0ms** |
+| 300 VU accepted 中位數 | 131.3ms | 131.6ms(**幾乎沒變**) |
+| soak accepted max | 1411.1ms | **130.0ms** |
+| soak completed max | 2173ms | **882ms** |
+
+completed 的尾端(p95/max)跟 soak 的極端離群值改善明顯,支持「連線池/batch size 太小」是
+其中一部分原因。但**300 VU 的 accepted 中位數幾乎沒變**——把連線池從 10 條開到 30 條(3 倍),
+理論上排隊時間應該明顯縮短,結果卻幾乎持平。這代表 DB 連線池不是 accepted 延遲的唯一或主要
+瓶頸,下一個候選是應用層本身的序列化:Redis Lua 對同一個 flash sale key 的原子預扣本來就是
+逐筆序列化執行,或者單純是 300 個併發執行緒本身的 CPU/JSON 解析/JWT 驗證開銷,在共用核心的
+筆電上已經逼近某個上限。這次沒有做進一步拆解量測(例如單獨量 Lua 執行時間 vs. 排隊等待時間、
+或用 profiler 抓 CPU 熱點),無法確定是哪一個,或兩者都有。
 
 ## 正確性
 
@@ -303,28 +383,25 @@ RabbitMQ 的處理能力**。要縮短它,調 `fixedDelay` 或改用 CDC 會比�
 除了上表,還逐筆核對了 `available + reserved + sold` 是否等於該次執行灌入的庫存
 (`runs[n].invariants.inventory` 對 `runs[n].stock`)。**16 次執行全部守恆**,例如
 `runs[15]`(soak)是 `available=0`、`reserved=0`、`sold=6000`,合計 6,000,等於灌入的 6,000 件。
-這一項目前的驗證器並沒有檢查,是額外做的複查。
-
-在拆掉壓測環境之前,也直接連進隔離的資料庫再查了一次 soak 結束時的狀態,結果與結果文件一致:
-庫存 `6000 / 0 / 0 / 6000`(total / available / reserved / sold)且守恆為真;
-`orders` 6,000 筆、來自 6,000 個不重複使用者、每人最多 1 筆;`order_items` 6,000 筆;
-`purchase_requests` 全部 6,000 筆都是 `SUCCEEDED`;`outbox_events` 6,000 筆且未發佈者為 0;
-`consumed_messages` 6,000 筆(消費端去重表與訂單數一致,代表沒有重複消費)。
-同時 Redis 的 `stock:1` 為 `0`,與 Postgres 的 `sold=6000` 一致,四條 RabbitMQ 佇列
-(含兩條 DLQ)深度皆為 0。
+這一項目前的驗證器並沒有檢查,是額外做的複查。這次收集用 `-KeepStack` 以外的預設流程跑完就
+自動 `down -v` 拆掉了隔離環境,沒有像上一版那樣在拆掉之前額外連進資料庫手動查
+`consumed_messages`、Redis key 等結果文件 schema 之外的表——這次的複查完全來自
+`results.json` 裡已經擷取的欄位,沒有額外的即時查詢佐證。
 
 ### 兩套獨立計數互相對帳
 
 壓測工具自己數的筆數,和 backend 自己的 Micrometer 指標可以對上:
 
-- 15 次競爭情境的 `outcomes.accepted` 加總為 150 + 500 + 1,058 = **1,708**,
-  等於 `runs[14].actuator["purchase.reservation"].COUNT` 的 **1,708**。
-- 同樣 15 次的訂單數加總為 50 + 150 + 500 = **700**,
-  等於 `runs[14].actuator["purchase.order.created"].COUNT` 的 **700**。
-- soak 之後兩者分別變成 **7,708**(= 1,708 + 6,000)與 **6,700**(= 700 + 6,000),
+- 15 次競爭情境的 `outcomes.accepted` 加總為 150 + 500 + 1,500 = **2,150**,加上這次收集在
+  正式量測前跑的 2 次 warm-up(20 VU、結果不進 `results.json`,每次 accepted 20 筆)共 40 筆,
+  等於 `runs[14].actuator["purchase.reservation"].COUNT` 的 **2,190**。
+- 同樣 15 次的訂單數加總為 50 + 150 + 500 = **700**,加上 2 次 warm-up 各 5 筆訂單共 10 筆,
+  等於 `runs[14].actuator["purchase.order.created"].COUNT` 的 **710**。
+- soak 之後兩者分別變成 **8,190**(= 2,190 + 6,000)與 **6,710**(= 710 + 6,000),
   對應 `runs[15].actuator`。
 
-k6 在外面數的與 backend 在裡面數的完全一致,沒有請求被默默吞掉,也沒有訂單被重複建立。
+k6 在外面數的與 backend 在裡面數的完全一致(連同被丟棄的 warm-up 流量也對得上),沒有請求被
+默默吞掉,也沒有訂單被重複建立。
 
 ## 這些數字的適用邊界
 
@@ -350,8 +427,9 @@ k6 在外面數的與 backend 在裡面數的完全一致,沒有請求被默默�
 powershell -ExecutionPolicy Bypass -File load-tests/benchmark/collect.ps1 -Mode full
 ```
 
-工具會啟動隔離的 `flashsale-benchmark` 專案、驗證隔離、依序跑完 15 次競爭情境與 soak、
-擷取不變量,最後產生一份結果文件並自動驗證。任何時候都可以重新驗證這份文件:
+工具會啟動隔離的 `flashsale-benchmark` 專案、驗證隔離、跑 2 次 warm-up(結果丟棄)、依序跑完
+15 次競爭情境與 soak、擷取不變量,最後產生一份結果文件並自動驗證。任何時候都可以重新驗證這份
+文件:
 
 ```powershell
 node load-tests/benchmark/verify-results.mjs docs/portfolio/data/benchmark-results.json

@@ -2,22 +2,22 @@
     "schemaVersion":  1,
     "mode":  "full",
     "environment":  {
-                        "gitSha":  "aba12097c3e76b6dbbb366d7bc48bdc1154d610e",
-                        "gitBranch":  "codex/week7-portfolio",
-                        "gitDirty":  false,
+                        "gitSha":  "c943756cd391d337111ec1488ef5d152efeea8a7",
+                        "gitBranch":  "main",
+                        "gitDirty":  true,
                         "k6Version":  "k6.exe v2.2.0 (commit/00a9a1b7f5, go1.26.5, windows/amd64)",
-                        "dockerVersion":  "29.6.2",
+                        "dockerVersion":  "29.7.2",
                         "dockerComposeVersion":  "5.3.1",
-                        "os":  "Microsoft Windows 11 家用版 10.0.26200",
+                        "os":  "Microsoft Windows 11 專業版 10.0.26200",
                         "cpu":  {
-                                    "model":  "Intel(R) Core(TM) i7-14650HX",
-                                    "logicalCores":  24
+                                    "model":  "11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz",
+                                    "logicalCores":  16
                                 },
-                        "memoryGb":  31.6,
+                        "memoryGb":  31.7,
                         "composeProject":  "flashsale-benchmark",
                         "backendBaseUrl":  "http://127.0.0.1:18080",
-                        "startedAt":  "2026-08-16T12:16:45.2393687Z",
-                        "finishedAt":  "2026-08-16T12:33:57.8919578Z"
+                        "startedAt":  "2026-08-17T02:21:25.4973952Z",
+                        "finishedAt":  "2026-08-17T02:38:13.7002837Z"
                     },
     "summary":  {
                     "expectedRuns":  16,
@@ -29,8 +29,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  10,
-                     "startedAt":  "2026-08-16T12:17:12.410Z",
-                     "finishedAt":  "2026-08-16T12:17:14.7545829Z",
+                     "startedAt":  "2026-08-17T02:22:18.384Z",
+                     "finishedAt":  "2026-08-17T02:22:20.6802451Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -42,30 +42,30 @@
                      "vus":  30,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  157.72347,
-                                                               "min":  145.4297,
-                                                               "med":  156.2109,
-                                                               "p90":  173.02377,
-                                                               "p95":  174.8784,
-                                                               "max":  176.5393
+                                                               "avg":  52.92322666666666,
+                                                               "min":  42.9158,
+                                                               "med":  55.8166,
+                                                               "p90":  58.095800000000004,
+                                                               "p95":  58.4198,
+                                                               "max":  58.4198
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  336.96666666666664,
-                                                                "min":  155,
-                                                                "med":  171.5,
-                                                                "p90":  682,
-                                                                "p95":  682,
-                                                                "max":  684
+                                                                "avg":  227.76666666666668,
+                                                                "min":  47,
+                                                                "med":  61,
+                                                                "p90":  567.8,
+                                                                "p95":  575,
+                                                                "max":  575
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  679.8,
-                                                                   "min":  676,
-                                                                   "med":  679,
-                                                                   "p90":  682.2,
-                                                                   "p95":  683.1,
-                                                                   "max":  684
+                                                                   "avg":  568,
+                                                                   "min":  563,
+                                                                   "med":  566.5,
+                                                                   "p90":  575,
+                                                                   "p95":  575,
+                                                                   "max":  575
                                                                },
-                                     "requestsPerSecond":  70.93240935831138,
+                                     "requestsPerSecond":  82.6882546957006,
                                      "httpRequests":  50,
                                      "iterations":  30
                                  },
@@ -130,15 +130,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  30.0
+                                                                   "COUNT":  70.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  30.0,
-                                                                           "TOTAL_TIME":  0.763422157,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  70.0,
+                                                                           "TOTAL_TIME":  2.911623374,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  10.0
+                                                                     "COUNT":  20.0
                                                                  }
                                   }
                  },
@@ -147,8 +147,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  10,
-                     "startedAt":  "2026-08-16T12:17:20.814Z",
-                     "finishedAt":  "2026-08-16T12:17:22.5574323Z",
+                     "startedAt":  "2026-08-17T02:22:26.114Z",
+                     "finishedAt":  "2026-08-17T02:22:28.3524290Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -160,30 +160,148 @@
                      "vus":  30,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  37.23651333333333,
-                                                               "min":  22.4592,
-                                                               "med":  37.82705,
-                                                               "p90":  51.2943,
-                                                               "p95":  51.2943,
-                                                               "max":  53.4792
+                                                               "avg":  56.06333,
+                                                               "min":  46.2307,
+                                                               "med":  56.0305,
+                                                               "p90":  62.39833,
+                                                               "p95":  62.69211,
+                                                               "max":  63.9319
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  128.86666666666667,
-                                                                "min":  36,
-                                                                "med":  52.5,
-                                                                "p90":  289.4,
-                                                                "p95":  293,
-                                                                "max":  293
+                                                                "avg":  230.56666666666666,
+                                                                "min":  50,
+                                                                "med":  61.5,
+                                                                "p90":  580.1,
+                                                                "p95":  581,
+                                                                "max":  581
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  289.8,
-                                                                   "min":  288,
-                                                                   "med":  289,
-                                                                   "p90":  293,
-                                                                   "p95":  293,
-                                                                   "max":  293
+                                                                   "avg":  575.1,
+                                                                   "min":  566,
+                                                                   "med":  575.5,
+                                                                   "p90":  581,
+                                                                   "p95":  581,
+                                                                   "max":  581
                                                                },
-                                     "requestsPerSecond":  131.4823251597346,
+                                     "requestsPerSecond":  81.50497302592917,
+                                     "httpRequests":  50,
+                                     "iterations":  30
+                                 },
+                     "outcomes":  {
+                                      "accepted":  30,
+                                      "succeeded":  10,
+                                      "soldOut":  20,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  10,
+                                        "succeededRequests":  10,
+                                        "soldOutRequests":  20,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  10,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  10
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  100.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  100.0,
+                                                                           "TOTAL_TIME":  3.498032332,
+                                                                           "MAX":  0.111969456
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  30.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-30x10-3",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  10,
+                     "startedAt":  "2026-08-17T02:22:33.907Z",
+                     "finishedAt":  "2026-08-17T02:22:35.7643536Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "k6-contention-30x10-3.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  30,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  43.63070333333335,
+                                                               "min":  39.0233,
+                                                               "med":  44.9336,
+                                                               "p90":  45.83041000000001,
+                                                               "p95":  47.94804,
+                                                               "max":  48.9717
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  131.3,
+                                                                "min":  42,
+                                                                "med":  48,
+                                                                "p90":  302.1,
+                                                                "p95":  304.65,
+                                                                "max":  306
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  302.3,
+                                                                   "min":  300,
+                                                                   "med":  302,
+                                                                   "p90":  306,
+                                                                   "p95":  306,
+                                                                   "max":  306
+                                                               },
+                                     "requestsPerSecond":  119.90774298254922,
                                      "httpRequests":  40,
                                      "iterations":  30
                                  },
@@ -248,133 +366,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  60.0
+                                                                   "COUNT":  130.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  60.0,
-                                                                           "TOTAL_TIME":  0.903699305,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  130.0,
+                                                                           "TOTAL_TIME":  3.953525416,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  20.0
-                                                                 }
-                                  }
-                 },
-                 {
-                     "runId":  "contention-30x10-3",
-                     "kind":  "contention",
-                     "status":  "valid",
-                     "stock":  10,
-                     "startedAt":  "2026-08-16T12:17:28.818Z",
-                     "finishedAt":  "2026-08-16T12:17:30.8623694Z",
-                     "k6":  {
-                                "exitCode":  0,
-                                "checksFailed":  0,
-                                "summaryFile":  "k6-contention-30x10-3.json"
-                            },
-                     "errors":  [
-
-                                ],
-                     "vus":  30,
-                     "metrics":  {
-                                     "acceptedLatencyMs":  {
-                                                               "avg":  36.720106666666666,
-                                                               "min":  28.4553,
-                                                               "med":  37.0477,
-                                                               "p90":  44.7641,
-                                                               "p95":  44.77532,
-                                                               "max":  44.7845
-                                                           },
-                                     "completedLatencyMs":  {
-                                                                "avg":  195.43333333333334,
-                                                                "min":  39,
-                                                                "med":  47,
-                                                                "p90":  551,
-                                                                "p95":  551.55,
-                                                                "max":  552
-                                                            },
-                                     "orderCreatedLatencyMs":  {
-                                                                   "avg":  499.4,
-                                                                   "min":  291,
-                                                                   "med":  551,
-                                                                   "p90":  552,
-                                                                   "p95":  552,
-                                                                   "max":  552
-                                                               },
-                                     "requestsPerSecond":  84.02113971875323,
-                                     "httpRequests":  48,
-                                     "iterations":  30
-                                 },
-                     "outcomes":  {
-                                      "accepted":  30,
-                                      "succeeded":  10,
-                                      "soldOut":  20,
-                                      "rejected":  0,
-                                      "failed":  0,
-                                      "unexpected5xx":  0,
-                                      "pendingTimeout":  0,
-                                      "missingToken":  0
-                                  },
-                     "invariants":  {
-                                        "ordersCreated":  10,
-                                        "succeededRequests":  10,
-                                        "soldOutRequests":  20,
-                                        "rejectedRequests":  0,
-                                        "failedRequests":  0,
-                                        "residualPending":  0,
-                                        "duplicateOrderUsers":  0,
-                                        "duplicateSucceededUsers":  0,
-                                        "orderItems":  10,
-                                        "ordersWithoutItems":  0,
-                                        "unpublishedOutboxEvents":  0,
-                                        "inventory":  {
-                                                          "available":  0,
-                                                          "reserved":  0,
-                                                          "sold":  10
-                                                      }
-                                    },
-                     "queues":  [
-                                    {
-                                        "name":  "order.create.queue.dlq",
-                                        "messages":  0,
-                                        "messagesReady":  0,
-                                        "messagesUnacknowledged":  0
-                                    },
-                                    {
-                                        "name":  "stock.release.queue.dlq",
-                                        "messages":  0,
-                                        "messagesReady":  0,
-                                        "messagesUnacknowledged":  0
-                                    },
-                                    {
-                                        "name":  "order.create.queue",
-                                        "messages":  0,
-                                        "messagesReady":  0,
-                                        "messagesUnacknowledged":  0
-                                    },
-                                    {
-                                        "name":  "stock.release.queue",
-                                        "messages":  0,
-                                        "messagesReady":  0,
-                                        "messagesUnacknowledged":  0
-                                    }
-                                ],
-                     "health":  {
-                                    "readiness":  "UP",
-                                    "liveness":  "UP",
-                                    "overall":  "UP"
-                                },
-                     "actuator":  {
-                                      "purchase.reservation":  {
-                                                                   "COUNT":  90.0
-                                                               },
-                                      "purchase.reservation.latency":  {
-                                                                           "COUNT":  90.0,
-                                                                           "TOTAL_TIME":  1.02083559,
-                                                                           "MAX":  0.071612166
-                                                                       },
-                                      "purchase.order.created":  {
-                                                                     "COUNT":  30.0
+                                                                     "COUNT":  40.0
                                                                  }
                                   }
                  },
@@ -383,8 +383,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  10,
-                     "startedAt":  "2026-08-16T12:17:36.879Z",
-                     "finishedAt":  "2026-08-16T12:17:38.9383794Z",
+                     "startedAt":  "2026-08-17T02:22:41.368Z",
+                     "finishedAt":  "2026-08-17T02:22:43.5934272Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -396,30 +396,30 @@
                      "vus":  30,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  35.416936666666665,
-                                                               "min":  25.0022,
-                                                               "med":  35.9678,
-                                                               "p90":  44.95129,
-                                                               "p95":  44.9854,
-                                                               "max":  44.9854
+                                                               "avg":  53.97551333333332,
+                                                               "min":  45.4425,
+                                                               "med":  52.7894,
+                                                               "p90":  64.41247,
+                                                               "p95":  66.6532,
+                                                               "max":  68.3886
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  207.86666666666667,
-                                                                "min":  37,
-                                                                "med":  46,
-                                                                "p90":  541,
-                                                                "p95":  541,
-                                                                "max":  541
+                                                                "avg":  228.33333333333334,
+                                                                "min":  50,
+                                                                "med":  56,
+                                                                "p90":  579.1,
+                                                                "p95":  580,
+                                                                "max":  582
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  540.6,
-                                                                   "min":  540,
-                                                                   "med":  541,
-                                                                   "p90":  541,
-                                                                   "p95":  541,
-                                                                   "max":  541
+                                                                   "avg":  575,
+                                                                   "min":  570,
+                                                                   "med":  573,
+                                                                   "p90":  580.2,
+                                                                   "p95":  581.1,
+                                                                   "max":  582
                                                                },
-                                     "requestsPerSecond":  89.38983748391206,
+                                     "requestsPerSecond":  81.55880406084547,
                                      "httpRequests":  50,
                                      "iterations":  30
                                  },
@@ -484,15 +484,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  120.0
+                                                                   "COUNT":  160.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  120.0,
-                                                                           "TOTAL_TIME":  1.186608703,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  160.0,
+                                                                           "TOTAL_TIME":  4.613258975,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  40.0
+                                                                     "COUNT":  50.0
                                                                  }
                                   }
                  },
@@ -501,8 +501,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  10,
-                     "startedAt":  "2026-08-16T12:17:44.996Z",
-                     "finishedAt":  "2026-08-16T12:17:47.0155081Z",
+                     "startedAt":  "2026-08-17T02:22:49.107Z",
+                     "finishedAt":  "2026-08-17T02:22:50.9956387Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -514,31 +514,31 @@
                      "vus":  30,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  31.405703333333342,
-                                                               "min":  22.9883,
-                                                               "med":  31.247,
-                                                               "p90":  38.3798,
-                                                               "p95":  38.69847,
-                                                               "max":  38.9592
+                                                               "avg":  37.992216666666664,
+                                                               "min":  27.7528,
+                                                               "med":  41.8836,
+                                                               "p90":  42.467980000000004,
+                                                               "p95":  42.92666,
+                                                               "max":  42.9317
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  151.9,
-                                                                "min":  30,
-                                                                "med":  39,
-                                                                "p90":  537.1,
-                                                                "p95":  538.55,
-                                                                "max":  540
+                                                                "avg":  125.56666666666666,
+                                                                "min":  33,
+                                                                "med":  45,
+                                                                "p90":  288,
+                                                                "p95":  294.04999999999995,
+                                                                "max":  300
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  384,
-                                                                   "min":  279,
-                                                                   "med":  283.5,
-                                                                   "p90":  539.1,
-                                                                   "p95":  539.55,
-                                                                   "max":  540
+                                                                   "avg":  290,
+                                                                   "min":  287,
+                                                                   "med":  288,
+                                                                   "p90":  299.1,
+                                                                   "p95":  299.55,
+                                                                   "max":  300
                                                                },
-                                     "requestsPerSecond":  78.94259975922508,
-                                     "httpRequests":  44,
+                                     "requestsPerSecond":  121.31619580312687,
+                                     "httpRequests":  40,
                                      "iterations":  30
                                  },
                      "outcomes":  {
@@ -602,15 +602,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  150.0
+                                                                   "COUNT":  190.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  150.0,
-                                                                           "TOTAL_TIME":  1.262321394,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  190.0,
+                                                                           "TOTAL_TIME":  5.023898621,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  50.0
+                                                                     "COUNT":  60.0
                                                                  }
                                   }
                  },
@@ -619,8 +619,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  30,
-                     "startedAt":  "2026-08-16T12:17:55.312Z",
-                     "finishedAt":  "2026-08-16T12:17:57.8588708Z",
+                     "startedAt":  "2026-08-17T02:22:58.365Z",
+                     "finishedAt":  "2026-08-17T02:23:00.8903686Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -632,31 +632,31 @@
                      "vus":  100,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  66.357108,
-                                                               "min":  21.498,
-                                                               "med":  69.3303,
-                                                               "p90":  105.82641,
-                                                               "p95":  110.63891,
-                                                               "max":  117.6871
+                                                               "avg":  75.54544399999999,
+                                                               "min":  31.7626,
+                                                               "med":  74.45949999999999,
+                                                               "p90":  106.4245,
+                                                               "p95":  109.596505,
+                                                               "max":  120.5624
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  295.73,
-                                                                "min":  48,
-                                                                "med":  101,
-                                                                "p90":  811,
-                                                                "p95":  812,
-                                                                "max":  816
+                                                                "avg":  290.24,
+                                                                "min":  61,
+                                                                "med":  104.5,
+                                                                "p90":  822,
+                                                                "p95":  829,
+                                                                "max":  837
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  789.6333333333333,
-                                                                   "min":  540,
-                                                                   "med":  811,
-                                                                   "p90":  816,
-                                                                   "p95":  816,
-                                                                   "max":  816
+                                                                   "avg":  751.8,
+                                                                   "min":  548,
+                                                                   "med":  816.5,
+                                                                   "p90":  831,
+                                                                   "p95":  831,
+                                                                   "max":  837
                                                                },
-                                     "requestsPerSecond":  224.12025052829196,
-                                     "httpRequests":  188,
+                                     "requestsPerSecond":  209.61207254973277,
+                                     "httpRequests":  182,
                                      "iterations":  100
                                  },
                      "outcomes":  {
@@ -720,15 +720,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  250.0
+                                                                   "COUNT":  290.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  250.0,
-                                                                           "TOTAL_TIME":  1.554251329,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  290.0,
+                                                                           "TOTAL_TIME":  5.927406333,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  80.0
+                                                                     "COUNT":  90.0
                                                                  }
                                   }
                  },
@@ -737,8 +737,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  30,
-                     "startedAt":  "2026-08-16T12:18:08.250Z",
-                     "finishedAt":  "2026-08-16T12:18:10.3650249Z",
+                     "startedAt":  "2026-08-17T02:23:08.347Z",
+                     "finishedAt":  "2026-08-17T02:23:10.5215028Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -750,31 +750,31 @@
                      "vus":  100,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  51.771765999999985,
-                                                               "min":  14.9443,
-                                                               "med":  54.483999999999995,
-                                                               "p90":  79.08969,
-                                                               "p95":  80.681,
-                                                               "max":  84.3505
+                                                               "avg":  74.452527,
+                                                               "min":  27.8963,
+                                                               "med":  75.7909,
+                                                               "p90":  99.85130000000001,
+                                                               "p95":  104.077815,
+                                                               "max":  107.7497
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  197.2,
-                                                                "min":  42,
-                                                                "med":  74,
-                                                                "p90":  545,
-                                                                "p95":  549,
-                                                                "max":  551
+                                                                "avg":  156.14,
+                                                                "min":  64,
+                                                                "med":  97,
+                                                                "p90":  311.40000000000003,
+                                                                "p95":  321.05,
+                                                                "max":  581
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  508.1666666666667,
-                                                                   "min":  277,
-                                                                   "med":  544.5,
-                                                                   "p90":  550,
-                                                                   "p95":  550,
-                                                                   "max":  551
+                                                                   "avg":  315.46666666666664,
+                                                                   "min":  286,
+                                                                   "med":  308,
+                                                                   "p90":  324,
+                                                                   "p95":  325.65,
+                                                                   "max":  581
                                                                },
-                                     "requestsPerSecond":  273.1783991535672,
-                                     "httpRequests":  156,
+                                     "requestsPerSecond":  214.16290342119518,
+                                     "httpRequests":  131,
                                      "iterations":  100
                                  },
                      "outcomes":  {
@@ -838,15 +838,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  350.0
+                                                                   "COUNT":  390.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  350.0,
-                                                                           "TOTAL_TIME":  1.721460975,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  390.0,
+                                                                           "TOTAL_TIME":  6.676712511,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  110.0
+                                                                     "COUNT":  120.0
                                                                  }
                                   }
                  },
@@ -855,8 +855,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  30,
-                     "startedAt":  "2026-08-16T12:18:20.852Z",
-                     "finishedAt":  "2026-08-16T12:18:22.9835266Z",
+                     "startedAt":  "2026-08-17T02:23:18.195Z",
+                     "finishedAt":  "2026-08-17T02:23:20.6824731Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -868,31 +868,31 @@
                      "vus":  100,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  70.71596999999998,
-                                                               "min":  18.228,
-                                                               "med":  81.5275,
-                                                               "p90":  104.11326,
-                                                               "p95":  108.3748,
-                                                               "max":  112.9216
+                                                               "avg":  59.44182500000001,
+                                                               "min":  33.503,
+                                                               "med":  57.356350000000006,
+                                                               "p90":  77.11182,
+                                                               "p95":  80.063105,
+                                                               "max":  85.1622
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  225.77,
-                                                                "min":  47,
-                                                                "med":  100,
-                                                                "p90":  552.1,
-                                                                "p95":  556.05,
-                                                                "max":  561
+                                                                "avg":  241.84,
+                                                                "min":  61,
+                                                                "med":  83,
+                                                                "p90":  564,
+                                                                "p95":  821,
+                                                                "max":  834
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  547.0333333333333,
-                                                                   "min":  537,
-                                                                   "med":  548,
-                                                                   "p90":  557.2,
-                                                                   "p95":  559.55,
-                                                                   "max":  561
+                                                                   "avg":  620.9333333333333,
+                                                                   "min":  545,
+                                                                   "med":  562,
+                                                                   "p90":  821.1,
+                                                                   "p95":  823.1,
+                                                                   "max":  834
                                                                },
-                                     "requestsPerSecond":  276.36290525813246,
-                                     "httpRequests":  160,
+                                     "requestsPerSecond":  191.45562219179314,
+                                     "httpRequests":  167,
                                      "iterations":  100
                                  },
                      "outcomes":  {
@@ -956,15 +956,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  450.0
+                                                                   "COUNT":  490.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  450.0,
-                                                                           "TOTAL_TIME":  1.936798553,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  490.0,
+                                                                           "TOTAL_TIME":  7.294856245,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  140.0
+                                                                     "COUNT":  150.0
                                                                  }
                                   }
                  },
@@ -973,8 +973,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  30,
-                     "startedAt":  "2026-08-16T12:18:33.146Z",
-                     "finishedAt":  "2026-08-16T12:18:35.1553808Z",
+                     "startedAt":  "2026-08-17T02:23:28.183Z",
+                     "finishedAt":  "2026-08-17T02:23:30.1834064Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -986,148 +986,30 @@
                      "vus":  100,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  50.151023000000016,
-                                                               "min":  15.6631,
-                                                               "med":  51.87865,
-                                                               "p90":  75.48675000000001,
-                                                               "p95":  80.93419,
-                                                               "max":  85.8717
+                                                               "avg":  79.12243399999998,
+                                                               "min":  33.4125,
+                                                               "med":  81.318,
+                                                               "p90":  108.54039,
+                                                               "p95":  111.80432499999999,
+                                                               "max":  118.0552
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  174.8,
-                                                                "min":  39,
-                                                                "med":  71.5,
-                                                                "p90":  544,
-                                                                "p95":  545,
-                                                                "max":  547
+                                                                "avg":  159.56,
+                                                                "min":  56,
+                                                                "med":  108,
+                                                                "p90":  313,
+                                                                "p95":  317,
+                                                                "max":  323
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  435.73333333333335,
-                                                                   "min":  273,
-                                                                   "med":  535.5,
-                                                                   "p90":  546.1,
-                                                                   "p95":  547,
-                                                                   "max":  547
+                                                                   "avg":  306.56666666666666,
+                                                                   "min":  292,
+                                                                   "med":  309,
+                                                                   "p90":  319.1,
+                                                                   "p95":  321.1,
+                                                                   "max":  323
                                                                },
-                                     "requestsPerSecond":  261.7055776885385,
-                                     "httpRequests":  148,
-                                     "iterations":  100
-                                 },
-                     "outcomes":  {
-                                      "accepted":  100,
-                                      "succeeded":  30,
-                                      "soldOut":  70,
-                                      "rejected":  0,
-                                      "failed":  0,
-                                      "unexpected5xx":  0,
-                                      "pendingTimeout":  0,
-                                      "missingToken":  0
-                                  },
-                     "invariants":  {
-                                        "ordersCreated":  30,
-                                        "succeededRequests":  30,
-                                        "soldOutRequests":  70,
-                                        "rejectedRequests":  0,
-                                        "failedRequests":  0,
-                                        "residualPending":  0,
-                                        "duplicateOrderUsers":  0,
-                                        "duplicateSucceededUsers":  0,
-                                        "orderItems":  30,
-                                        "ordersWithoutItems":  0,
-                                        "unpublishedOutboxEvents":  0,
-                                        "inventory":  {
-                                                          "available":  0,
-                                                          "reserved":  0,
-                                                          "sold":  30
-                                                      }
-                                    },
-                     "queues":  [
-                                    {
-                                        "name":  "order.create.queue.dlq",
-                                        "messages":  0,
-                                        "messagesReady":  0,
-                                        "messagesUnacknowledged":  0
-                                    },
-                                    {
-                                        "name":  "stock.release.queue.dlq",
-                                        "messages":  0,
-                                        "messagesReady":  0,
-                                        "messagesUnacknowledged":  0
-                                    },
-                                    {
-                                        "name":  "order.create.queue",
-                                        "messages":  0,
-                                        "messagesReady":  0,
-                                        "messagesUnacknowledged":  0
-                                    },
-                                    {
-                                        "name":  "stock.release.queue",
-                                        "messages":  0,
-                                        "messagesReady":  0,
-                                        "messagesUnacknowledged":  0
-                                    }
-                                ],
-                     "health":  {
-                                    "readiness":  "UP",
-                                    "liveness":  "UP",
-                                    "overall":  "UP"
-                                },
-                     "actuator":  {
-                                      "purchase.reservation":  {
-                                                                   "COUNT":  550.0
-                                                               },
-                                      "purchase.reservation.latency":  {
-                                                                           "COUNT":  550.0,
-                                                                           "TOTAL_TIME":  2.077269473,
-                                                                           "MAX":  0.071612166
-                                                                       },
-                                      "purchase.order.created":  {
-                                                                     "COUNT":  170.0
-                                                                 }
-                                  }
-                 },
-                 {
-                     "runId":  "contention-100x30-5",
-                     "kind":  "contention",
-                     "status":  "valid",
-                     "stock":  30,
-                     "startedAt":  "2026-08-16T12:18:44.837Z",
-                     "finishedAt":  "2026-08-16T12:18:46.9530297Z",
-                     "k6":  {
-                                "exitCode":  0,
-                                "checksFailed":  0,
-                                "summaryFile":  "k6-contention-100x30-5.json"
-                            },
-                     "errors":  [
-
-                                ],
-                     "vus":  100,
-                     "metrics":  {
-                                     "acceptedLatencyMs":  {
-                                                               "avg":  41.992605,
-                                                               "min":  15.5828,
-                                                               "med":  43.07645,
-                                                               "p90":  61.68621,
-                                                               "p95":  63.069344999999984,
-                                                               "max":  71.4331
-                                                           },
-                                     "completedLatencyMs":  {
-                                                                "avg":  120.48,
-                                                                "min":  30,
-                                                                "med":  57.5,
-                                                                "p90":  282,
-                                                                "p95":  286,
-                                                                "max":  301
-                                                            },
-                                     "orderCreatedLatencyMs":  {
-                                                                   "avg":  282.1333333333333,
-                                                                   "min":  275,
-                                                                   "med":  281,
-                                                                   "p90":  286.90000000000003,
-                                                                   "p95":  296.65,
-                                                                   "max":  301
-                                                               },
-                                     "requestsPerSecond":  407.27276372791175,
+                                     "requestsPerSecond":  353.73466254121354,
                                      "httpRequests":  130,
                                      "iterations":  100
                                  },
@@ -1192,15 +1074,133 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  650.0
+                                                                   "COUNT":  590.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  650.0,
-                                                                           "TOTAL_TIME":  2.210184828,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  590.0,
+                                                                           "TOTAL_TIME":  8.530184635,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  200.0
+                                                                     "COUNT":  180.0
+                                                                 }
+                                  }
+                 },
+                 {
+                     "runId":  "contention-100x30-5",
+                     "kind":  "contention",
+                     "status":  "valid",
+                     "stock":  30,
+                     "startedAt":  "2026-08-17T02:23:37.792Z",
+                     "finishedAt":  "2026-08-17T02:23:40.0767880Z",
+                     "k6":  {
+                                "exitCode":  0,
+                                "checksFailed":  0,
+                                "summaryFile":  "k6-contention-100x30-5.json"
+                            },
+                     "errors":  [
+
+                                ],
+                     "vus":  100,
+                     "metrics":  {
+                                     "acceptedLatencyMs":  {
+                                                               "avg":  62.90371299999999,
+                                                               "min":  33.1434,
+                                                               "med":  64.13895,
+                                                               "p90":  81.51886,
+                                                               "p95":  83.3362,
+                                                               "max":  85.9272
+                                                           },
+                                     "completedLatencyMs":  {
+                                                                "avg":  194.87,
+                                                                "min":  55,
+                                                                "med":  80,
+                                                                "p90":  553,
+                                                                "p95":  557,
+                                                                "max":  569
+                                                            },
+                                     "orderCreatedLatencyMs":  {
+                                                                   "avg":  477.43333333333334,
+                                                                   "min":  290,
+                                                                   "med":  552.5,
+                                                                   "p90":  557.6,
+                                                                   "p95":  564.1,
+                                                                   "max":  569
+                                                               },
+                                     "requestsPerSecond":  251.8845047825528,
+                                     "httpRequests":  151,
+                                     "iterations":  100
+                                 },
+                     "outcomes":  {
+                                      "accepted":  100,
+                                      "succeeded":  30,
+                                      "soldOut":  70,
+                                      "rejected":  0,
+                                      "failed":  0,
+                                      "unexpected5xx":  0,
+                                      "pendingTimeout":  0,
+                                      "missingToken":  0
+                                  },
+                     "invariants":  {
+                                        "ordersCreated":  30,
+                                        "succeededRequests":  30,
+                                        "soldOutRequests":  70,
+                                        "rejectedRequests":  0,
+                                        "failedRequests":  0,
+                                        "residualPending":  0,
+                                        "duplicateOrderUsers":  0,
+                                        "duplicateSucceededUsers":  0,
+                                        "orderItems":  30,
+                                        "ordersWithoutItems":  0,
+                                        "unpublishedOutboxEvents":  0,
+                                        "inventory":  {
+                                                          "available":  0,
+                                                          "reserved":  0,
+                                                          "sold":  30
+                                                      }
+                                    },
+                     "queues":  [
+                                    {
+                                        "name":  "order.create.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue.dlq",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "order.create.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    },
+                                    {
+                                        "name":  "stock.release.queue",
+                                        "messages":  0,
+                                        "messagesReady":  0,
+                                        "messagesUnacknowledged":  0
+                                    }
+                                ],
+                     "health":  {
+                                    "readiness":  "UP",
+                                    "liveness":  "UP",
+                                    "overall":  "UP"
+                                },
+                     "actuator":  {
+                                      "purchase.reservation":  {
+                                                                   "COUNT":  690.0
+                                                               },
+                                      "purchase.reservation.latency":  {
+                                                                           "COUNT":  690.0,
+                                                                           "TOTAL_TIME":  9.193051789,
+                                                                           "MAX":  0.111969456
+                                                                       },
+                                      "purchase.order.created":  {
+                                                                     "COUNT":  210.0
                                                                  }
                                   }
                  },
@@ -1209,8 +1209,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  100,
-                     "startedAt":  "2026-08-16T12:19:03.293Z",
-                     "finishedAt":  "2026-08-16T12:19:06.8884877Z",
+                     "startedAt":  "2026-08-17T02:23:53.184Z",
+                     "finishedAt":  "2026-08-17T02:23:56.2477687Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -1222,39 +1222,39 @@
                      "vus":  300,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  74.00040300000003,
-                                                               "min":  0,
-                                                               "med":  66.48949999999999,
-                                                               "p90":  165.01582000000002,
-                                                               "p95":  175.79719500000002,
-                                                               "max":  190.4197
+                                                               "avg":  123.70992333333328,
+                                                               "min":  39.9627,
+                                                               "med":  118.92885,
+                                                               "p90":  180.20951000000002,
+                                                               "p95":  188.14846000000003,
+                                                               "max":  240.4059
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  552.9190476190477,
-                                                                "min":  101,
-                                                                "med":  185.5,
-                                                                "p90":  1363.1,
-                                                                "p95":  1373,
-                                                                "max":  1635
+                                                                "avg":  428.75,
+                                                                "min":  93,
+                                                                "med":  201.5,
+                                                                "p90":  1130.1,
+                                                                "p95":  1145,
+                                                                "max":  1164
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  998.15,
-                                                                   "min":  533,
-                                                                   "med":  956.5,
-                                                                   "p90":  1373.4,
-                                                                   "p95":  1395.3499999999992,
-                                                                   "max":  1635
+                                                                   "avg":  942.91,
+                                                                   "min":  555,
+                                                                   "med":  870.5,
+                                                                   "p90":  1148.1,
+                                                                   "p95":  1154.05,
+                                                                   "max":  1164
                                                                },
-                                     "requestsPerSecond":  400.22600149345595,
-                                     "httpRequests":  666,
+                                     "requestsPerSecond":  522.7776799407806,
+                                     "httpRequests":  632,
                                      "iterations":  300
                                  },
                      "outcomes":  {
-                                      "accepted":  210,
+                                      "accepted":  300,
                                       "succeeded":  100,
-                                      "soldOut":  110,
+                                      "soldOut":  200,
                                       "rejected":  0,
-                                      "failed":  90,
+                                      "failed":  0,
                                       "unexpected5xx":  0,
                                       "pendingTimeout":  0,
                                       "missingToken":  0
@@ -1262,7 +1262,7 @@
                      "invariants":  {
                                         "ordersCreated":  100,
                                         "succeededRequests":  100,
-                                        "soldOutRequests":  110,
+                                        "soldOutRequests":  200,
                                         "rejectedRequests":  0,
                                         "failedRequests":  0,
                                         "residualPending":  0,
@@ -1310,15 +1310,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  860.0
+                                                                   "COUNT":  990.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  860.0,
-                                                                           "TOTAL_TIME":  2.61616807,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  990.0,
+                                                                           "TOTAL_TIME":  11.651434049,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  300.0
+                                                                     "COUNT":  310.0
                                                                  }
                                   }
                  },
@@ -1327,8 +1327,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  100,
-                     "startedAt":  "2026-08-16T12:19:23.946Z",
-                     "finishedAt":  "2026-08-16T12:19:26.5845399Z",
+                     "startedAt":  "2026-08-17T02:24:09.854Z",
+                     "finishedAt":  "2026-08-17T02:24:12.4329033Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -1340,39 +1340,39 @@
                      "vus":  300,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  61.87631666666668,
-                                                               "min":  0,
-                                                               "med":  61.18795,
-                                                               "p90":  129.61937000000003,
-                                                               "p95":  137.49454500000002,
-                                                               "max":  151.9467
+                                                               "avg":  122.32756600000006,
+                                                               "min":  33.9344,
+                                                               "med":  124.32,
+                                                               "p90":  173.17766,
+                                                               "p95":  183.86904,
+                                                               "max":  229.7217
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  377.3,
-                                                                "min":  90,
-                                                                "med":  149,
-                                                                "p90":  1098,
-                                                                "p95":  1101.55,
-                                                                "max":  1107
+                                                                "avg":  340.93333333333334,
+                                                                "min":  102,
+                                                                "med":  197.5,
+                                                                "p90":  636,
+                                                                "p95":  867.05,
+                                                                "max":  912
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  660.9,
-                                                                   "min":  280,
-                                                                   "med":  691.5,
-                                                                   "p90":  1102,
-                                                                   "p95":  1103,
-                                                                   "max":  1107
+                                                                   "avg":  674.01,
+                                                                   "min":  551,
+                                                                   "med":  621,
+                                                                   "p90":  874.8000000000001,
+                                                                   "p95":  897.2,
+                                                                   "max":  912
                                                                },
-                                     "requestsPerSecond":  474.06125718926694,
-                                     "httpRequests":  537,
+                                     "requestsPerSecond":  540.8570829802026,
+                                     "httpRequests":  527,
                                      "iterations":  300
                                  },
                      "outcomes":  {
-                                      "accepted":  210,
+                                      "accepted":  300,
                                       "succeeded":  100,
-                                      "soldOut":  110,
+                                      "soldOut":  200,
                                       "rejected":  0,
-                                      "failed":  90,
+                                      "failed":  0,
                                       "unexpected5xx":  0,
                                       "pendingTimeout":  0,
                                       "missingToken":  0
@@ -1380,7 +1380,7 @@
                      "invariants":  {
                                         "ordersCreated":  100,
                                         "succeededRequests":  100,
-                                        "soldOutRequests":  110,
+                                        "soldOutRequests":  200,
                                         "rejectedRequests":  0,
                                         "failedRequests":  0,
                                         "residualPending":  0,
@@ -1428,15 +1428,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  1070.0
+                                                                   "COUNT":  1290.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  1070.0,
-                                                                           "TOTAL_TIME":  2.982498599,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  1290.0,
+                                                                           "TOTAL_TIME":  13.938874016,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  400.0
+                                                                     "COUNT":  410.0
                                                                  }
                                   }
                  },
@@ -1445,8 +1445,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  100,
-                     "startedAt":  "2026-08-16T12:19:43.032Z",
-                     "finishedAt":  "2026-08-16T12:19:45.8981134Z",
+                     "startedAt":  "2026-08-17T02:24:25.719Z",
+                     "finishedAt":  "2026-08-17T02:24:28.3311726Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -1458,39 +1458,39 @@
                      "vus":  300,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  56.769122666666604,
-                                                               "min":  0,
-                                                               "med":  56.99625,
-                                                               "p90":  127.4119,
-                                                               "p95":  136.73564,
-                                                               "max":  147.6802
+                                                               "avg":  143.8557866666667,
+                                                               "min":  43.8084,
+                                                               "med":  143.8688,
+                                                               "p90":  207.38594,
+                                                               "p95":  215.207675,
+                                                               "max":  231.8805
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  445.49528301886795,
-                                                                "min":  84,
-                                                                "med":  147,
-                                                                "p90":  1088,
-                                                                "p95":  1091.9,
-                                                                "max":  1099
+                                                                "avg":  407.9166666666667,
+                                                                "min":  137,
+                                                                "med":  234,
+                                                                "p90":  922.1,
+                                                                "p95":  929.05,
+                                                                "max":  968
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  815.6,
-                                                                   "min":  536,
-                                                                   "med":  811,
-                                                                   "p90":  1093,
-                                                                   "p95":  1094,
-                                                                   "max":  1099
+                                                                   "avg":  795.92,
+                                                                   "min":  343,
+                                                                   "med":  907,
+                                                                   "p90":  932.1,
+                                                                   "p95":  952,
+                                                                   "max":  968
                                                                },
-                                     "requestsPerSecond":  534.4266515008259,
-                                     "httpRequests":  600,
+                                     "requestsPerSecond":  540.912676724799,
+                                     "httpRequests":  558,
                                      "iterations":  300
                                  },
                      "outcomes":  {
-                                      "accepted":  212,
+                                      "accepted":  300,
                                       "succeeded":  100,
-                                      "soldOut":  112,
+                                      "soldOut":  200,
                                       "rejected":  0,
-                                      "failed":  88,
+                                      "failed":  0,
                                       "unexpected5xx":  0,
                                       "pendingTimeout":  0,
                                       "missingToken":  0
@@ -1498,7 +1498,7 @@
                      "invariants":  {
                                         "ordersCreated":  100,
                                         "succeededRequests":  100,
-                                        "soldOutRequests":  112,
+                                        "soldOutRequests":  200,
                                         "rejectedRequests":  0,
                                         "failedRequests":  0,
                                         "residualPending":  0,
@@ -1546,15 +1546,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  1282.0
+                                                                   "COUNT":  1590.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  1282.0,
-                                                                           "TOTAL_TIME":  3.298353994,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  1590.0,
+                                                                           "TOTAL_TIME":  17.190660046,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  500.0
+                                                                     "COUNT":  510.0
                                                                  }
                                   }
                  },
@@ -1563,8 +1563,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  100,
-                     "startedAt":  "2026-08-16T12:20:03.677Z",
-                     "finishedAt":  "2026-08-16T12:20:06.5346688Z",
+                     "startedAt":  "2026-08-17T02:24:41.925Z",
+                     "finishedAt":  "2026-08-17T02:24:44.8222908Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -1576,39 +1576,39 @@
                      "vus":  300,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  81.55464800000001,
-                                                               "min":  0,
-                                                               "med":  82.826,
-                                                               "p90":  170.55377000000004,
-                                                               "p95":  181.1309,
-                                                               "max":  205.8336
+                                                               "avg":  125.22071100000001,
+                                                               "min":  31.9893,
+                                                               "med":  131.6452,
+                                                               "p90":  183.0532,
+                                                               "p95":  188.00203000000005,
+                                                               "max":  232.8259
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  513.9205607476636,
-                                                                "min":  120,
-                                                                "med":  198,
-                                                                "p90":  1117.7,
-                                                                "p95":  1124.7,
-                                                                "max":  1389
+                                                                "avg":  370.1566666666667,
+                                                                "min":  105,
+                                                                "med":  185.5,
+                                                                "p90":  1114.1,
+                                                                "p95":  1126,
+                                                                "max":  1143
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  919.26,
-                                                                   "min":  539,
-                                                                   "med":  959.5,
-                                                                   "p90":  1126.4,
-                                                                   "p95":  1384,
-                                                                   "max":  1389
+                                                                   "avg":  781.02,
+                                                                   "min":  289,
+                                                                   "med":  586,
+                                                                   "p90":  1130.1,
+                                                                   "p95":  1135.15,
+                                                                   "max":  1143
                                                                },
-                                     "requestsPerSecond":  440.7213124889559,
-                                     "httpRequests":  633,
+                                     "requestsPerSecond":  479.6567256699955,
+                                     "httpRequests":  576,
                                      "iterations":  300
                                  },
                      "outcomes":  {
-                                      "accepted":  214,
+                                      "accepted":  300,
                                       "succeeded":  100,
-                                      "soldOut":  114,
+                                      "soldOut":  200,
                                       "rejected":  0,
-                                      "failed":  86,
+                                      "failed":  0,
                                       "unexpected5xx":  0,
                                       "pendingTimeout":  0,
                                       "missingToken":  0
@@ -1616,7 +1616,7 @@
                      "invariants":  {
                                         "ordersCreated":  100,
                                         "succeededRequests":  100,
-                                        "soldOutRequests":  114,
+                                        "soldOutRequests":  200,
                                         "rejectedRequests":  0,
                                         "failedRequests":  0,
                                         "residualPending":  0,
@@ -1664,15 +1664,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  1496.0
+                                                                   "COUNT":  1890.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  1496.0,
-                                                                           "TOTAL_TIME":  3.699115808,
-                                                                           "MAX":  0.071612166
+                                                                           "COUNT":  1890.0,
+                                                                           "TOTAL_TIME":  19.122507655,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  600.0
+                                                                     "COUNT":  610.0
                                                                  }
                                   }
                  },
@@ -1681,8 +1681,8 @@
                      "kind":  "contention",
                      "status":  "valid",
                      "stock":  100,
-                     "startedAt":  "2026-08-16T12:20:22.890Z",
-                     "finishedAt":  "2026-08-16T12:20:26.0913051Z",
+                     "startedAt":  "2026-08-17T02:24:58.167Z",
+                     "finishedAt":  "2026-08-17T02:25:00.9665019Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -1694,39 +1694,39 @@
                      "vus":  300,
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  58.35464300000001,
-                                                               "min":  0,
-                                                               "med":  55.4166,
-                                                               "p90":  122.36037000000006,
-                                                               "p95":  129.9647,
-                                                               "max":  141.9705
+                                                               "avg":  187.92532566666665,
+                                                               "min":  37.041,
+                                                               "med":  210.7594,
+                                                               "p90":  253.19482,
+                                                               "p95":  275.65737000000007,
+                                                               "max":  332.283
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  542.933962264151,
-                                                                "min":  89,
-                                                                "med":  139,
-                                                                "p90":  1337,
-                                                                "p95":  1348,
-                                                                "max":  1358
+                                                                "avg":  434.86,
+                                                                "min":  159,
+                                                                "med":  268.5,
+                                                                "p90":  909.7000000000006,
+                                                                "p95":  954,
+                                                                "max":  974
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  1023.85,
-                                                                   "min":  539,
-                                                                   "med":  1062.5,
-                                                                   "p90":  1348,
-                                                                   "p95":  1351,
-                                                                   "max":  1358
+                                                                   "avg":  805.34,
+                                                                   "min":  552,
+                                                                   "med":  868,
+                                                                   "p90":  956.1,
+                                                                   "p95":  961,
+                                                                   "max":  974
                                                                },
-                                     "requestsPerSecond":  492.5792183496216,
-                                     "httpRequests":  683,
+                                     "requestsPerSecond":  557.5877731996027,
+                                     "httpRequests":  568,
                                      "iterations":  300
                                  },
                      "outcomes":  {
-                                      "accepted":  212,
+                                      "accepted":  300,
                                       "succeeded":  100,
-                                      "soldOut":  112,
+                                      "soldOut":  200,
                                       "rejected":  0,
-                                      "failed":  88,
+                                      "failed":  0,
                                       "unexpected5xx":  0,
                                       "pendingTimeout":  0,
                                       "missingToken":  0
@@ -1734,7 +1734,7 @@
                      "invariants":  {
                                         "ordersCreated":  100,
                                         "succeededRequests":  100,
-                                        "soldOutRequests":  112,
+                                        "soldOutRequests":  200,
                                         "rejectedRequests":  0,
                                         "failedRequests":  0,
                                         "residualPending":  0,
@@ -1782,15 +1782,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  1708.0
+                                                                   "COUNT":  2190.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  1708.0,
-                                                                           "TOTAL_TIME":  3.986467264,
-                                                                           "MAX":  0.021382823
+                                                                           "COUNT":  2190.0,
+                                                                           "TOTAL_TIME":  21.943278982,
+                                                                           "MAX":  0.111969456
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  700.0
+                                                                     "COUNT":  710.0
                                                                  }
                                   }
                  },
@@ -1799,8 +1799,8 @@
                      "kind":  "soak",
                      "status":  "valid",
                      "stock":  6000,
-                     "startedAt":  "2026-08-16T12:23:52.335Z",
-                     "finishedAt":  "2026-08-16T12:33:54.2522623Z",
+                     "startedAt":  "2026-08-17T02:28:09.444Z",
+                     "finishedAt":  "2026-08-17T02:38:11.7129058Z",
                      "k6":  {
                                 "exitCode":  0,
                                 "checksFailed":  0,
@@ -1820,31 +1820,31 @@
                                   },
                      "metrics":  {
                                      "acceptedLatencyMs":  {
-                                                               "avg":  8.108091749999986,
-                                                               "min":  0.531,
-                                                               "med":  7.59715,
-                                                               "p90":  11.77078,
-                                                               "p95":  12.55851,
-                                                               "max":  34.9809
+                                                               "avg":  9.816030316666648,
+                                                               "min":  6.2646,
+                                                               "med":  9.4848,
+                                                               "p90":  11.315660000000001,
+                                                               "p95":  12.272195000000002,
+                                                               "max":  129.969
                                                            },
                                      "completedLatencyMs":  {
-                                                                "avg":  405.2475,
-                                                                "min":  254,
-                                                                "med":  511,
-                                                                "p90":  520,
-                                                                "p95":  523,
-                                                                "max":  784
+                                                                "avg":  432.69483333333335,
+                                                                "min":  259,
+                                                                "med":  515,
+                                                                "p90":  521,
+                                                                "p95":  769,
+                                                                "max":  882
                                                             },
                                      "orderCreatedLatencyMs":  {
-                                                                   "avg":  405.2475,
-                                                                   "min":  254,
-                                                                   "med":  511,
-                                                                   "p90":  520,
-                                                                   "p95":  523,
-                                                                   "max":  784
+                                                                   "avg":  432.69483333333335,
+                                                                   "min":  259,
+                                                                   "med":  515,
+                                                                   "p90":  521,
+                                                                   "p95":  769,
+                                                                   "max":  882
                                                                },
-                                     "requestsPerSecond":  25.59536525354544,
-                                     "httpRequests":  15369,
+                                     "requestsPerSecond":  26.64741749010326,
+                                     "httpRequests":  16003,
                                      "iterations":  6001
                                  },
                      "outcomes":  {
@@ -1908,15 +1908,15 @@
                                 },
                      "actuator":  {
                                       "purchase.reservation":  {
-                                                                   "COUNT":  7708.0
+                                                                   "COUNT":  8190.0
                                                                },
                                       "purchase.reservation.latency":  {
-                                                                           "COUNT":  7708.0,
-                                                                           "TOTAL_TIME":  9.226234745,
-                                                                           "MAX":  0.002674274
+                                                                           "COUNT":  8190.0,
+                                                                           "TOTAL_TIME":  27.215505118,
+                                                                           "MAX":  0.002269797
                                                                        },
                                       "purchase.order.created":  {
-                                                                     "COUNT":  6700.0
+                                                                     "COUNT":  6710.0
                                                                  }
                                   }
                  }
