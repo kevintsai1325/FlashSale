@@ -51,6 +51,13 @@ function Assert-RancherDesktopContext {
     }
 }
 
+function Assert-KubernetesApiReachable {
+    & kubectl get --raw=/readyz --request-timeout=5s | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to reach the Kubernetes API for the rancher-desktop context. No resources were changed.'
+    }
+}
+
 function Invoke-KubectlYaml {
     param(
         [string[]]$Arguments,
@@ -92,6 +99,7 @@ Get-RequiredFileContent -Path $certificateKeyPath -Description 'Nginx TLS privat
 
 Assert-CommandAvailable -Name 'kubectl'
 Assert-RancherDesktopContext
+Assert-KubernetesApiReachable
 
 $namespaceYaml = Invoke-KubectlYaml -Arguments @('create', 'namespace', 'flashsale', '--dry-run=client', '-o', 'yaml') -Operation 'rendering the namespace'
 Apply-KubectlYaml -Yaml $namespaceYaml -Operation 'applying the namespace'
