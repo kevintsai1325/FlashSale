@@ -3,11 +3,14 @@ $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $buildScript = Join-Path $repo 'scripts\k8s\build-local.ps1'
 $deployScript = Join-Path $repo 'scripts\k8s\deploy.ps1'
+$verifyScript = Join-Path $repo 'scripts\k8s\verify.ps1'
 $powershell51 = (Get-Command powershell.exe -ErrorAction Stop).Source
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('flashsale-k8s-script-test-' + [Guid]::NewGuid().ToString('N'))
 $shimRoot = Join-Path $testRoot 'bin'
+$verifyShimRoot = Join-Path $testRoot 'verify-bin'
 $kubectlLog = Join-Path $testRoot 'kubectl.log'
 $nerdctlLog = Join-Path $testRoot 'nerdctl.log'
+$httpLog = Join-Path $testRoot 'http.log'
 $privateKeyPath = Join-Path $testRoot 'jwt-private.pem'
 $publicKeyPath = Join-Path $testRoot 'jwt-public.pem'
 $certificatePath = Join-Path $repo 'nginx\certs\localhost.crt'
@@ -67,12 +70,62 @@ function Invoke-LocalScript {
     }
 }
 
+function Invoke-VerificationScript {
+    param([hashtable]$Environment = @{})
+
+    $savedValues = @{}
+    foreach ($name in $Environment.Keys) {
+        $savedValues[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+        [Environment]::SetEnvironmentVariable($name, $Environment[$name], 'Process')
+    }
+
+    $httpRequest = {
+        param([string]$Uri)
+
+        [IO.File]::AppendAllText($env:FL_K3S_TEST_HTTP_LOG, ($Uri + [Environment]::NewLine))
+        if ($env:FL_K3S_TEST_HTTP_MODE -eq 'unhealthy' -and $Uri -like '*readiness') {
+            return [pscustomobject]@{ StatusCode = 200; Content = '{"status":"DOWN"}' }
+        }
+        if ($env:FL_K3S_TEST_HTTP_MODE -eq 'readiness-error' -and $Uri -like '*readiness') {
+            return [pscustomobject]@{ StatusCode = 503; Content = '{"status":"UP"}' }
+        }
+        if ($env:FL_K3S_TEST_HTTP_MODE -eq 'frontend-error' -and $Uri -eq 'https://localhost:8443/') {
+            return [pscustomobject]@{ StatusCode = 503; Content = '' }
+        }
+        if ($Uri -like '*readiness') {
+            return [pscustomobject]@{ StatusCode = 200; Content = '{"status":"UP"}' }
+        }
+
+        return [pscustomobject]@{ StatusCode = 200; Content = '<html />' }
+    }
+
+    try {
+        try {
+            $verifyKubectl = Join-Path $verifyShimRoot 'kubectl.cmd'
+            $output = & $verifyScript -HttpRequest $httpRequest -KubectlCommand $verifyKubectl 2>&1 | Out-String
+            $exitCode = 0
+        }
+        catch {
+            $output = ($_ | Out-String)
+            $exitCode = 1
+        }
+
+        return @{ ExitCode = $exitCode; Output = $output }
+    }
+    finally {
+        foreach ($name in $Environment.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $savedValues[$name], 'Process')
+        }
+    }
+}
+
 function Set-ShimMode {
     param([string]$Mode)
 
     [Environment]::SetEnvironmentVariable('FL_K3S_TEST_KUBECTL_MODE', $Mode, 'Process')
     [IO.File]::WriteAllText($kubectlLog, '')
     [IO.File]::WriteAllText($nerdctlLog, '')
+    [IO.File]::WriteAllText($httpLog, '')
 }
 
 function Assert-NoMutations {
@@ -83,6 +136,7 @@ function Assert-NoMutations {
 
 function New-TestShims {
     New-Item -ItemType Directory -Force -Path $shimRoot | Out-Null
+    New-Item -ItemType Directory -Force -Path $verifyShimRoot | Out-Null
 
     $kubectlShim = @'
 $Arguments = @($env:FL_K3S_TEST_SHIM_ARGS -split ' ' | Where-Object { $_ -ne '' })
@@ -116,6 +170,34 @@ if (($Arguments.Count -ge 2) -and ($Arguments[0] -eq 'get') -and ($Arguments -co
     }
 
     Write-Output 'ok'
+    exit 0
+}
+
+if (($Arguments.Count -eq 6) -and ($Arguments[0] -eq '-n') -and ($Arguments[1] -eq 'flashsale') -and ($Arguments[2] -eq 'rollout') -and ($Arguments[3] -eq 'status')) {
+    Write-Output 'successfully rolled out'
+    exit 0
+}
+
+if (($Arguments -join ' ') -eq '-n flashsale get deployment backend -o jsonpath={.status.readyReplicas}') {
+    if ($env:FL_K3S_TEST_KUBECTL_MODE -eq 'backend-not-ready') { Write-Output '0' } else { Write-Output '1' }
+    exit 0
+}
+
+if (($Arguments.Count -ge 4) -and ($Arguments[0] -eq '-n') -and ($Arguments[1] -eq 'flashsale') -and ($Arguments[2] -eq 'get') -and ($Arguments[3] -eq 'pods')) {
+    if ($env:FL_K3S_TEST_KUBECTL_MODE -eq 'restart') { Write-Output '1' } else { Write-Output '0' }
+    exit 0
+}
+
+if (($Arguments -join ' ') -eq '-n flashsale get pvc --no-headers') {
+    if ($env:FL_K3S_TEST_KUBECTL_MODE -eq 'wrong-pvc-count') {
+        Write-Output 'pvc-one Bound'
+        Write-Output 'pvc-two Bound'
+    }
+    else {
+        Write-Output 'pvc-one Bound'
+        Write-Output 'pvc-two Bound'
+        Write-Output 'pvc-three Bound'
+    }
     exit 0
 }
 
@@ -154,11 +236,43 @@ exit 1
     [IO.File]::WriteAllText((Join-Path $shimRoot 'nerdctl-shim.ps1'), $nerdctlShim)
     [IO.File]::WriteAllText((Join-Path $shimRoot 'kubectl.cmd'), ($commandShim -f 'kubectl-shim'))
     [IO.File]::WriteAllText((Join-Path $shimRoot 'nerdctl.cmd'), ($commandShim -f 'nerdctl-shim'))
+
+    $verifyKubectlShim = @'
+@echo off
+echo %*>> "%FL_K3S_TEST_KUBECTL_LOG%"
+if "%1 %2"=="config current-context" (
+  if "%FL_K3S_TEST_KUBECTL_MODE%"=="wrong-context" (echo old-cluster) else (echo rancher-desktop)
+  exit /b 0
+)
+if "%1 %2 %3 %4"=="-n flashsale rollout status" (
+  echo successfully rolled out
+  exit /b 0
+)
+if "%1 %2 %3 %4"=="-n flashsale get deployment" (
+  if "%FL_K3S_TEST_KUBECTL_MODE%"=="backend-not-ready" (echo 0) else (echo 1)
+  exit /b 0
+)
+if "%1 %2 %3 %4"=="-n flashsale get pods" (
+  if "%FL_K3S_TEST_KUBECTL_MODE%"=="restart" (echo 1) else (echo 0)
+  exit /b 0
+)
+if "%1 %2 %3 %4"=="-n flashsale get pvc" (
+  echo pvc-one Bound
+  echo pvc-two Bound
+  if not "%FL_K3S_TEST_KUBECTL_MODE%"=="wrong-pvc-count" echo pvc-three Bound
+  exit /b 0
+)
+echo Unexpected kubectl invocation: %* 1>&2
+exit /b 1
+'@
+    [IO.File]::WriteAllText((Join-Path $verifyShimRoot 'kubectl.cmd'), $verifyKubectlShim)
 }
 
 try {
     Assert-True (Test-Path -LiteralPath $buildScript) 'build-local.ps1 must exist.'
     Assert-True (Test-Path -LiteralPath $deployScript) 'deploy.ps1 must exist.'
+    Assert-True (Test-Path -LiteralPath $verifyScript) 'verify.ps1 must exist.'
+    Assert-True ((Get-Content -LiteralPath $verifyScript -Raw) -match 'Add-Type\s+-AssemblyName\s+System\.Net\.Http') 'verify.ps1 must load System.Net.Http before creating its PowerShell 5.1-compatible HTTPS client.'
 
     New-Item -ItemType Directory -Force -Path $testRoot | Out-Null
     [IO.File]::WriteAllText($privateKeyPath, 'test-private-key')
@@ -181,6 +295,66 @@ try {
         FL_K3S_TEST_KUBECTL_LOG = $kubectlLog
         FL_K3S_TEST_NERDCTL_LOG = $nerdctlLog
     }
+
+    $verificationEnvironment = @{
+        FL_K3S_TEST_KUBECTL_LOG = $kubectlLog
+        FL_K3S_TEST_HTTP_LOG = $httpLog
+        FL_K3S_TEST_HTTP_MODE = 'healthy'
+    }
+
+    Set-ShimMode -Mode 'wrong-context'
+    $verifyWrongContext = Invoke-VerificationScript -Environment $verificationEnvironment
+    Assert-True ($verifyWrongContext.ExitCode -ne 0) 'verify.ps1 must reject a non-rancher-desktop context.'
+    Assert-True ($verifyWrongContext.Output -match 'rancher-desktop') 'verify.ps1 must identify the required kubectl context.'
+    $wrongContextLines = Get-LogLines -Path $kubectlLog
+    Assert-True ($wrongContextLines.Count -eq 1) 'verify.ps1 must not inspect workloads before the context guard succeeds.'
+    Assert-True ((Get-LogLines -Path $httpLog).Count -eq 0) 'verify.ps1 must not issue HTTP checks when the context guard rejects it.'
+
+    Set-ShimMode -Mode 'reachable'
+    $verifySuccess = Invoke-VerificationScript -Environment $verificationEnvironment
+    Assert-True ($verifySuccess.ExitCode -eq 0) 'verify.ps1 must pass when all rollout, pod, PVC, and endpoint assertions succeed.'
+    $verifyLines = Get-LogLines -Path $kubectlLog
+    Assert-True (@($verifyLines | Where-Object { $_ -match '^-n\s+flashsale\s+rollout\s+status\s+' }).Count -eq 8) 'verify.ps1 must wait for all three StatefulSets and five Deployments.'
+    Assert-True (@($verifyLines | Where-Object { $_ -match '^-n\s+flashsale\s+rollout\s+status\s+statefulset/postgres\s+--timeout=180s$' }).Count -eq 1) 'verify.ps1 must wait for PostgreSQL.'
+    Assert-True (@($verifyLines | Where-Object { $_ -match '^-n\s+flashsale\s+rollout\s+status\s+deployment/nginx\s+--timeout=180s$' }).Count -eq 1) 'verify.ps1 must wait for Nginx.'
+    Assert-True ((Get-LogLines -Path $httpLog) -join "`n" -match [regex]::Escape('https://localhost:8443/actuator/health/readiness')) 'verify.ps1 must check Backend readiness through Nginx.'
+    Assert-True ((Get-LogLines -Path $httpLog) -join "`n" -match [regex]::Escape('https://localhost:8443/')) 'verify.ps1 must check the frontend route through Nginx.'
+
+    Set-ShimMode -Mode 'backend-not-ready'
+    $verifyBackendFailure = Invoke-VerificationScript -Environment $verificationEnvironment
+    Assert-True ($verifyBackendFailure.ExitCode -ne 0) 'verify.ps1 must fail when the Backend does not have one ready Pod.'
+    Assert-True ($verifyBackendFailure.Output -match 'Expected one ready Backend Pod') 'verify.ps1 must report a Backend ready Pod assertion failure.'
+
+    Set-ShimMode -Mode 'restart'
+    $verifyRestartFailure = Invoke-VerificationScript -Environment $verificationEnvironment
+    Assert-True ($verifyRestartFailure.ExitCode -ne 0) 'verify.ps1 must fail when a container restart is reported.'
+    Assert-True ($verifyRestartFailure.Output -match 'Expected zero container restarts') 'verify.ps1 must report a restart assertion failure.'
+
+    Set-ShimMode -Mode 'wrong-pvc-count'
+    $verifyPvcFailure = Invoke-VerificationScript -Environment $verificationEnvironment
+    Assert-True ($verifyPvcFailure.ExitCode -ne 0) 'verify.ps1 must fail when exactly three PVCs are not present.'
+    Assert-True ($verifyPvcFailure.Output -match 'Expected three PVCs') 'verify.ps1 must report a PVC assertion failure.'
+
+    Set-ShimMode -Mode 'reachable'
+    $unhealthyEnvironment = $verificationEnvironment.Clone()
+    $unhealthyEnvironment.FL_K3S_TEST_HTTP_MODE = 'unhealthy'
+    $verifyHealthFailure = Invoke-VerificationScript -Environment $unhealthyEnvironment
+    Assert-True ($verifyHealthFailure.ExitCode -ne 0) 'verify.ps1 must fail when Backend readiness is not UP through Nginx.'
+    Assert-True ($verifyHealthFailure.Output -match 'Backend readiness is not UP') 'verify.ps1 must report a readiness assertion failure.'
+
+    Set-ShimMode -Mode 'reachable'
+    $readinessErrorEnvironment = $verificationEnvironment.Clone()
+    $readinessErrorEnvironment.FL_K3S_TEST_HTTP_MODE = 'readiness-error'
+    $verifyReadinessStatusFailure = Invoke-VerificationScript -Environment $readinessErrorEnvironment
+    Assert-True ($verifyReadinessStatusFailure.ExitCode -ne 0) 'verify.ps1 must fail when the readiness endpoint returns a non-200 status.'
+    Assert-True ($verifyReadinessStatusFailure.Output -match 'Backend readiness is not UP') 'verify.ps1 must report a non-200 readiness response as a readiness failure.'
+
+    Set-ShimMode -Mode 'reachable'
+    $frontendErrorEnvironment = $verificationEnvironment.Clone()
+    $frontendErrorEnvironment.FL_K3S_TEST_HTTP_MODE = 'frontend-error'
+    $verifyFrontendFailure = Invoke-VerificationScript -Environment $frontendErrorEnvironment
+    Assert-True ($verifyFrontendFailure.ExitCode -ne 0) 'verify.ps1 must fail when the frontend route is not HTTP 200.'
+    Assert-True ($verifyFrontendFailure.Output -match 'Frontend route did not return 200') 'verify.ps1 must report a frontend route assertion failure.'
 
     Set-ShimMode -Mode 'wrong-context'
     $buildFailure = Invoke-LocalScript -ScriptPath $buildScript -Environment $runtimeEnvironment
