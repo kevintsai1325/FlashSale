@@ -9,20 +9,43 @@ function Assert-CommandAvailable {
     }
 }
 
+function Protect-KubectlErrorText {
+    param([string]$Text)
+    if ([String]::IsNullOrWhiteSpace($Text)) { return '' }
+    $sanitized = $Text
+    foreach ($name in @('FL_K3S_POSTGRES_PASSWORD', 'FL_K3S_RABBITMQ_PASSWORD')) {
+        $secret = [Environment]::GetEnvironmentVariable($name, 'Process')
+        if (-not [String]::IsNullOrWhiteSpace($secret)) { $sanitized = $sanitized.Replace($secret, '<redacted>') }
+    }
+    $sanitized = [regex]::Replace($sanitized, '(?s)-----BEGIN [^-]+-----.*?-----END [^-]+-----', '<redacted PEM>')
+    $sanitized = $sanitized.Trim()
+    if ($sanitized.Length -gt 2000) { $sanitized = $sanitized.Substring(0, 2000) + '...<truncated>' }
+    return $sanitized
+}
+
 function Invoke-KubectlChecked {
     param(
         [string]$KubectlCommand = 'kubectl',
         [string[]]$Arguments,
         [string]$Operation
     )
+    $stderrPath = [IO.Path]::GetTempFileName()
     $previousPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $output = & $KubectlCommand @Arguments 2>&1
+        $output = & $KubectlCommand @Arguments 2> $stderrPath
         $exitCode = $LASTEXITCODE
     }
-    finally { $ErrorActionPreference = $previousPreference }
-    if ($exitCode -ne 0) { throw "kubectl failed while $Operation." }
+    finally {
+        $ErrorActionPreference = $previousPreference
+        $stderr = if (Test-Path -LiteralPath $stderrPath) { Get-Content -LiteralPath $stderrPath -Raw } else { '' }
+        if (Test-Path -LiteralPath $stderrPath) { Remove-Item -LiteralPath $stderrPath -Force }
+    }
+    if ($exitCode -ne 0) {
+        $detail = Protect-KubectlErrorText -Text $stderr
+        if ([String]::IsNullOrWhiteSpace($detail)) { throw "kubectl failed while $Operation." }
+        throw "kubectl failed while $Operation. kubectl stderr: $detail"
+    }
     return $output
 }
 

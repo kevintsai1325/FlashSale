@@ -3,6 +3,7 @@ Set-StrictMode -Version Latest
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $base = Join-Path $repo 'k8s\base'
+$requirementsPath = Join-Path $PSScriptRoot 'requirements-k8s.txt'
 
 function Assert-True {
     param([bool]$Condition, [string]$Message)
@@ -20,6 +21,19 @@ function Get-PropertyValue {
 foreach ($command in @('kubectl', 'python')) {
     Assert-True ($null -ne (Get-Command $command -ErrorAction SilentlyContinue)) "$command is required for the offline manifest contract test."
 }
+Assert-True (Test-Path -LiteralPath $requirementsPath -PathType Leaf) "Pinned test requirements are missing: $requirementsPath"
+$pinnedRequirement = (Get-Content -LiteralPath $requirementsPath | Where-Object { $_ -match '^PyYAML==' } | Select-Object -First 1)
+Assert-True (-not [String]::IsNullOrWhiteSpace($pinnedRequirement)) 'requirements-k8s.txt must pin PyYAML with ==.'
+$pinnedPyYamlVersion = $pinnedRequirement.Substring('PyYAML=='.Length).Trim()
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    $pyYamlVersion = (& python -c 'import yaml; print(yaml.__version__)' 2>&1 | Out-String).Trim()
+    $pyYamlExitCode = $LASTEXITCODE
+}
+finally { $ErrorActionPreference = $previousPreference }
+if ($pyYamlExitCode -ne 0) { throw "PyYAML is required. Install the pinned dependency with: python -m pip install -r scripts/tests/requirements-k8s.txt" }
+Assert-True ($pyYamlVersion -eq $pinnedPyYamlVersion) "PyYAML $pyYamlVersion is installed; version $pinnedPyYamlVersion is required. Run: python -m pip install -r scripts/tests/requirements-k8s.txt"
 
 $renderedText = (& kubectl kustomize $base | Out-String)
 if ($LASTEXITCODE -ne 0) { throw 'kubectl kustomize validation failed.' }
@@ -36,6 +50,7 @@ $resources = @()
 for ($index = 0; $index -lt $parsedResources.Count; $index++) {
     $resources += $parsedResources[$index]
 }
+Assert-True ($resources.Count -eq 21) "Expected exactly 21 rendered resources, got $($resources.Count)."
 
 $secrets = @($resources | Where-Object { $_.kind -eq 'Secret' })
 Assert-True ($secrets.Count -eq 0) 'Rendered resources must not contain Secret objects or values.'
@@ -58,6 +73,13 @@ $expectedStages = @{
         'Deployment/mailpit', 'Service/mailpit', 'Deployment/zipkin', 'Service/zipkin'
     )
     application = @('Deployment/backend', 'Service/backend', 'Deployment/frontend', 'Service/frontend', 'Deployment/nginx', 'Service/nginx')
+}
+$allowedStages = @($expectedStages.Keys)
+foreach ($resource in $resources) {
+    $labels = Get-PropertyValue $resource.metadata 'labels'
+    $stageProperties = @($labels.PSObject.Properties | Where-Object { $_.Name -eq 'flashsale.dev/stage' })
+    Assert-True ($stageProperties.Count -eq 1) "$($resource.kind)/$($resource.metadata.name) must have exactly one flashsale.dev/stage label."
+    Assert-True ($stageProperties[0].Value -in $allowedStages) "$($resource.kind)/$($resource.metadata.name) has an unsupported stage label: $($stageProperties[0].Value)"
 }
 foreach ($stage in $expectedStages.Keys) {
     $actual = @($resources | Where-Object { (Get-PropertyValue (Get-PropertyValue $_.metadata 'labels') 'flashsale.dev/stage') -eq $stage } | ForEach-Object { "$($_.kind)/$($_.metadata.name)" } | Sort-Object)
@@ -123,4 +145,4 @@ $backendSecretRefs = @($backend.spec.template.spec.containers[0].env | ForEach-O
 Assert-True (($backendSecretRefs.Count -eq 4) -and (@($backendSecretRefs | Where-Object { $_ -ne 'flashsale-secrets' }).Count -eq 0)) 'Backend must source all four sensitive values from flashsale-secrets.'
 Assert-True ($nginx.spec.template.spec.volumes[0].secret.secretName -eq 'flashsale-local-tls') 'Nginx must mount flashsale-local-tls.'
 
-Write-Host 'PASS: Kubernetes rendered-resource contract (8 workloads, probes, persistence, headless Services, Secret refs, namespace, and local images).'
+Write-Host 'PASS: Kubernetes rendered-resource contract (21 resources, exact stages, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, and local images).'

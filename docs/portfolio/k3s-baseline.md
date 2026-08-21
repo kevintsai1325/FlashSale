@@ -39,6 +39,8 @@ nerdctl --namespace k8s.io images | Select-String 'flashsale-'
 
 `k8s/base` 使用本地 `:local` images 與 `imagePullPolicy: Never`。Nginx 的 `LoadBalancer` Service 仍是入口，HTTPS 路徑為 `https://localhost:8443/`；不會把 image 推到公開 registry，也不以 Traefik 取代現有 Nginx gateway。
 
+這份 baseline 固定主要版本，但部分 upstream images 仍使用可變動的 major/minor tags（例如 `postgres:16-alpine`、`redis:7-alpine`、`openzipkin/zipkin:3`），因此操作流程可重跑不等於 bit-for-bit image 可重現。真正的 live acceptance 必須保存每個 Pod 的 resolved `imageID`；若要長期重現同一套 bytes，後續應把 upstream images 固定到 digest。
+
 ## 前置條件與安全的 context 選擇
 
 1. 在 Rancher Desktop 啟用 Kubernetes，並於 **Settings → Container Engine** 選擇 **containerd**，再依 UI 提示套用／重啟。此基準需要 containerd 的 `k8s.io` image namespace；Docker/Moby 不是可替代引擎。
@@ -182,12 +184,21 @@ kubectl --context rancher-desktop delete namespace flashsale
 
 ## 可重跑的離線安全檢查
 
-尚未取得 `nerdctl` 或相容 `kubectl` 時，仍可驗證 manifest 與 PowerShell script 的離線契約；manifest test 需要 Python 3 + PyYAML，並只使用 `kubectl kustomize`（不連 API）。這些結果不等同 live deployment evidence：
+尚未取得 `nerdctl` 或相容 `kubectl` 時，仍可驗證 manifest 與 PowerShell script 的離線契約。manifest test 需要 Python 3 與 requirements file 固定的 PyYAML；測試會先檢查 import 與精確版本，再只使用 `kubectl kustomize`（不連 API）。先安裝依賴：
+
+```powershell
+python -m pip install -r scripts\tests\requirements-k8s.txt
+```
+
+兩個 suite 都先在目前的 PowerShell host 執行；若同一台 Windows 也裝有另一個 host（Windows PowerShell 5.1 或 PowerShell 7），script suite 會自動用另一個 host 再跑 build/deploy smoke paths。這些結果不等同 live deployment evidence：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tests\k8s-manifests-test.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tests\k8s-scripts-test.ps1
+# 若目前使用 PowerShell 7，也可直接以同一 host 跑完整 suite：
+pwsh -NoProfile -File scripts\tests\k8s-manifests-test.ps1
+pwsh -NoProfile -File scripts\tests\k8s-scripts-test.ps1
 git diff --check
 ```
 
-預期兩個 PowerShell suite 分別輸出 `PASS: Kubernetes rendered-resource contract (8 workloads, probes, persistence, headless Services, Secret refs, namespace, and local images).` 與 `PASS: k8s scripts enforce shared version-safe preflight, staged deployment, create-once credentials, stdin Secret safety, local rollouts, and deterministic verification.`，而 `git diff --check` 沒有輸出。
+預期兩個 PowerShell suite 分別輸出 `PASS: Kubernetes rendered-resource contract (21 resources, exact stages, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, and local images).` 與 `PASS: k8s scripts enforce shared version-safe preflight, staged deployment, create-once credentials, stdin Secret safety, local rollouts, and deterministic verification.`，而 `git diff --check` 沒有 whitespace error（Windows 的 Git 設定可能另顯示 LF/CRLF conversion warnings）。

@@ -6,8 +6,12 @@ $buildScript = Join-Path $repo 'scripts\k8s\build-local.ps1'
 $deployScript = Join-Path $repo 'scripts\k8s\deploy.ps1'
 $verifyScript = Join-Path $repo 'scripts\k8s\verify.ps1'
 $preflightScript = Join-Path $repo 'scripts\k8s\k8s-preflight.ps1'
-$powershell51 = (Get-Command powershell.exe -ErrorAction Stop).Source
-$powershell7 = (Get-Command pwsh.exe -ErrorAction Stop).Source
+$isDesktopPowerShell = $PSVersionTable.PSEdition -eq 'Desktop'
+$currentPowerShellCommand = if ($isDesktopPowerShell) { (Get-Command powershell.exe -ErrorAction Stop).Source } else { (Get-Command pwsh.exe -ErrorAction Stop).Source }
+$currentPowerShellLabel = if ($isDesktopPowerShell) { 'PowerShell 5.1' } else { 'PowerShell 7' }
+$alternateCommandInfo = if ($isDesktopPowerShell) { Get-Command pwsh.exe -ErrorAction SilentlyContinue } else { Get-Command powershell.exe -ErrorAction SilentlyContinue }
+$alternatePowerShellCommand = if ($null -eq $alternateCommandInfo) { $null } else { $alternateCommandInfo.Source }
+$alternatePowerShellLabel = if ($isDesktopPowerShell) { 'PowerShell 7' } else { 'PowerShell 5.1' }
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('flashsale-k8s-script-test-' + [Guid]::NewGuid().ToString('N'))
 $shimRoot = Join-Path $testRoot 'bin'
 $kubectlLog = Join-Path $testRoot 'kubectl.log'
@@ -48,7 +52,7 @@ function Invoke-LocalScript {
     param(
         [string]$ScriptPath,
         [hashtable]$Environment = @{},
-        [string]$PowerShellCommand = $powershell51
+        [string]$PowerShellCommand = $currentPowerShellCommand
     )
     $savedValues = @{}
     foreach ($name in $Environment.Keys) {
@@ -86,6 +90,12 @@ function Invoke-VerificationScript {
         if ($env:FL_K3S_TEST_HTTP_MODE -eq 'unhealthy' -and $Uri -like '*readiness') {
             return [pscustomobject]@{ StatusCode = 200; Content = '{"status":"DOWN"}' }
         }
+        if ($env:FL_K3S_TEST_HTTP_MODE -eq 'readiness-error' -and $Uri -like '*readiness') {
+            return [pscustomobject]@{ StatusCode = 503; Content = '{"status":"UP"}' }
+        }
+        if ($env:FL_K3S_TEST_HTTP_MODE -eq 'frontend-error' -and $Uri -eq 'https://localhost:8443/') {
+            return [pscustomobject]@{ StatusCode = 503; Content = '' }
+        }
         if ($Uri -like '*readiness') { return [pscustomobject]@{ StatusCode = 200; Content = '{"status":"UP"}' } }
         return [pscustomobject]@{ StatusCode = 200; Content = '<html />' }
     }
@@ -113,8 +123,13 @@ if (($Arguments -join ' ') -eq 'config current-context') {
     exit 0
 }
 if (($Arguments -join ' ') -eq '--context rancher-desktop version -o json') {
+    if ($mode -eq 'version-command-failure') {
+        [Console]::Error.WriteLine('Rancher Desktop version API failed with credential test-postgres-password')
+        exit 1
+    }
     $clientMinor = if ($mode -eq 'unsupported-client') { '23' } else { '36' }
     $serverMinor = if ($mode -eq 'version-skew') { '39+' } else { '36+' }
+    if ($mode -eq 'unsupported-client') { [Console]::Error.WriteLine('WARNING: client/server version difference is outside the supported minor version skew') }
     @{ clientVersion = @{ major = '1'; minor = $clientMinor; gitVersion = "v1.$clientMinor.0" }; serverVersion = @{ major = '1'; minor = $serverMinor; gitVersion = "v1.$serverMinor.0+k3s" } } | ConvertTo-Json -Compress
     exit 0
 }
@@ -122,7 +137,10 @@ if (($Arguments -join ' ') -eq '--context rancher-desktop get --raw=/readyz --re
     if ($mode -eq 'unreachable') { Write-Error 'simulated unreachable API'; exit 1 }
     'ok'; exit 0
 }
-if (($Arguments -join ' ') -like '--context rancher-desktop apply --server-side --dry-run=server -k *') { 'server dry-run passed'; exit 0 }
+if (($Arguments -join ' ') -like '--context rancher-desktop apply --server-side --dry-run=server -k *') {
+    if ($mode -eq 'server-dry-run-failure') { [Console]::Error.WriteLine('server schema rejected the rendered baseline'); exit 1 }
+    'server dry-run passed'; exit 0
+}
 if (($Arguments -join ' ') -eq '--context rancher-desktop get namespace flashsale --ignore-not-found -o name') {
     if ($mode -in @('existing', 'password-change', 'missing-secret', 'empty-state')) { 'namespace/flashsale' }
     exit 0
@@ -138,6 +156,7 @@ if (($Arguments -join ' ') -eq '--context rancher-desktop -n flashsale get secre
 if (($Arguments -join ' ') -eq '--context rancher-desktop -n flashsale get pvc --no-headers') {
     if ($mode -eq 'missing-secret') { 'data-postgres-0 Bound' }
     elseif ($mode -eq 'empty-state') { Write-Error 'No resources found in flashsale namespace.' }
+    elseif ($mode -eq 'wrong-pvc-count') { 'pvc-one Bound'; 'pvc-two Bound' }
     else { 'pvc-one Bound'; 'pvc-two Bound'; 'pvc-three Bound' }
     exit 0
 }
@@ -153,21 +172,33 @@ if (($Arguments -join ' ') -eq '--context rancher-desktop apply -f -') {
     'secret configured'; exit 0
 }
 if (($Arguments.Count -ge 7) -and ($Arguments[0] -eq '--context') -and ($Arguments[2] -eq '-n') -and ($Arguments[4] -eq 'rollout')) {
+    if (($mode -eq 'rollout-failure') -and ($Arguments[5] -eq 'status')) { [Console]::Error.WriteLine('simulated rollout failure'); exit 1 }
+    if (($mode -eq 'dependency-rollout-failure') -and ($Arguments[5] -eq 'status') -and ($Arguments[6] -eq 'statefulset/postgres')) { [Console]::Error.WriteLine('postgres rollout failed'); exit 1 }
     if (($Arguments[5] -eq 'status') -or ($Arguments[5] -eq 'restart')) { 'successfully rolled out'; exit 0 }
 }
 if (($Arguments -join ' ') -like '--context rancher-desktop -n flashsale get pods -l app=* -o json') {
     $selector = @($Arguments | Where-Object { $_ -like 'app=*' })[0]
     $app = $selector.Substring(4)
     @{ items = @(
-        @{ metadata = @{ name = "${app}-1" }; spec = @{ containers = @(@{ image = "flashsale-$app`:local" }) }; status = @{ containerStatuses = @(@{ imageID = "sha256:$app" }) } }
+        @{ metadata = @{ name = "${app}-1" }; spec = @{ containers = @(@{ image = "flashsale-$app`:local" }) }; status = @{ containerStatuses = @(@{ imageID = $(if (($mode -eq 'empty-image-id') -and ($app -eq 'backend')) { '' } else { "sha256:$app" }) }) } }
     ) } | ConvertTo-Json -Depth 8 -Compress
     exit 0
 }
-if (($Arguments -join ' ') -like '--context rancher-desktop -n flashsale get deployment backend -o jsonpath=*') { '1'; exit 0 }
+if (($Arguments -join ' ') -like '--context rancher-desktop -n flashsale get deployment backend -o jsonpath=*') {
+    if ($mode -eq 'backend-not-ready') { '0' } else { '1' }
+    exit 0
+}
 if (($Arguments.Count -ge 9) -and (($Arguments[0..8] -join ' ') -eq '--context rancher-desktop -n flashsale get pods -l app -o')) {
+    if ($mode -eq 'wrong-pod-count') { 1..7 | ForEach-Object { "pod-$_,Running,True" }; exit 0 }
+    if ($mode -eq 'pod-not-ready') { 1..7 | ForEach-Object { "pod-$_,Running,True" }; 'pod-8,Pending,False'; exit 0 }
     1..8 | ForEach-Object { "pod-$_,Running,True" }; exit 0
 }
-if (($Arguments.Count -ge 7) -and (($Arguments[0..6] -join ' ') -eq '--context rancher-desktop -n flashsale get pods -o')) { '0'; exit 0 }
+if (($Arguments.Count -ge 7) -and (($Arguments[0..6] -join ' ') -eq '--context rancher-desktop -n flashsale get pods -o')) {
+    if ($mode -eq 'restart') { '1' }
+    elseif ($mode -eq 'multiple-restarts') { '1'; '2'; '3' }
+    else { '0' }
+    exit 0
+}
 Write-Error ('Unexpected kubectl invocation: ' + ($Arguments -join ' ')); exit 1
 '@
     $nerdctlShim = @'
@@ -223,7 +254,8 @@ try {
     foreach ($script in @($buildScript, $deployScript)) {
         $result = Invoke-LocalScript $script $commonEnvironment
         Assert-True ($result.ExitCode -ne 0) "$script must reject kubectl v1.23."
-        Assert-True ($result.Output -match '1\.35.*1\.37|1.35-1.37') "$script must provide an actionable supported kubectl range."
+        Assert-True ($result.Output -match [regex]::Escape('Install kubectl 1.35-1.37')) "$script must parse stdout despite a stderr skew warning and provide the exact actionable kubectl range. Output: $($result.Output)"
+        Assert-True ($result.Output -notmatch 'Unable to parse') "$script must not merge a version warning from stderr into JSON stdout."
         Assert-NoMutations (Get-LogLines $kubectlLog)
         Assert-True (@(Get-LogLines $nerdctlLog).Count -eq 0) 'Version rejection must happen before image builds.'
         Set-ShimMode 'unsupported-client'
@@ -235,6 +267,13 @@ try {
     Assert-True ($skewResult.Output -match 'skew') 'The version-skew rejection must identify version skew.'
     Assert-NoMutations (Get-LogLines $kubectlLog)
 
+    Set-ShimMode 'version-command-failure'
+    $versionFailureResult = Invoke-LocalScript $deployScript $commonEnvironment
+    Assert-True ($versionFailureResult.ExitCode -ne 0) 'Version command failure must stop deployment.'
+    Assert-True (($versionFailureResult.Output -match 'Rancher Desktop version API') -and ($versionFailureResult.Output -match 'failed with credential <redacted>')) "Version command failure must preserve actionable stderr. Output: $($versionFailureResult.Output)"
+    Assert-True ($versionFailureResult.Output -notmatch 'test-postgres-password') 'Version command failure must redact known secret values from stderr.'
+    Assert-NoMutations (Get-LogLines $kubectlLog)
+
     Set-ShimMode 'unreachable'
     $unreachableResult = Invoke-LocalScript $deployScript $commonEnvironment
     Assert-True ($unreachableResult.ExitCode -ne 0) 'deploy.ps1 must stop when the bounded API readiness probe fails.'
@@ -243,16 +282,18 @@ try {
 
     Set-ShimMode 'reachable'
     $buildResult = Invoke-LocalScript $buildScript $commonEnvironment
-    Assert-True ($buildResult.ExitCode -eq 0) 'build-local.ps1 must pass with a supported reachable shim.'
+    Assert-True ($buildResult.ExitCode -eq 0) "build-local.ps1 must pass with a supported reachable shim under the current host ($currentPowerShellLabel)."
     Assert-True (@(Get-LogLines $nerdctlLog | Where-Object { $_ -match "\tbuild\t" }).Count -eq 3) 'build-local.ps1 must build exactly three local images.'
 
-    Set-ShimMode 'reachable'
-    $buildPowerShell7Result = Invoke-LocalScript -ScriptPath $buildScript -Environment $commonEnvironment -PowerShellCommand $powershell7
-    Assert-True ($buildPowerShell7Result.ExitCode -eq 0) 'build-local.ps1 must execute successfully under PowerShell 7.'
+    if ($null -ne $alternatePowerShellCommand) {
+        Set-ShimMode 'reachable'
+        $alternateBuildResult = Invoke-LocalScript -ScriptPath $buildScript -Environment $commonEnvironment -PowerShellCommand $alternatePowerShellCommand
+        Assert-True ($alternateBuildResult.ExitCode -eq 0) "build-local.ps1 must execute successfully under $alternatePowerShellLabel when that host is installed."
+    }
 
     Set-ShimMode 'reachable'
     $deployResult = Invoke-LocalScript $deployScript $commonEnvironment
-    Assert-True ($deployResult.ExitCode -eq 0) "First deploy must pass with complete initial secret inputs. Output: $($deployResult.Output)"
+    Assert-True ($deployResult.ExitCode -eq 0) "First deploy must pass under the current host ($currentPowerShellLabel) with complete initial secret inputs. Output: $($deployResult.Output)"
     $deployLines = Get-LogLines $kubectlLog
     $dryRunIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match 'apply\t--server-side\t--dry-run=server' })
     $firstApplyIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match '--context\trancher-desktop\tapply\t-k' })
@@ -271,10 +312,32 @@ try {
     Assert-True (@($deployLines | Where-Object { $_ -match 'rollout\trestart\tdeployment/(backend|frontend|nginx)' }).Count -eq 3) 'Deploy must restart backend, frontend, and nginx after application apply.'
     Assert-True (@($deployLines | Where-Object { $_ -match 'rollout\tstatus\t(statefulset/(postgres|redis|rabbitmq)|deployment/(mailpit|zipkin))' }).Count -eq 5) 'Deploy must wait for all five dependencies before applying the application stage.'
 
-    Set-ShimMode 'reachable'
-    $deployPowerShell7Result = Invoke-LocalScript -ScriptPath $deployScript -Environment $commonEnvironment -PowerShellCommand $powershell7
-    Assert-True ($deployPowerShell7Result.ExitCode -eq 0) 'deploy.ps1 must execute successfully under PowerShell 7.'
-    Assert-True ($deployPowerShell7Result.Output -notmatch 'test-postgres-password|test-rabbitmq-password|test-private-key|test-public-key') 'PowerShell 7 deploy output must not expose decoded secrets.'
+    if ($null -ne $alternatePowerShellCommand) {
+        Set-ShimMode 'reachable'
+        $alternateDeployResult = Invoke-LocalScript -ScriptPath $deployScript -Environment $commonEnvironment -PowerShellCommand $alternatePowerShellCommand
+        Assert-True ($alternateDeployResult.ExitCode -eq 0) "deploy.ps1 must execute successfully under $alternatePowerShellLabel when that host is installed."
+        Assert-True ($alternateDeployResult.Output -notmatch 'test-postgres-password|test-rabbitmq-password|test-private-key|test-public-key') "$alternatePowerShellLabel deploy output must not expose decoded secrets."
+    }
+
+    Set-ShimMode 'server-dry-run-failure'
+    $dryRunFailure = Invoke-LocalScript $deployScript $commonEnvironment
+    Assert-True ($dryRunFailure.ExitCode -ne 0) 'Deploy must stop when server-side schema dry-run fails.'
+    Assert-True ($dryRunFailure.Output -match 'server schema rejected') 'Server dry-run failure must preserve actionable stderr.'
+    $dryRunFailureLines = Get-LogLines $kubectlLog
+    Assert-True (@($dryRunFailureLines | Where-Object { $_ -match 'stage=(dependency|application)' }).Count -eq 0) 'Failed server dry-run must abort before dependency or application mutation.'
+    Assert-True (@($dryRunFailureLines | Where-Object { $_ -match '^stdin-secret\t' }).Count -eq 0) 'Failed server dry-run must abort before Secret mutation.'
+
+    Set-ShimMode 'dependency-rollout-failure'
+    $dependencyFailure = Invoke-LocalScript $deployScript $commonEnvironment
+    Assert-True ($dependencyFailure.ExitCode -ne 0) 'Deploy must stop when a dependency rollout fails.'
+    Assert-True ($dependencyFailure.Output -match 'postgres rollout failed') 'Dependency rollout failure must preserve actionable stderr.'
+    $dependencyFailureLines = Get-LogLines $kubectlLog
+    Assert-True (@($dependencyFailureLines | Where-Object { $_ -match 'stage=application|rollout\trestart' }).Count -eq 0) 'Dependency rollout failure must abort before application mutation or restart.'
+
+    Set-ShimMode 'empty-image-id'
+    $emptyImageResult = Invoke-LocalScript $deployScript $commonEnvironment
+    Assert-True ($emptyImageResult.ExitCode -ne 0) 'Deploy must fail when a restarted local-image Pod has no resolved image ID.'
+    Assert-True ($emptyImageResult.Output -match 'resolved image ID') 'Empty image ID failure must be actionable.'
 
     Set-ShimMode 'existing'
     $reuseEnvironment = $commonEnvironment.Clone()
@@ -309,6 +372,62 @@ try {
     Assert-True (@($verifyLines | Where-Object { $_ -notmatch '^(config\tcurrent-context|--context\trancher-desktop)' }).Count -eq 0) 'Every kubectl operation after current-context must explicitly select rancher-desktop.'
     Assert-True (@($verifyLines | Where-Object { $_ -match 'rollout\tstatus' }).Count -eq 8) 'verify.ps1 must wait for exactly eight workloads.'
     Assert-True (@(Get-LogLines $httpLog).Count -eq 2) 'verify.ps1 must execute both HTTPS endpoint checks.'
+
+    Set-ShimMode 'rollout-failure'
+    $rolloutFailureResult = Invoke-VerificationScript $verificationEnvironment
+    Assert-True ($rolloutFailureResult.ExitCode -ne 0) 'verify.ps1 must fail when a workload rollout command fails.'
+    Assert-True ($rolloutFailureResult.Output -match 'simulated rollout') 'Rollout command failure must preserve actionable kubectl stderr.'
+    Assert-True (@(Get-LogLines $kubectlLog | Where-Object { $_ -match '\tget\t(deployment|pods|pvc)' }).Count -eq 0) 'Rollout failure must abort before workload-state checks.'
+    Assert-True (@(Get-LogLines $httpLog).Count -eq 0) 'Rollout failure must abort before HTTP endpoint checks.'
+
+    Set-ShimMode 'backend-not-ready'
+    $backendNotReadyResult = Invoke-VerificationScript $verificationEnvironment
+    Assert-True ($backendNotReadyResult.ExitCode -ne 0) 'verify.ps1 must fail unless Backend has exactly one ready replica.'
+    Assert-True ($backendNotReadyResult.Output -match 'Expected one ready Backend Pod') 'Backend replica failure must be actionable.'
+
+    Set-ShimMode 'wrong-pod-count'
+    $wrongPodCountResult = Invoke-VerificationScript $verificationEnvironment
+    Assert-True ($wrongPodCountResult.ExitCode -ne 0) 'verify.ps1 must fail when it does not find exactly eight application Pods.'
+    Assert-True ($wrongPodCountResult.Output -match 'Expected eight application Pods') 'Wrong Pod count failure must be actionable.'
+
+    Set-ShimMode 'pod-not-ready'
+    $podNotReadyResult = Invoke-VerificationScript $verificationEnvironment
+    Assert-True ($podNotReadyResult.ExitCode -ne 0) 'verify.ps1 must fail when an application Pod is not Running and Ready.'
+    Assert-True ($podNotReadyResult.Output -match 'Running and Ready') 'Pod readiness failure must be actionable.'
+
+    Set-ShimMode 'restart'
+    $restartResult = Invoke-VerificationScript $verificationEnvironment
+    Assert-True ($restartResult.ExitCode -ne 0) 'verify.ps1 must fail when a container restart is reported.'
+    Assert-True ($restartResult.Output -match 'Expected zero container restarts') 'Restart failure must be actionable.'
+
+    Set-ShimMode 'multiple-restarts'
+    $multipleRestartsResult = Invoke-VerificationScript $verificationEnvironment
+    Assert-True ($multipleRestartsResult.ExitCode -ne 0) 'verify.ps1 must fail when multiple container restarts are reported.'
+    Assert-True ($multipleRestartsResult.Output -match 'Expected zero container restarts, got 6') 'Restart counts must be aggregated across Pods.'
+
+    Set-ShimMode 'wrong-pvc-count'
+    $wrongPvcResult = Invoke-VerificationScript $verificationEnvironment
+    Assert-True ($wrongPvcResult.ExitCode -ne 0) 'verify.ps1 must fail when exactly three PVCs are not present.'
+    Assert-True ($wrongPvcResult.Output -match 'Expected three PVCs') 'PVC count failure must be actionable.'
+
+    Set-ShimMode 'reachable'
+    $unhealthyEnvironment = $verificationEnvironment.Clone()
+    $unhealthyEnvironment.FL_K3S_TEST_HTTP_MODE = 'unhealthy'
+    $unhealthyResult = Invoke-VerificationScript $unhealthyEnvironment
+    Assert-True ($unhealthyResult.ExitCode -ne 0) 'verify.ps1 must fail when Backend readiness is not UP through Nginx.'
+    Assert-True ($unhealthyResult.Output -match 'Backend readiness is not UP') 'Unhealthy endpoint failure must be actionable.'
+
+    $readinessErrorEnvironment = $verificationEnvironment.Clone()
+    $readinessErrorEnvironment.FL_K3S_TEST_HTTP_MODE = 'readiness-error'
+    $readinessErrorResult = Invoke-VerificationScript $readinessErrorEnvironment
+    Assert-True ($readinessErrorResult.ExitCode -ne 0) 'verify.ps1 must fail when Backend readiness returns a non-200 status.'
+    Assert-True ($readinessErrorResult.Output -match 'Backend readiness is not UP') 'Readiness HTTP status failure must be actionable.'
+
+    $frontendErrorEnvironment = $verificationEnvironment.Clone()
+    $frontendErrorEnvironment.FL_K3S_TEST_HTTP_MODE = 'frontend-error'
+    $frontendErrorResult = Invoke-VerificationScript $frontendErrorEnvironment
+    Assert-True ($frontendErrorResult.ExitCode -ne 0) 'verify.ps1 must fail when the Frontend route returns a non-200 status.'
+    Assert-True ($frontendErrorResult.Output -match 'Frontend route did not return 200') 'Frontend HTTP status failure must be actionable.'
 
     Set-ShimMode 'unsupported-client'
     $verifyVersionResult = Invoke-VerificationScript $verificationEnvironment
