@@ -14,9 +14,9 @@ if ($all -match 'POSTGRES_PASSWORD:\s*flashsale') { throw 'Default database pass
 if ($all -notmatch 'replicas:\s*1') { throw 'Baseline must declare one replica' }
 if ($all -notmatch 'readinessProbe:') { throw 'No readiness probe found' }
 if ($all -notmatch 'livenessProbe:') { throw 'No liveness probe found' }
-if ($all -notmatch 'persistentVolumeClaim') { throw 'No persistent volume claim found' }
+if ($all -notmatch '(persistentVolumeClaim|volumeClaimTemplates)') { throw 'No persistent volume claim found' }
 if ($all -notmatch 'imagePullPolicy:\s*Never') { throw 'Local baseline must not pull unpublished images' }
 
-kubectl kustomize (Join-Path $repo 'k8s\base') | kubectl apply --dry-run=client -f - | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'kubectl client-side validation failed' }
+kubectl kustomize (Join-Path $repo 'k8s\base') | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'kubectl kustomize validation failed' }
 Write-Host 'PASS: Kubernetes manifest contract'

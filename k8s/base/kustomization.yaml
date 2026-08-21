@@ -4,3 +4,6 @@ resources:
   - namespace.yaml
   - config.yaml
   - data.yaml
+  - support.yaml
+  - application.yaml
+  - gateway.yaml
