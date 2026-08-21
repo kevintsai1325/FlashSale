@@ -10,7 +10,7 @@
 |---|---|---|
 | 筆電 | 已知 | 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz，總記憶體 32 GB。k6 與 k3s 共用同一台實體筆電，因此 CPU、記憶體、磁碟與網路資源會互相影響。 |
 | Windows | 已知的先前量測 | Microsoft Windows 11 專業版 10.0.26200；來源是既有 [Compose 壓測環境紀錄](./performance-report.md#量測環境)，不是本次 k3s 部署量測。 |
-| `kubectl` 目標 | 已確認 | active context 目前是 `musesaiaks`。只有明確選用 `rancher-desktop` context 時，Rancher Desktop Kubernetes API 的 `/readyz` 探針可達。所有部署、驗證與 teardown 前都必須切到該 context。 |
+| `kubectl` 目標 | 已確認但不相容 | active context 目前是 `musesaiaks`；PATH 上的 client 是 v1.23，而 Rancher Desktop server 是 v1.36。這超過支援的 minor skew，因此本次沒有執行 build、server dry-run、deploy 或 workload verify。 |
 | RD CPU／RAM 配額、RD／Kubernetes 版本 | 尚未記錄 | 請在真正執行當次從 Rancher Desktop Settings 與下方擷取指令記錄；本文件不臆測數值。 |
 | 本機 images | 未完成 | `nerdctl` 目前不在 `PATH`，`flashsale-*:local` 尚未建立或列出。 |
 | workloads、路由與 PVC 持久化 | 未完成 | 尚未部署 `flashsale` namespace，未執行 rollout、Nginx 路由或 PostgreSQL PVC 持久化驗證。 |
@@ -21,10 +21,10 @@
 ```powershell
 $timestamp = Get-Date -Format o
 "Test timestamp: $timestamp"
-kubectl version
-kubectl get nodes -o wide
-kubectl -n flashsale get deployment,statefulset,service,pvc
-kubectl -n flashsale top pods
+kubectl --context rancher-desktop version
+kubectl --context rancher-desktop get nodes -o wide
+kubectl --context rancher-desktop -n flashsale get deployment,statefulset,service,pvc
+kubectl --context rancher-desktop -n flashsale top pods
 nerdctl --namespace k8s.io images | Select-String 'flashsale-'
 ```
 
@@ -42,9 +42,10 @@ nerdctl --namespace k8s.io images | Select-String 'flashsale-'
 ## 前置條件與安全的 context 選擇
 
 1. 在 Rancher Desktop 啟用 Kubernetes，並於 **Settings → Container Engine** 選擇 **containerd**，再依 UI 提示套用／重啟。此基準需要 containerd 的 `k8s.io` image namespace；Docker/Moby 不是可替代引擎。
-2. 確認 `kubectl` 可用，並在 repository root 執行後續命令。
+2. 安裝 Kubernetes 1.35～1.37 的 `kubectl`（優先使用 1.36），確認 `Get-Command kubectl` 指向該版本，並在 repository root 執行後續命令。v1.23 不可用於 v1.36 server。
 3. 準備 repository 外的 JWT PEM key pair。私鑰、密碼、產生的 TLS certificate/key 都不可 commit。
-4. `build-local.ps1`、`deploy.ps1`、`verify.ps1` 都會檢查 active context，因此單獨替某個命令加 `--context` 不足以通過 guard。
+4. 確認有 default StorageClass，且單節點至少能供應三個 RWO PVC（宣告容量合計 17 GiB）；也確認 host 的 TCP 8080、8443 沒有被其他程式佔用。
+5. `build-local.ps1`、`deploy.ps1`、`verify.ps1` 共用相同 preflight：command、active context、client/server minor skew、`/readyz` API。版本或 API 不合時會在 build、mutation、workload check 前停止；其餘 kubectl 操作都明確帶 `--context rancher-desktop`。
 
 以下命令保存原 context，明確切到 Rancher Desktop，並在任何資源變更前確認 API：
 
@@ -55,7 +56,10 @@ kubectl config use-context rancher-desktop
 if ((kubectl config current-context).Trim() -ne 'rancher-desktop') {
     throw 'Rancher Desktop context selection failed; stop before building or deploying.'
 }
-kubectl get --raw=/readyz --request-timeout=5s
+kubectl --context rancher-desktop version -o json
+kubectl --context rancher-desktop get --raw=/readyz --request-timeout=5s
+kubectl --context rancher-desktop get storageclass
+Get-NetTCPConnection -State Listen -LocalPort 8080,8443 -ErrorAction SilentlyContinue
 ```
 
 目前的 `musesaiaks` context 不可承接這個 lab 的命令。完成後如需回復：
@@ -92,7 +96,7 @@ nerdctl version
 MSYS_NO_PATHCONV=1 ./nginx/certs/generate-cert.sh
 ```
 
-下列 helper 將密碼只放進當前 PowerShell process environment。部署腳本直接把值送往 Kubernetes API 產生／更新 Secret，不會將解碼後內容寫到檔案或標準輸出。
+下列 helper 將密碼只放進當前 PowerShell process environment。第一次部署會以記憶體內 JSON 經 stdin 建立 Secret，不把解碼後內容放進 kubectl process arguments、檔案或標準輸出。初始 PostgreSQL／RabbitMQ 密碼必須存進安全的密碼管理器；PVC 與 `flashsale-secrets` 是同一組必須共同保留的狀態。
 
 ```powershell
 function Read-SessionSecret([string]$Prompt) {
@@ -118,38 +122,67 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\k8s\deploy.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\k8s\verify.ps1
 ```
 
-`verify.ps1` 會等待三個 StatefulSet（PostgreSQL、Redis、RabbitMQ）與五個 Deployment（Mailpit、Zipkin、Backend、Frontend、Nginx），檢查一個 Ready Backend Pod、八個 Ready application Pods、零 container restarts、三個 PVC，並從 Nginx 驗證 backend readiness 與 frontend route。成功後可保留非機密狀態：
+`deploy.ps1` 依 `bootstrap → foundation → dependency → application` 套用：先只建立 Namespace，接著對完整 rendered baseline 做 server-side dry-run；通過後才建立 Config／Secrets、三個 StatefulSet 與 Mailpit／Zipkin並等待 ready；最後才是 Backend／Frontend／Nginx。把完整 dry-run 放在 Namespace bootstrap 後，可讓第一次部署的 namespaced resources 接受 API schema 驗證，而 Config、Secrets 與 workloads 仍受 dry-run gate 保護。套用 application stage 後，腳本會 restart Backend、Frontend、Nginx，等待 rollout，並列出三者解析後的非機密 image ID；因此相同 `:local` tag 的新 image 與更新後的 TLS `subPath` mount 都會生效。
+
+`verify.ps1` 會等待三個 StatefulSet（PostgreSQL、Redis、RabbitMQ）與五個 Deployment（Mailpit、Zipkin、Backend、Frontend、Nginx），檢查一個 Ready Backend Pod、八個 Ready application Pods、零 container restarts、三個 PVC，並以 10 秒 HTTP timeout 從 Nginx 驗證 backend readiness 與 frontend route。成功後可保留非機密狀態：
 
 ```powershell
-kubectl -n flashsale get pods,svc,pvc -o wide
-kubectl -n flashsale get deployment,statefulset,service,pvc
+kubectl --context rancher-desktop -n flashsale get pods,svc,pvc -o wide
+kubectl --context rancher-desktop -n flashsale get deployment,statefulset,service,pvc
+kubectl --context rancher-desktop -n flashsale get pods -l 'app in (backend,frontend,nginx)' -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[0].image,IMAGE_ID:.status.containerStatuses[0].imageID'
 ```
+
+### Stateful credential 保留政策
+
+第一次部署需要 `FL_K3S_POSTGRES_PASSWORD` 與 `FL_K3S_RABBITMQ_PASSWORD`。之後可從 process environment 移除這兩個變數；腳本會在記憶體中重用 cluster Secret 的既有值。若仍提供，值必須與既有 Secret 完全相同。PVC 已存在但 Secret 遺失時，或嘗試替換任一 stateful 密碼時，部署會在任何 apply／restart 前停止。PostgreSQL／RabbitMQ 的協調式 credential rotation 需要同步更新資料服務內部狀態與 Kubernetes Secret，明確不屬於此基準。
+
+JWT key paths 與 TLS certificate/key 每次 deploy 仍是必要輸入；它們可刻意更新，Backend／Nginx rollout 會載入新值。不要以 `kubectl get secret ... -o yaml` 輸出到一般文字檔做備份；使用受控的 secret manager 或加密備份，並讓 Secret 與 PVC 具有一致的保留／還原生命週期。
 
 ### 日誌、重啟與日常重新部署
 
 ```powershell
-kubectl -n flashsale logs deployment/backend --tail=200
-kubectl -n flashsale logs deployment/nginx --tail=200
-kubectl -n flashsale logs deployment/backend --follow
+kubectl --context rancher-desktop -n flashsale logs deployment/backend --tail=200
+kubectl --context rancher-desktop -n flashsale logs deployment/nginx --tail=200
+kubectl --context rancher-desktop -n flashsale logs deployment/backend --follow
 
-kubectl -n flashsale rollout restart deployment/backend
-kubectl -n flashsale rollout status deployment/backend --timeout=180s
+kubectl --context rancher-desktop -n flashsale rollout restart deployment/backend
+kubectl --context rancher-desktop -n flashsale rollout status deployment/backend --timeout=240s
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\k8s\verify.ps1
 ```
 
-一般 redeploy 是 image 有變時重跑 `build-local.ps1`，再重跑 `deploy.ps1`，**不是**刪除 namespace。若要驗證 PostgreSQL PVC 持久性，先以非敏感測試資料建立並記錄檢查值、重啟 `postgres-0`、等待 StatefulSet ready，再讀回同一值；尚未完成前不得宣稱持久性已驗證。
+一般 redeploy 是 image 有變時重跑 `build-local.ps1`，再重跑 `deploy.ps1`，**不是**刪除 namespace。deploy 已包含三個 local-image Deployment 的 restart，不必再手動刪 Pod。
+
+PostgreSQL PVC 持久性可用獨立的非敏感 probe table 驗證；這些命令尚未在本環境執行，取得 live 輸出前不得宣稱持久性已驗證：
+
+```powershell
+kubectl --context rancher-desktop -n flashsale exec postgres-0 -- psql -U flashsale -d flashsale -c "CREATE TABLE IF NOT EXISTS k3s_persistence_probe (id integer PRIMARY KEY, marker text NOT NULL); INSERT INTO k3s_persistence_probe VALUES (1, 'before-restart') ON CONFLICT (id) DO UPDATE SET marker = EXCLUDED.marker;"
+kubectl --context rancher-desktop -n flashsale exec postgres-0 -- psql -U flashsale -d flashsale -c "SELECT id, marker FROM k3s_persistence_probe;"
+kubectl --context rancher-desktop -n flashsale delete pod postgres-0
+kubectl --context rancher-desktop -n flashsale rollout status statefulset/postgres --timeout=240s
+kubectl --context rancher-desktop -n flashsale exec postgres-0 -- psql -U flashsale -d flashsale -c "SELECT id, marker FROM k3s_persistence_probe;"
+kubectl --context rancher-desktop -n flashsale exec postgres-0 -- psql -U flashsale -d flashsale -c "DROP TABLE k3s_persistence_probe;"
+```
+
+Zipkin 在 k3s baseline 只有 ClusterIP；用 port-forward 做臨時本機檢查，結束時按 Ctrl+C：
+
+```powershell
+kubectl --context rancher-desktop -n flashsale port-forward service/zipkin 9411:9411
+# 另一個 PowerShell：
+Invoke-RestMethod -TimeoutSec 10 'http://localhost:9411/health'
+Invoke-RestMethod -TimeoutSec 10 'http://localhost:9411/api/v2/services'
+```
 
 ### 破壞性 teardown（僅在丟棄整個 lab 時）
 
 ```powershell
-kubectl delete namespace flashsale
+kubectl --context rancher-desktop delete namespace flashsale
 ```
 
 **警告：**這會刪除整個 `flashsale` namespace，包括 PVC-backed lab data；它不是一般 redeploy 命令，也不應在保留測試資料、量測結果或除錯證據時執行。執行前確認 active context 仍是 `rancher-desktop`，而非 `musesaiaks` 或其他 cluster。
 
 ## 可重跑的離線安全檢查
 
-尚未取得 `nerdctl` 或部署 workload 時，仍可驗證 manifest 與 PowerShell script 的離線契約；這些結果不等同 live deployment evidence：
+尚未取得 `nerdctl` 或相容 `kubectl` 時，仍可驗證 manifest 與 PowerShell script 的離線契約；manifest test 需要 Python 3 + PyYAML，並只使用 `kubectl kustomize`（不連 API）。這些結果不等同 live deployment evidence：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tests\k8s-manifests-test.ps1
@@ -157,4 +190,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tests\k8s-scripts-te
 git diff --check
 ```
 
-預期兩個 PowerShell suite 分別輸出 `PASS: Kubernetes manifest contract` 與 `PASS: k8s scripts use deterministic offline shims for guards, builds, deployment, and secret safety.`，而 `git diff --check` 沒有輸出。
+預期兩個 PowerShell suite 分別輸出 `PASS: Kubernetes rendered-resource contract (8 workloads, probes, persistence, headless Services, Secret refs, namespace, and local images).` 與 `PASS: k8s scripts enforce shared version-safe preflight, staged deployment, create-once credentials, stdin Secret safety, local rollouts, and deterministic verification.`，而 `git diff --check` 沒有輸出。

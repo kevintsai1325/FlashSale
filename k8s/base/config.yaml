@@ -3,6 +3,8 @@ kind: ConfigMap
 metadata:
   name: flashsale-config
   namespace: flashsale
+  labels:
+    flashsale.dev/stage: foundation
 data:
   POSTGRES_DB: flashsale
   POSTGRES_USER: flashsale

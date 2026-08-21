@@ -1,6 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
-metadata: {name: nginx, namespace: flashsale}
+metadata: {name: nginx, namespace: flashsale, labels: {flashsale.dev/stage: application}}
 spec:
   replicas: 1
   selector: {matchLabels: {app: nginx}}
@@ -24,7 +24,7 @@ spec:
 ---
 apiVersion: v1
 kind: Service
-metadata: {name: nginx, namespace: flashsale}
+metadata: {name: nginx, namespace: flashsale, labels: {flashsale.dev/stage: application}}
 spec:
   type: LoadBalancer
   selector: {app: nginx}
