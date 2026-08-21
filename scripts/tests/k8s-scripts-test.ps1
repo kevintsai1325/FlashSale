@@ -244,8 +244,25 @@ if "%1 %2"=="config current-context" (
   if "%FL_K3S_TEST_KUBECTL_MODE%"=="wrong-context" (echo old-cluster) else (echo rancher-desktop)
   exit /b 0
 )
+if "%FL_K3S_TEST_KUBECTL_MODE%"=="rollout-failure" if "%3"=="rollout" (
+  echo simulated rollout failure 1>&2
+  exit /b 1
+)
 if "%1 %2 %3 %4"=="-n flashsale rollout status" (
   echo successfully rolled out
+  exit /b 0
+)
+if "%1 %2 %3 %4 %5"=="-n flashsale get pods -l" (
+  if "%FL_K3S_TEST_KUBECTL_MODE%"=="wrong-pod-count" (
+    for /l %%I in (1,1,7) do echo pod-%%I,Running,True
+    exit /b 0
+  )
+  if "%FL_K3S_TEST_KUBECTL_MODE%"=="pod-not-ready" (
+    for /l %%I in (1,1,7) do echo pod-%%I,Running,True
+    echo pod-8,Pending,False
+    exit /b 0
+  )
+  for /l %%I in (1,1,8) do echo pod-%%I,Running,True
   exit /b 0
 )
 if "%1 %2 %3 %4"=="-n flashsale get deployment" (
@@ -253,7 +270,7 @@ if "%1 %2 %3 %4"=="-n flashsale get deployment" (
   exit /b 0
 )
 if "%1 %2 %3 %4"=="-n flashsale get pods" (
-  if "%FL_K3S_TEST_KUBECTL_MODE%"=="restart" (echo 1) else (echo 0)
+  if "%FL_K3S_TEST_KUBECTL_MODE%"=="restart" (echo 1) else if "%FL_K3S_TEST_KUBECTL_MODE%"=="multiple-restarts" (echo 1&echo 2&echo 3) else (echo 0)
   exit /b 0
 )
 if "%1 %2 %3 %4"=="-n flashsale get pvc" (
@@ -273,6 +290,9 @@ try {
     Assert-True (Test-Path -LiteralPath $deployScript) 'deploy.ps1 must exist.'
     Assert-True (Test-Path -LiteralPath $verifyScript) 'verify.ps1 must exist.'
     Assert-True ((Get-Content -LiteralPath $verifyScript -Raw) -match 'Add-Type\s+-AssemblyName\s+System\.Net\.Http') 'verify.ps1 must load System.Net.Http before creating its PowerShell 5.1-compatible HTTPS client.'
+    $verifyContent = Get-Content -LiteralPath $verifyScript -Raw
+    $restartJsonPath = 'jsonpath={range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}'
+    Assert-True ($verifyContent -match [regex]::Escape($restartJsonPath)) 'verify.ps1 must use a live-valid JSONPath newline expression for restart counts.'
 
     New-Item -ItemType Directory -Force -Path $testRoot | Out-Null
     [IO.File]::WriteAllText($privateKeyPath, 'test-private-key')
@@ -310,6 +330,13 @@ try {
     Assert-True ($wrongContextLines.Count -eq 1) 'verify.ps1 must not inspect workloads before the context guard succeeds.'
     Assert-True ((Get-LogLines -Path $httpLog).Count -eq 0) 'verify.ps1 must not issue HTTP checks when the context guard rejects it.'
 
+    Set-ShimMode -Mode 'rollout-failure'
+    $verifyRolloutFailure = Invoke-VerificationScript -Environment $verificationEnvironment
+    Assert-True ($verifyRolloutFailure.ExitCode -ne 0) 'verify.ps1 must fail when a rollout status command fails.'
+    Assert-True ($verifyRolloutFailure.Output -match 'kubectl failed') 'verify.ps1 must report a rollout status command failure.'
+    Assert-True (@((Get-LogLines -Path $kubectlLog) | Where-Object { $_ -match 'get pods' }).Count -eq 0) 'verify.ps1 must stop before Pod checks when a rollout fails.'
+    Assert-True ((Get-LogLines -Path $httpLog).Count -eq 0) 'verify.ps1 must stop before HTTP checks when a rollout fails.'
+
     Set-ShimMode -Mode 'reachable'
     $verifySuccess = Invoke-VerificationScript -Environment $verificationEnvironment
     Assert-True ($verifySuccess.ExitCode -eq 0) 'verify.ps1 must pass when all rollout, pod, PVC, and endpoint assertions succeed.'
@@ -317,6 +344,7 @@ try {
     Assert-True (@($verifyLines | Where-Object { $_ -match '^-n\s+flashsale\s+rollout\s+status\s+' }).Count -eq 8) 'verify.ps1 must wait for all three StatefulSets and five Deployments.'
     Assert-True (@($verifyLines | Where-Object { $_ -match '^-n\s+flashsale\s+rollout\s+status\s+statefulset/postgres\s+--timeout=180s$' }).Count -eq 1) 'verify.ps1 must wait for PostgreSQL.'
     Assert-True (@($verifyLines | Where-Object { $_ -match '^-n\s+flashsale\s+rollout\s+status\s+deployment/nginx\s+--timeout=180s$' }).Count -eq 1) 'verify.ps1 must wait for Nginx.'
+    Assert-True (@($verifyLines | Where-Object { $_ -match '^-n\s+flashsale\s+get\s+pods\s+-l\s+app\s+-o\s+' }).Count -eq 1) 'verify.ps1 must inspect only application-labelled Pods.'
     Assert-True ((Get-LogLines -Path $httpLog) -join "`n" -match [regex]::Escape('https://localhost:8443/actuator/health/readiness')) 'verify.ps1 must check Backend readiness through Nginx.'
     Assert-True ((Get-LogLines -Path $httpLog) -join "`n" -match [regex]::Escape('https://localhost:8443/')) 'verify.ps1 must check the frontend route through Nginx.'
 
@@ -329,6 +357,21 @@ try {
     $verifyRestartFailure = Invoke-VerificationScript -Environment $verificationEnvironment
     Assert-True ($verifyRestartFailure.ExitCode -ne 0) 'verify.ps1 must fail when a container restart is reported.'
     Assert-True ($verifyRestartFailure.Output -match 'Expected zero container restarts') 'verify.ps1 must report a restart assertion failure.'
+
+    Set-ShimMode -Mode 'multiple-restarts'
+    $verifyMultipleRestartsFailure = Invoke-VerificationScript -Environment $verificationEnvironment
+    Assert-True ($verifyMultipleRestartsFailure.ExitCode -ne 0) 'verify.ps1 must fail when restarts across multiple Pods sum to a nonzero value.'
+    Assert-True ($verifyMultipleRestartsFailure.Output -match 'got 6') 'verify.ps1 must sum restart counts from multiple Pods.'
+
+    Set-ShimMode -Mode 'wrong-pod-count'
+    $verifyPodCountFailure = Invoke-VerificationScript -Environment $verificationEnvironment
+    Assert-True ($verifyPodCountFailure.ExitCode -ne 0) 'verify.ps1 must fail when it does not find exactly eight application Pods.'
+    Assert-True ($verifyPodCountFailure.Output -match 'Expected eight application Pods') 'verify.ps1 must report an application Pod count assertion failure.'
+
+    Set-ShimMode -Mode 'pod-not-ready'
+    $verifyPodStateFailure = Invoke-VerificationScript -Environment $verificationEnvironment
+    Assert-True ($verifyPodStateFailure.ExitCode -ne 0) 'verify.ps1 must fail when an application Pod is not Running and Ready.'
+    Assert-True ($verifyPodStateFailure.Output -match 'Running and Ready') 'verify.ps1 must report an application Pod state assertion failure.'
 
     Set-ShimMode -Mode 'wrong-pvc-count'
     $verifyPvcFailure = Invoke-VerificationScript -Environment $verificationEnvironment

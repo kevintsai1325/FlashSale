@@ -30,8 +30,17 @@ function Assert-RancherDesktopContext {
 function Invoke-Kubectl {
     param([string[]]$Arguments)
 
-    $output = & $KubectlCommand @Arguments
-    if ($LASTEXITCODE -ne 0) {
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & $KubectlCommand @Arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+
+    if ($exitCode -ne 0) {
         throw "kubectl failed: kubectl $($Arguments -join ' ')"
     }
 
@@ -78,8 +87,27 @@ if ($backendReady -ne '1') {
     throw "Expected one ready Backend Pod, got $backendReady"
 }
 
-$restartOutput = Invoke-Kubectl -Arguments @('-n', $ns, 'get', 'pods', '-o', 'jsonpath={range .items[*]}{.status.containerStatuses[0].restartCount}{"`n"}{end}')
-$restarts = [int]($restartOutput | Measure-Object -Sum).Sum
+$appPodStates = @(Invoke-Kubectl -Arguments @(
+    '-n', $ns, 'get', 'pods', '-l', 'app', '-o',
+    'jsonpath={range .items[*]}{.metadata.name}{","}{.status.phase}{","}{range .status.conditions[?(@.type=="Ready")]}{.status}{end}{"\n"}{end}'
+) | ForEach-Object { $_.ToString().Trim() } | Where-Object { -not [String]::IsNullOrWhiteSpace($_) })
+if ($appPodStates.Count -ne 8) {
+    throw "Expected eight application Pods, got $($appPodStates.Count)"
+}
+
+$unexpectedPodStates = @($appPodStates | Where-Object {
+    $fields = $_.Split([char]',')
+    ($fields.Count -ne 3) -or [String]::IsNullOrWhiteSpace($fields[0]) -or $fields[1] -ne 'Running' -or $fields[2] -ne 'True'
+})
+if ($unexpectedPodStates.Count -ne 0) {
+    throw "Expected all eight application Pods to be Running and Ready; unexpected states: $($unexpectedPodStates -join ', ')"
+}
+
+$restartCounts = @(Invoke-Kubectl -Arguments @(
+    '-n', $ns, 'get', 'pods', '-o',
+    'jsonpath={range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}'
+) | ForEach-Object { $_.ToString().Trim() } | Where-Object { -not [String]::IsNullOrWhiteSpace($_) } | ForEach-Object { [int]$_ })
+$restarts = if ($restartCounts.Count -eq 0) { 0 } else { [int]($restartCounts | Measure-Object -Sum).Sum }
 if ($restarts -ne 0) {
     throw "Expected zero container restarts, got $restarts"
 }
