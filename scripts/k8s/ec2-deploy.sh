@@ -4,6 +4,8 @@
 set -euo pipefail
 
 SHA="${1:?usage: ec2-deploy.sh <git-sha>}"
+# k3s 把 kubectl 裝在 /usr/local/bin，但 sudo 的 secure_path 和 SSM 的 PATH 都不含它。
+export PATH="/usr/local/bin:${PATH}"
 export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 OVERLAY=k8s/overlays/aws
 
