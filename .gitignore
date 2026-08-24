@@ -12,3 +12,6 @@ frontend/dist/
 # untracked results/ directory would make collect.ps1 record gitDirty: true for
 # every run it just produced.
 load-tests/benchmark/results/
+
+# Kubernetes runtime secrets and generated TLS material
+k8s/runtime/

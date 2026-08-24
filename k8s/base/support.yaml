@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: mailpit, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: mailpit}}
+  template:
+    metadata: {labels: {app: mailpit}}
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.27.9
+          ports: [{name: http, containerPort: 8025}, {name: smtp, containerPort: 1025}]
+          readinessProbe: {httpGet: {path: /api/v1/info, port: 8025}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /api/v1/info, port: 8025}, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "1", memory: 512Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: mailpit, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  type: ClusterIP
+  selector: {app: mailpit}
+  ports:
+    - {name: http, port: 8025, targetPort: 8025}
+    - {name: smtp, port: 1025, targetPort: 1025}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: zipkin, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: zipkin}}
+  template:
+    metadata: {labels: {app: zipkin}}
+    spec:
+      containers:
+        - name: zipkin
+          image: openzipkin/zipkin:3
+          ports: [{name: http, containerPort: 9411}]
+          startupProbe: {httpGet: {path: /health, port: 9411}, failureThreshold: 30, periodSeconds: 5, timeoutSeconds: 3}
+          readinessProbe: {httpGet: {path: /health, port: 9411}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /health, port: 9411}, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "1", memory: 512Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: zipkin, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  type: ClusterIP
+  selector: {app: zipkin}
+  ports: [{name: http, port: 9411, targetPort: 9411}]

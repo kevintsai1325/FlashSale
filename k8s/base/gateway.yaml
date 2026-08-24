@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: nginx, namespace: flashsale, labels: {flashsale.dev/stage: application}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: nginx}}
+  template:
+    metadata: {labels: {app: nginx}}
+    spec:
+      containers:
+        - name: nginx
+          image: flashsale-nginx:local
+          imagePullPolicy: Never
+          ports: [{containerPort: 8080}, {containerPort: 8443}]
+          readinessProbe: {httpGet: {path: /internal-health, port: 8080}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /internal-health, port: 8080}, periodSeconds: 10}
+          resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 500m, memory: 256Mi}}
+          volumeMounts:
+            - {name: tls, mountPath: /etc/nginx/certs/localhost.crt, subPath: tls.crt, readOnly: true}
+            - {name: tls, mountPath: /etc/nginx/certs/localhost.key, subPath: tls.key, readOnly: true}
+      volumes:
+        - name: tls
+          secret: {secretName: flashsale-local-tls}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: nginx, namespace: flashsale, labels: {flashsale.dev/stage: application}}
+spec:
+  type: LoadBalancer
+  selector: {app: nginx}
+  ports:
+    - {name: http, port: 8080, targetPort: 8080}
+    - {name: https, port: 8443, targetPort: 8443}

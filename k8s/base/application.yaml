@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: backend, namespace: flashsale, labels: {flashsale.dev/stage: application}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: backend}}
+  template:
+    metadata: {labels: {app: backend}}
+    spec:
+      containers:
+        - name: backend
+          image: flashsale-backend:local
+          imagePullPolicy: Never
+          envFrom: [{configMapRef: {name: flashsale-config}}]
+          env:
+            - {name: SPRING_DATASOURCE_PASSWORD, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: POSTGRES_PASSWORD}}}
+            - {name: SPRING_RABBITMQ_PASSWORD, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: SPRING_RABBITMQ_PASSWORD}}}
+            - {name: JWT_PRIVATE_KEY, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: JWT_PRIVATE_KEY}}}
+            - {name: JWT_PUBLIC_KEY, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: JWT_PUBLIC_KEY}}}
+          ports: [{containerPort: 8080}]
+          startupProbe: {httpGet: {path: /actuator/health/liveness, port: 8080}, failureThreshold: 30, periodSeconds: 5, timeoutSeconds: 3}
+          readinessProbe: {httpGet: {path: /actuator/health/readiness, port: 8080}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /actuator/health/liveness, port: 8080}, periodSeconds: 10}
+          resources: {requests: {cpu: 500m, memory: 1Gi}, limits: {cpu: "2", memory: 2Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: backend, namespace: flashsale, labels: {flashsale.dev/stage: application}}
+spec: {selector: {app: backend}, ports: [{name: http, port: 8080, targetPort: 8080}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: frontend, namespace: flashsale, labels: {flashsale.dev/stage: application}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: frontend}}
+  template:
+    metadata: {labels: {app: frontend}}
+    spec:
+      containers:
+        - name: frontend
+          image: flashsale-frontend:local
+          imagePullPolicy: Never
+          ports: [{containerPort: 80}]
+          readinessProbe: {httpGet: {path: /internal-health, port: 80}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /internal-health, port: 80}, periodSeconds: 10}
+          resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 500m, memory: 256Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: frontend, namespace: flashsale, labels: {flashsale.dev/stage: application}}
+spec: {selector: {app: frontend}, ports: [{name: http, port: 80, targetPort: 80}]}
