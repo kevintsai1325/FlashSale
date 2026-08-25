@@ -55,6 +55,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # 暫時：印出 GitHub 實際送出的 OIDC claim，用來對信任政策的 sub。確認後移除。
+      - name: Show OIDC claims
+        run: |
+          set -euo pipefail
+          token=$(curl -sH "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN"             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')
+          python3 -c "
+          import base64, json, sys
+          payload = sys.argv[1].split('.')[1]
+          payload += '=' * (-len(payload) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(payload))
+          print(json.dumps({k: claims.get(k) for k in
+                ['sub','aud','repository','ref','event_name','workflow_ref','repository_owner']}, indent=2))
+          " "$token"
       # OIDC 換臨時憑證，不存 access key；EC2 也不開任何 inbound port。
       - uses: aws-actions/configure-aws-credentials@v4
         with:
