@@ -44,3 +44,16 @@ patches:
       - op: replace
         path: /spec/ports/1/port
         value: 443
+
+  # 單節點、每個 Deployment 只有 1 個 replica。預設 RollingUpdate 會先起新 Pod 才殺舊的，
+  # 光 backend 就 request 1Gi，t3.medium 撐不住這個 surge，新 Pod 排不進去、舊的收不掉。
+  # 先殺後起：更新期間會短暫斷線，單節點本來就沒有可用性可保。
+  - target: {kind: Deployment}
+    patch: |
+      - op: add
+        path: /spec/strategy
+        value:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
