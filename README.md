@@ -160,6 +160,7 @@ Demo的展示流程(3~5 分鐘)在 [Demo 腳本](docs/portfolio/demo-script.md)�
 | [壓測工具](load-tests/benchmark/README.md) | 產生上述數字的隔離 benchmark harness |
 | [k6 端到端腳本](load-tests/README.md) | 走完整 Nginx 路徑的壓力測試腳本 |
 | [k3s 單節點基準](docs/portfolio/k3s-baseline.md) | Rancher Desktop 可重現操作、目前證據邊界與單機限制 |
+| [AWS EC2 k3s 部署](docs/portfolio/aws-ec2-k3s.md) | 單台 EC2 上的 k3s 實際執行結果、OIDC/SSM 的 CD 管線與已知限制 |
 
 ## 詳細設定
 
