@@ -122,7 +122,9 @@ foreach ($name in @('backend', 'frontend', 'nginx')) { Wait-ForRollout "deployme
 
 foreach ($name in @('backend', 'frontend', 'nginx')) {
     $podJson = (Invoke-KubectlChecked -Arguments @('--context', 'rancher-desktop', '-n', $namespace, 'get', 'pods', '-l', "app=$name", '-o', 'json') -Operation "reading $name image identity" | Out-String) | ConvertFrom-Json
-    $pods = @($podJson.items)
+    # rollout status 回來時，被取代的舊 Pod 可能還在 Terminating。它已經標記刪除，
+    # 不算在「這次 rollout 的結果」裡，否則這個檢查會隨機失敗。
+    $pods = @($podJson.items | Where-Object { $null -eq $_.metadata.PSObject.Properties['deletionTimestamp'] })
     if ($pods.Count -ne 1) { throw "Expected exactly one $name Pod after rollout, got $($pods.Count)." }
     $container = $pods[0].spec.containers[0]
     $status = $pods[0].status.containerStatuses[0]
