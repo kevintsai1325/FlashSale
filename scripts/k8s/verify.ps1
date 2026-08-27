@@ -17,8 +17,23 @@ function Invoke-BaselineKubectl {
 function Invoke-InsecureHttpsGet {
     param([string]$Uri)
     Add-Type -AssemblyName System.Net.Http
+    # 不能把 PowerShell scriptblock 當成憑證驗證 callback：.NET 在背景執行緒上呼叫它，
+    # 那個執行緒沒有 Runspace，scriptblock 執行不了，握手直接失敗（Windows PowerShell 5.1）。
+    # 改用編譯過的靜態方法，並掛在 ServicePointManager 上讓 HttpClientHandler 沿用。
+    if (-not ('FlashSaleBaselineCertTrust' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
+public static class FlashSaleBaselineCertTrust {
+    public static bool TrustAll(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors errors) { return true; }
+}
+'@
+    }
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = [System.Delegate]::CreateDelegate(
+        [System.Net.Security.RemoteCertificateValidationCallback],
+        [FlashSaleBaselineCertTrust].GetMethod('TrustAll'))
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
     $handler = New-Object System.Net.Http.HttpClientHandler
-    $handler.ServerCertificateCustomValidationCallback = { param($message, $certificate, $chain, $errors) return $true }
     $client = New-Object System.Net.Http.HttpClient($handler)
     $client.Timeout = [TimeSpan]::FromSeconds(10)
     try {
@@ -41,22 +56,28 @@ foreach ($name in @('mailpit', 'zipkin', 'backend', 'frontend', 'nginx')) {
 $backendReady = (Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'get', 'deployment', 'backend', '-o', 'jsonpath={.status.readyReplicas}') -Operation 'checking Backend readiness' | Out-String).Trim()
 if ($backendReady -ne '1') { throw "Expected one ready Backend Pod, got $backendReady" }
 
-$appPodStates = @(Invoke-BaselineKubectl -Arguments @(
-    '-n', $namespace, 'get', 'pods', '-l', 'app', '-o',
-    'jsonpath={range .items[*]}{.metadata.name}{","}{.status.phase}{","}{range .status.conditions[?(@.type=="Ready")]}{.status}{end}{"\n"}{end}'
-) -Operation 'checking application Pod states' | ForEach-Object { $_.ToString().Trim() } | Where-Object { -not [String]::IsNullOrWhiteSpace($_) })
-if ($appPodStates.Count -ne 8) { throw "Expected eight application Pods, got $($appPodStates.Count)" }
-$unexpectedPodStates = @($appPodStates | Where-Object {
-    $fields = $_.Split([char]',')
-    ($fields.Count -ne 3) -or [String]::IsNullOrWhiteSpace($fields[0]) -or $fields[1] -ne 'Running' -or $fields[2] -ne 'True'
-})
+# 用 -o json 而不是 jsonpath：jsonpath 需要內嵌雙引號（{","}、@.type=="Ready"），
+# PowerShell 把參數交給原生 exe 時會把引號吃掉，kubectl 收到 {,} 直接拒絕解析。
+$appPodsJson = (Invoke-BaselineKubectl -Arguments @(
+    '-n', $namespace, 'get', 'pods', '-l', 'app', '-o', 'json'
+) -Operation 'checking application Pod states' | Out-String) | ConvertFrom-Json
+$appPods = @($appPodsJson.items)
+if ($appPods.Count -ne 8) { throw "Expected eight application Pods, got $($appPods.Count)" }
+$unexpectedPodStates = @($appPods | Where-Object {
+    $conditions = if ($_.status.PSObject.Properties['conditions']) { @($_.status.conditions) } else { @() }
+    $ready = @($conditions | Where-Object { $_.type -eq 'Ready' })
+    ($_.status.phase -ne 'Running') -or ($ready.Count -ne 1) -or ([string]$ready[0].status -ne 'True')
+} | ForEach-Object { "$($_.metadata.name),$($_.status.phase)" })
 if ($unexpectedPodStates.Count -ne 0) { throw "Expected all eight application Pods to be Running and Ready; unexpected states: $($unexpectedPodStates -join ', ')" }
 
-$restartCounts = @(Invoke-BaselineKubectl -Arguments @(
-    '-n', $namespace, 'get', 'pods', '-o',
-    'jsonpath={range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}'
-) -Operation 'checking container restart counts' | ForEach-Object { $_.ToString().Trim() } | Where-Object { -not [String]::IsNullOrWhiteSpace($_) } | ForEach-Object { [int]$_ })
-$restarts = if ($restartCounts.Count -eq 0) { 0 } else { [int]($restartCounts | Measure-Object -Sum).Sum }
+$allPodsJson = (Invoke-BaselineKubectl -Arguments @(
+    '-n', $namespace, 'get', 'pods', '-o', 'json'
+) -Operation 'checking container restart counts' | Out-String) | ConvertFrom-Json
+$restarts = 0
+foreach ($pod in @($allPodsJson.items)) {
+    if (-not $pod.status.PSObject.Properties['containerStatuses']) { continue }
+    foreach ($containerStatus in @($pod.status.containerStatuses)) { $restarts += [int]$containerStatus.restartCount }
+}
 if ($restarts -ne 0) { throw "Expected zero container restarts, got $restarts" }
 
 $pvcCount = @(Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'get', 'pvc', '--no-headers') -Operation 'checking persistent volume claims').Count

@@ -189,14 +189,20 @@ if (($Arguments -join ' ') -like '--context rancher-desktop -n flashsale get dep
     exit 0
 }
 if (($Arguments.Count -ge 9) -and (($Arguments[0..8] -join ' ') -eq '--context rancher-desktop -n flashsale get pods -l app -o')) {
-    if ($mode -eq 'wrong-pod-count') { 1..7 | ForEach-Object { "pod-$_,Running,True" }; exit 0 }
-    if ($mode -eq 'pod-not-ready') { 1..7 | ForEach-Object { "pod-$_,Running,True" }; 'pod-8,Pending,False'; exit 0 }
-    1..8 | ForEach-Object { "pod-$_,Running,True" }; exit 0
+    function New-PodItem($name, $phase, $ready) {
+        @{ metadata = @{ name = $name }; status = @{ phase = $phase; conditions = @(@{ type = 'Ready'; status = $ready }) } }
+    }
+    if ($mode -eq 'wrong-pod-count') { $items = @(1..7 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
+    elseif ($mode -eq 'pod-not-ready') { $items = @(1..7 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) + @(New-PodItem 'pod-8' 'Pending' 'False') }
+    else { $items = @(1..8 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
+    @{ items = $items } | ConvertTo-Json -Depth 8 -Compress
+    exit 0
 }
 if (($Arguments.Count -ge 7) -and (($Arguments[0..6] -join ' ') -eq '--context rancher-desktop -n flashsale get pods -o')) {
-    if ($mode -eq 'restart') { '1' }
-    elseif ($mode -eq 'multiple-restarts') { '1'; '2'; '3' }
-    else { '0' }
+    if ($mode -eq 'restart') { $counts = @(1) }
+    elseif ($mode -eq 'multiple-restarts') { $counts = @(1, 2, 3) }
+    else { $counts = @(0) }
+    @{ items = @($counts | ForEach-Object { @{ status = @{ containerStatuses = @(@{ restartCount = $_ }) } } }) } | ConvertTo-Json -Depth 8 -Compress
     exit 0
 }
 Write-Error ('Unexpected kubectl invocation: ' + ($Arguments -join ' ')); exit 1
