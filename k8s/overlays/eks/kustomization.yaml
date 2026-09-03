@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# EKS 跟 EC2 k3s 的差別只有存放區：其餘（從 registry 拉、Service 80/443、健康探測）
+# aws overlay 已經處理掉了，所以直接疊在它上面。
+resources:
+  - ../aws
+
+# EBS 的掛載點自帶 lost+found，initdb 拒絕在非空目錄初始化。
+# k3s 的 local-path 給的是空目錄，所以 EC2 那套不會踩到，不能把這個 patch 移進 base。
+patches:
+  - target: {kind: StatefulSet, name: postgres}
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
