@@ -57,3 +57,11 @@ patches:
           rollingUpdate:
             maxSurge: 0
             maxUnavailable: 1
+
+  # 上面把 nginx Service 的 port 換成 80/443，但 base 的健康探測還指著 nginx:8080。
+  # ClusterIP 上沒有 8080，封包被丟掉而不是 RST，dashboard 上就顯示「逾時」。
+  - target: {kind: ConfigMap, name: flashsale-config}
+    patch: |
+      - op: replace
+        path: /data/APP_HEALTH_NGINX_URL
+        value: http://nginx/internal-health
