@@ -114,8 +114,9 @@ spec:
             - {name: RABBITMQ_DEFAULT_PASS, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: SPRING_RABBITMQ_PASSWORD}}}
           ports: [{containerPort: 5672}, {containerPort: 15672}]
           startupProbe: {exec: {command: [rabbitmq-diagnostics, -q, ping]}, failureThreshold: 40, periodSeconds: 5, timeoutSeconds: 5}
-          readinessProbe: {exec: {command: [rabbitmq-diagnostics, -q, ping]}, initialDelaySeconds: 10, periodSeconds: 5}
-          livenessProbe: {exec: {command: [rabbitmq-diagnostics, -q, ping]}, initialDelaySeconds: 30, periodSeconds: 10}
+          # ping 要起一個 Erlang node 去連本地節點，不是輕量檢查，預設 1s timeout 會在節點忙時誤判。
+          readinessProbe: {exec: {command: [rabbitmq-diagnostics, -q, ping]}, initialDelaySeconds: 10, periodSeconds: 10, timeoutSeconds: 5}
+          livenessProbe: {exec: {command: [rabbitmq-diagnostics, -q, ping]}, initialDelaySeconds: 30, periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 5}
           resources: {requests: {cpu: 250m, memory: 512Mi}, limits: {cpu: "2", memory: 2Gi}}
           volumeMounts: [{name: data, mountPath: /var/lib/rabbitmq}]
   volumeClaimTemplates:
