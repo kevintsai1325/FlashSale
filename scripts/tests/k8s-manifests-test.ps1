@@ -145,4 +145,13 @@ $backendSecretRefs = @($backend.spec.template.spec.containers[0].env | ForEach-O
 Assert-True (($backendSecretRefs.Count -eq 4) -and (@($backendSecretRefs | Where-Object { $_ -ne 'flashsale-secrets' }).Count -eq 0)) 'Backend must source all four sensitive values from flashsale-secrets.'
 Assert-True ($nginx.spec.template.spec.volumes[0].secret.secretName -eq 'flashsale-local-tls') 'Nginx must mount flashsale-local-tls.'
 
-Write-Host 'PASS: Kubernetes rendered-resource contract (21 resources, exact stages, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, and local images).'
+# Backend is the workload that scales horizontally, so its update behaviour must be declared
+# rather than inherited. The Kubernetes default of 25% maxUnavailable would take a replica out
+# of service during every rollout, which is exactly what the scale-out is meant to prevent.
+$backendStrategy = Get-PropertyValue $backend.spec 'strategy'
+Assert-True ((Get-PropertyValue $backendStrategy 'type') -eq 'RollingUpdate') 'Backend must declare an explicit RollingUpdate strategy.'
+$backendRollingUpdate = Get-PropertyValue $backendStrategy 'rollingUpdate'
+Assert-True ([string](Get-PropertyValue $backendRollingUpdate 'maxUnavailable') -eq '0') 'Backend rolling update must keep every existing replica available (maxUnavailable 0).'
+Assert-True ([string](Get-PropertyValue $backendRollingUpdate 'maxSurge') -eq '1') 'Backend rolling update must add at most one surge Pod at a time.'
+
+Write-Host 'PASS: Kubernetes rendered-resource contract (21 resources, exact stages, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, and backend rollout strategy).'

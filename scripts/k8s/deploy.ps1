@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -121,13 +121,18 @@ foreach ($name in @('backend', 'frontend', 'nginx')) {
 foreach ($name in @('backend', 'frontend', 'nginx')) { Wait-ForRollout "deployment/$name" }
 
 foreach ($name in @('backend', 'frontend', 'nginx')) {
+    # 期望值取自 Deployment 宣告的副本數，不寫死成 1。這個檢查的目的是證明「跑起來的是本機建置的
+    # 映像」，不是把工作負載釘在單一 Pod 上；水平擴展本來就是跑在 Kubernetes 上的理由。
+    $expected = [int](Invoke-KubectlChecked -Arguments @('--context', 'rancher-desktop', '-n', $namespace, 'get', 'deployment', $name, '-o', 'jsonpath={.spec.replicas}') -Operation "reading the desired replica count for $name" | Out-String).Trim()
     $podJson = (Invoke-KubectlChecked -Arguments @('--context', 'rancher-desktop', '-n', $namespace, 'get', 'pods', '-l', "app=$name", '-o', 'json') -Operation "reading $name image identity" | Out-String) | ConvertFrom-Json
     # rollout status 回來時，被取代的舊 Pod 可能還在 Terminating。它已經標記刪除，
     # 不算在「這次 rollout 的結果」裡，否則這個檢查會隨機失敗。
     $pods = @($podJson.items | Where-Object { $null -eq $_.metadata.PSObject.Properties['deletionTimestamp'] })
-    if ($pods.Count -ne 1) { throw "Expected exactly one $name Pod after rollout, got $($pods.Count)." }
-    $container = $pods[0].spec.containers[0]
-    $status = $pods[0].status.containerStatuses[0]
-    if ($container.image -ne "flashsale-$name`:local" -or [String]::IsNullOrWhiteSpace([string]$status.imageID)) { throw "$name did not report the expected local image and a resolved image ID." }
-    Write-Host "Activated $name image ID: $($status.imageID)"
+    if ($pods.Count -ne $expected) { throw "Expected $expected $name Pod(s) after rollout, got $($pods.Count)." }
+    foreach ($pod in $pods) {
+        $container = $pod.spec.containers[0]
+        $status = $pod.status.containerStatuses[0]
+        if ($container.image -ne "flashsale-$name`:local" -or [String]::IsNullOrWhiteSpace([string]$status.imageID)) { throw "$name Pod $($pod.metadata.name) did not report the expected local image and a resolved image ID." }
+        Write-Host "Activated $name Pod $($pod.metadata.name) image ID: $($status.imageID)"
+    }
 }
