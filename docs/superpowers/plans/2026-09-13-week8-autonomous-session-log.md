@@ -189,6 +189,95 @@ if ($appPods.Count -ne 8) { throw "Expected eight application Pods, got $($appPo
 
 這比原本的寫法更好：它驗證的是「跑起來的與宣告的一致」，而不是「剛好是八個」。
 
+### Q10：`load-tests/purchase-flow.js` 自 API 變更後就一直是壞的
+
+首次執行端到端購買驗證時，30 個 VU 全部拿到 **400**，沒有任何一筆進入搶購邏輯。
+後端日誌指出真正原因是 `Required request body is missing`：`PurchaseController.purchase()`
+需要 `PurchaseCreateRequest`（`{ quantity }`）主體，但腳本送的是 `null`。
+
+`git log` 顯示這個 API 變更來自 `d0a8c12 feat: let buyers choose a purchase quantity within their limit`。
+`load-tests/benchmark/purchase-load.js` 當時有跟著改（送 `JSON.stringify({ quantity: 1 })`），
+**`load-tests/purchase-flow.js` 沒有**。
+
+最值得注意的是它為什麼沒被發現：這支腳本的檢查是
+`'purchase-request never raw 5xx': (r) => r.status < 500`。400 不是 5xx，所以這一項**通過**。
+整支端到端腳本在完全沒有執行任何搶購邏輯的情況下，看起來像是綠燈。
+
+**決策（D12）**：修正腳本送出正確的主體。修正後實測 30 買家搶 10 件，checks 160/160 全過、
+10 筆訂單、20 筆 SOLD_OUT、庫存歸零、無殘留 PENDING。
+
+**待使用者注意**：`status < 500` 這種檢查會讓 4xx 靜默通過。建議日後在關鍵路徑的檢查上
+直接斷言預期狀態碼，而不是只排除 5xx。
+
+### Q11：`maxUnavailable: 0` 不等於零中斷
+
+規格的 P1 驗收要求「滾動更新期間壓測不出現 5xx 與連線中斷」。實測**沒有通過**：
+在壓測進行中觸發 `rollout restart`，329 個請求中有 **2 個失敗（0.60%）**。
+
+**根因**：Pod 被刪除時，「從 Endpoints 移除」與「收到 SIGTERM」是兩件並行的事，沒有先後保證。
+kube-proxy 重新傳播 iptables 規則需要時間，在那之前流量仍會被導向正在關閉的 Pod。
+專案既沒有設定 Spring 的 `server.shutdown: graceful`，manifest 也沒有 `preStop` hook。
+
+**決策（D13）**：只在 manifest 層修正，加上 `preStop: sleep 5` 與
+`terminationGracePeriodSeconds: 30`，不修改應用程式設定。
+
+**理由**：preStop 直接針對「Endpoints 傳播延遲」這個根因，而且完全不需要重建映像、
+不影響 Docker Compose 環境、不需要重跑 backend 測試套件。若之後發現仍有 in-flight 請求
+被切斷，再考慮加上 Spring 的優雅關閉設定。
+
+修正後重測：530/530 checks 全過，**失敗率 0%**。此前後對照已寫入
+`docs/portfolio/data/k8s-scale-out-results.json`。
+
+### Q12：`portfolio-docs-test.ps1` 在我開始之前就是紅的（非本次造成）
+
+執行作品集文件契約測試時出現一個失敗：
+
+```
+README.md: cites a 300-VU number without carrying the ~212 effective buyers caveat
+```
+
+我沒有修改過 `README.md` 或 `portfolio-docs-test.ps1`。為了確認不是我造成的，我在
+起始 commit `86dd751` 上開了一個臨時 worktree 執行同一支測試，**同樣失敗**。
+
+**決策（D14）**：不修正，僅記錄。這牽涉到作品集對壓測數字的措辭要怎麼標註，屬於使用者對
+自己作品的表述方式，不該由我代為決定。
+
+---
+
+## P1 完成狀態與量測結果
+
+### 驗收對照
+
+| 規格的 P1 驗收項目 | 結果 |
+|---|---|
+| 所有 Pod Running 且 Ready | 通過。10 個 Pod（backend ×3 加其餘 7 個）全部 Ready |
+| 經 `https://localhost:8443` 完成完整購買流程 | 通過。30 買家搶 10 件，checks 160/160，無超賣 |
+| `replicas` 1 與 3 的壓測對照數據 | 完成，見 `k8s-scale-out-results.json` |
+| 各 Pod 的請求分配比例 | 完成，34.9% / 37.4% / 27.7% |
+| 單一 Pod 從建立到 Ready 的耗時 | 完成，10 秒 |
+| 排程重複執行的實測證據 | 完成，見 `scheduler-duplication-evidence.md` |
+| 兩套 k8s 測試通過 | 通過 |
+| 三副本下不超賣仍成立 | **服務請求路徑成立；排程路徑不成立**（見下） |
+
+### 三個推翻預設的量測結果
+
+**1. 三副本比單副本慢。** p95 從 274.97ms 變成 388.03ms（慢 41%），吞吐量持平。
+原因是這次的壓測是固定併發（100 VU、每 VU 一次迭代），不是逐步加壓到飽和；而且下游的
+Postgres 與 Redis 都只有單一實例，並未成為瓶頸。在下游沒飽和的情況下，多開副本只是讓三個
+JVM 在同一台機器上競爭 CPU 與記憶體。
+
+這不代表水平擴展沒用，而是代表**這次的壓測設計無法顯示水平擴展的價值**。要量到擴展的好處，
+需要改成「固定到達率、逐步加壓到系統飽和」的壓測，觀察吞吐上限而不是固定併發下的延遲。
+這件事已寫入結果檔的 `boundaries`。
+
+**2. Pod 只要 10 秒就 Ready，不是設計時假設的 30–60 秒。**
+這直接推翻了規格中「CPU-based HPA 對秒殺場景反應過慢」的預設。10 秒的擴容速度對持續數十秒的
+尖峰是有機會跟上的。**P3 的設計必須依這個實測數字重寫**，這正是把後期階段的計畫押後到前期
+量測之後才寫的理由。
+
+**3. kube-proxy 的分配明顯不均。** 393 個請求分配為 137 / 147 / 109，最大偏離完美均分 12.2%。
+這符合 iptables 模式「隨機選取」而非「輪詢」的行為。樣本數越小偏差越明顯。
+
 ---
 
 ## 計畫自我檢查修正的問題
@@ -204,3 +293,57 @@ if ($appPods.Count -ne 8) { throw "Expected eight application Pods, got $($appPo
    原計畫只跑 `verify.ps1`（僅健康檢查），補上走 Nginx 與 TLS 的端到端購買驗證。
 5. **結果檔格式未定義**：原本只寫「把數據寫入 JSON」，沒有給結構。補上完整 schema，
    並明訂沒量到的欄位寫 `null` 並說明原因，不得以推估值填充。
+
+---
+
+## 本次停在哪裡，以及為什麼
+
+### 已完成
+
+- Week 8 設計規格（P1–P6 路線圖）
+- P1 實作計畫，並依自我檢查修正五處錯誤
+- **P1 全部執行完畢**：k8s 腳本修正、首次實際部署、壓測對照、滾動更新修復、排程缺陷取證、文件更新
+- P2 實作計畫（分散式鎖）
+
+### 刻意停在 P2 實作之前
+
+P2 會加入新的執行期相依（Redisson），並修改 `order`、`notification`、`inventory`、`common`
+四個模組的正式程式碼。這是第一個會動到後端業務程式碼的階段。
+
+停下來的理由是**還有兩道未經你審閱的閘門**：
+
+1. **設計規格從未經你確認。** 你說「開始吧」是同意我動筆寫規格，寫完後我請你審閱，
+   但你接著就去睡了。規格裡有幾個決定（Redisson 而非 advisory lock、Flink 而非 Kafka Streams、
+   3+1 的服務切法）是你在抽象層次選的，還沒看過具體長相。
+2. **P1 的量測結果已經推翻了規格中的一個假設。** 規格寫「CPU-based HPA 對秒殺場景反應過慢」，
+   但實測 Pod 只要 10 秒就 Ready。P3 那一節需要依實測重寫。既然規格已經需要修訂，
+   在修訂前繼續往下實作並不明智。
+
+P2 的計畫已經寫好、可直接執行，只等你點頭。
+
+### 需要你決定或確認的事項
+
+| 項目 | 記錄於 | 需要你做什麼 |
+|---|---|---|
+| `application.yml` 的 Tomcat 容量被調降 | D2 | 那是實驗殘留還是有意的？我已還原並存成 patch |
+| `k3s-baseline.md` 曾寫「Moby 不是可替代引擎」 | Q3 / D6 | 當初堅持 containerd 是否有我不知道的理由？我已依實測更正 |
+| 全 repo 的 `.ps1` 中文註解編碼地雷 | Q7 / D9 | 是否要統一為所有 `.ps1` 加 BOM |
+| `rancher-desktop` distro 的 `/etc/resolv.conf` 被我修改 | Q8 / D10 | Rancher Desktop 重啟後可能被覆寫；`192.168.127.1` 為何失效未追查 |
+| `portfolio-docs-test.ps1` 紅燈（非本次造成） | Q12 / D14 | README 的 300-VU 數字要怎麼標註，屬於你對作品的表述 |
+| 設計規格與 P2 計畫 | — | 兩份都待你審閱後才進入實作 |
+
+### 本次新增的檔案
+
+```
+docs/superpowers/specs/2026-09-13-flashsale-k8s-microservices-design.md   設計規格（P1-P6）
+docs/superpowers/plans/2026-09-13-week8-p1-k8s-scale-out.md               P1 實作計畫
+docs/superpowers/plans/2026-09-13-week8-p2-distributed-lock.md            P2 實作計畫
+docs/superpowers/plans/2026-09-13-week8-autonomous-session-log.md         本檔
+docs/superpowers/plans/2026-09-13-local-tomcat-tuning.patch               你未提交改動的備份
+docs/portfolio/scheduler-duplication-evidence.md                          排程重複執行證據
+docs/portfolio/data/k8s-scale-out-results.json                            擴展量測結果
+load-tests/k8s/k6-job.yaml                                                效能量測 Job
+load-tests/k8s/k6-e2e-job.yaml                                            端到端驗證 Job
+load-tests/k8s/pod-request-counts.sh                                      每 Pod 請求分配量測
+load-tests/k8s/ensure-metrics-admin.sh                                    量測用管理員帳號
+```
