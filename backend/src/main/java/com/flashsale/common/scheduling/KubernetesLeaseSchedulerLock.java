@@ -25,6 +25,7 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
@@ -214,8 +215,7 @@ public class KubernetesLeaseSchedulerLock implements SchedulerLock {
         HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(apiBase))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body)));
-        // 409 = 別的副本在同一瞬間建立了同一筆 Lease。那就是它贏了。
-        return response.statusCode() == 201;
+        return interpret(response, 201, "create", leaseName);
     }
 
     private boolean update(String leaseName, Duration leaseTime, Instant now, JsonNode current) throws Exception {
@@ -228,8 +228,29 @@ public class KubernetesLeaseSchedulerLock implements SchedulerLock {
         HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(apiBase + leaseName))
             .header("Content-Type", "application/json")
             .PUT(HttpRequest.BodyPublishers.ofString(body)));
-        // 409 Conflict 代表 resourceVersion 已經過時 —— 別的副本搶先一步。這就是互斥發生的地方。
-        return response.statusCode() == 200;
+        return interpret(response, 200, "update", leaseName);
+    }
+
+    /**
+     * 把 HTTP 回應分成三類，而不是「成功或失敗」兩類。
+     *
+     * <p>這個區分是必要的：409 Conflict 代表**別的副本贏了這次競爭**，是正常且預期的結果；
+     * 其他非成功狀態（403 權限不足、400 格式錯誤、500 等）代表**這個鎖根本不能用**。
+     * 把兩者都當成「跳過」會讓系統安靜地什麼都不做 —— 2026-09-13 就是這樣：微秒精度的
+     * 時間格式錯誤讓每次 create 都回 400，被記成 skipped，排程連續 12 次沒有執行，
+     * 而日誌裡一行錯誤都沒有。
+     */
+    private boolean interpret(HttpResponse<String> response, int successCode, String operation, String leaseName) {
+        int status = response.statusCode();
+        if (status == successCode) {
+            return true;
+        }
+        if (status == 409) {
+            log.debug("Lease {} {} lost the race to another replica", leaseName, operation);
+            return false;
+        }
+        throw new IllegalStateException(
+            "Lease " + operation + " for " + leaseName + " failed with HTTP " + status + ": " + response.body());
     }
 
     private HttpResponse<String> send(HttpRequest.Builder builder) throws Exception {
@@ -240,7 +261,15 @@ public class KubernetesLeaseSchedulerLock implements SchedulerLock {
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
+    // Lease 的 acquireTime / renewTime 是 Kubernetes 的 MicroTime 型別，格式固定為
+    // "2006-01-02T15:04:05.000000Z07:00" —— **必須帶六位小數的微秒**。送秒精度的 ISO instant
+    // 會被 API server 以 400 拒絕：
+    //   parsing time "...Z" as "2006-01-02T15:04:05.000000Z07:00": cannot parse "Z" as ".000000"
+    // ISO_INSTANT 在小數為零時會省略整個小數部分，所以不能用。
+    private static final DateTimeFormatter MICRO_TIME =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'").withZone(ZoneOffset.UTC);
+
     private static String iso(Instant instant) {
-        return DateTimeFormatter.ISO_INSTANT.format(instant.truncatedTo(java.time.temporal.ChronoUnit.SECONDS));
+        return MICRO_TIME.format(instant);
     }
 }

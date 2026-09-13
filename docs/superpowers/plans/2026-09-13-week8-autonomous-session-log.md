@@ -572,3 +572,91 @@ using apps/v1: .spec.volumeClaimTemplates
    ClusterRole。契約測試已加上斷言保護這四點。
 
 `SchedulerLock` 重構為介面，以 `app.scheduling.lock` 切換兩種實作，預設 `redisson`。
+
+### Q20：Lease 實作的兩個 bug，其中一個的教訓比另一個重要得多
+
+部署 Lease 實作後，排程**完全沒有執行**：`EXPIRED` 訂單 0 筆、叢集裡沒有任何 Lease 物件、
+日誌一行錯誤都沒有。
+
+查 `scheduler.lock.outcome` 指標才看出端倪：12 次呼叫，**全部是 `skipped`**。
+
+#### Bug 1（表面）：MicroTime 需要微秒精度
+
+用 backend 的 ServiceAccount 直接打 API，拿到真正的錯誤：
+
+```
+parsing time "2026-09-13T10:56:47Z" as "2006-01-02T15:04:05.000000Z07:00":
+cannot parse "Z" as ".000000"        HTTP 400 BadRequest
+```
+
+Lease 的 `acquireTime` / `renewTime` 是 Kubernetes 的 `MicroTime` 型別，**必須帶六位小數**。
+我用的 `DateTimeFormatter.ISO_INSTANT` 在小數為零時會把整個小數部分省略，於是永遠是 400。
+改用 `yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'`，實測 HTTP 201。
+
+#### Bug 2（真正的問題）：把硬錯誤當成「別人贏了」
+
+原本的程式碼是：
+
+```java
+return response.statusCode() == 201;   // 非 201 一律回 false → 記為 skipped
+```
+
+`409 Conflict`（別的副本搶先）與 `400 Bad Request`（請求根本是錯的）被歸為同一類。
+結果是**系統安靜地什麼都不做，日誌乾乾淨淨，指標顯示一切「正常跳過」**。
+
+這比 Bug 1 嚴重得多。Bug 1 只要看到錯誤訊息就能在一分鐘內修好；Bug 2 讓錯誤訊息根本不存在。
+如果不是我去查指標、再用 SA 手動打 API，這個問題可以隱藏很久 —— 而且表現形式是
+「排程莫名其妙不работа」，最難查的那種。
+
+**決策（D22）**：把回應分成三類而不是兩類 —— 成功、409（正常競爭失敗）、其他（拋例外）。
+其他狀態一律 `IllegalStateException` 並帶上狀態碼與回應內容，由上層記為 `error` outcome。
+
+**通則**：在分散式協調的程式碼裡，「取不到鎖」與「鎖機制壞掉」必須是兩種可區分的結果。
+把它們合併成一個 boolean 會讓系統在故障時表現得像在正常運作。
+
+#### 一個有效的除錯手法
+
+在花時間重建映像之前，先用一個掛著相同 ServiceAccount 的 `curl` Pod 手動打 API 驗證修法。
+一輪 build + deploy 要 10 分鐘以上，這個手法把驗證縮到 10 秒，而且直接看到 API server 的
+原始錯誤訊息 —— 那是應用程式日誌不會顯示的東西。順帶也驗證了 RBAC 的 `delete` 限制確實
+生效（DELETE → HTTP 403）。
+
+### P2 Task 8 完成：對照實測的結果
+
+兩種實作在**正確性上沒有差別**（都是 30 筆訂單全部恰好處理一次），差別在故障行為與運維。
+
+三個實測得到的結論：
+
+1. **接手延遲由「租約 + 排程間隔」決定，不是由鎖的實作決定。** Redisson 量到「鎖鍵消失」
+   58.0 秒（租約 57.8 秒），Lease 量到「新副本接手」88.8 秒（租約 60 秒 + 最多 30 秒 tick）。
+   **這兩個數字量的不是同一件事** —— Lease 物件不會消失，「接手」是唯一可觀察的事件。
+   Redisson 若量同一件事也會落在 58–88 秒。想縮短就得縮租約或加密排程，換機制沒用。
+
+2. **Lease 的過期判定依賴各副本自己的時鐘**，Redisson 則完全由 Redis 單一時鐘決定。
+   在本機這種每 30 秒回跳 1.5 秒的環境，這是結構性風險（雖然 1.5/60 = 2.5% 還不足以出事）。
+   **這是維持 Redisson 為預設的主要理由。**
+
+3. **運維可見性 Lease 明顯勝出。** `kubectl get leases` 直接顯示持有者是哪個 Pod；
+   Redisson 只有 `<UUID>:<threadId>`，對應不回 Pod。這個差異在實驗中造成具體代價：
+   測 Redisson 的持有者崩潰時第一次刪錯 Pod，量到的是任務執行時間，差點得出錯誤結論。
+
+**API server 不可用那一項沒有實測**，因為單節點 k3s 上停掉 API server 等同毀掉整個叢集。
+文件中已明確標示該段是推論而非量測。
+
+---
+
+## P2 完成狀態
+
+| Task | 狀態 |
+|---|---|
+| 1. Redisson 相依 | 完成，與 Spring Boot 3.3.4 相容 |
+| 2. 重現超賣的失敗測試 | 完成，繞過鎖時紅、加鎖後綠 |
+| 3. `SchedulerLock` | 完成，已重構為介面 |
+| 4. 四個排程套用 | 完成 |
+| 5. 觀測指標 | 完成 |
+| 6. 叢集閉環驗證 | 完成：117→60、87→30、每筆恰好一次 |
+| 7. 四項故障模式 | 完成（API server 那項標示為推論） |
+| 8. K8s Lease 對照 | 完成 |
+
+測試現況：後端 177 個、k8s manifests、k8s scripts、portfolio docs 全數通過。
+叢集已切回預設的 Redisson 實作，資料已重置，`verify.ps1` 通過。
