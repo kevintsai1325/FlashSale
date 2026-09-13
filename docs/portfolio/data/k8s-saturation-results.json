@@ -572,7 +572,8 @@
     {
       "replicas": 1,
       "saturationRps": 1016.1362133037209,
-      "acceptP95Ms": 130.0327850000002
+      "acceptP95Ms": 130.0327850000002,
+      "note": "這個數字跟 replicas=3/5 的兩個不是同一種東西：3 與 5 的飽和點是「測過的速率裡最高且仍健康」的那一格，900 rps 那一格是真的測過、也是健康的。這裡的 1016.1 RPS（targetRate=600）則是「再往上量不到」——900 rps 在 replicas=1 下被分析器拒絕（droppedIterations 從未歸零，見 unachievedRates[0]），不是「測了 900 但劣化了」。細節見 downstreamPeaks[\"1\"].note。"
     },
     {
       "replicas": 3,
@@ -615,7 +616,7 @@
           "preAllocatedVUs": 300,
           "maxVUs": 1200,
           "droppedIterations": 14468,
-          "note": "controller 最終、乾淨（未與其他掃描重疊）的版本，即本檔 runs 中被排除的 saturation-r1-900"
+          "note": "controller 最終、乾淨（未與其他掃描重疊）的版本，即本檔 runs 中被排除的 saturation-r1-900。參數跟第一列的 agent 首次嘗試完全相同（300/1200），但掉的 iteration 數不同（14468 對 13526）：這是同一套「持續超載」設定下正常的執行間變異（系統早已處於不穩定佇列狀態，每次跑落點自然會有幾個百分點的抖動），不是設定或量測方式不一致。"
         }
       ],
       "lastHealthyRate": {
@@ -630,7 +631,17 @@
         },
         "hikariPending": {
           "peak": 176,
-          "avg": 79.29
+          "avg": 79.29,
+          "sustainedAboveThreshold": {
+            "threshold": 0,
+            "samples": 15,
+            "spanSeconds": 63.659,
+            "min": 131,
+            "max": 176,
+            "median": 167,
+            "startedAt": "2026-09-13T15:52:43.9366750Z",
+            "endedAt": "2026-09-13T15:53:47.5957935Z"
+          }
         },
         "pgBackends": {
           "peak": 31,
@@ -639,7 +650,7 @@
         "reservationMaxMs": {
           "peak": 0
         },
-        "interpretation": "在 900 rps 嘗試期間，hikariActive 貼著 30（連線池上限）、hikariPending 在 hold 階段中段連續 13 個取樣點（約 65 秒）維持在 130-176，是持續性的排隊，不是瞬間尖峰；reservationMaxMs 全程為 0，代表 Redis 預扣本身沒有變慢。結論：一個副本在 900 rps 下崩潰的直接機制是 Postgres 連線池（HikariCP 上限 30）被打滿、執行緒排隊等連線，而不是 Redis 或 backend 運算本身。"
+        "interpretation": "取 hikariPending > 0 為門檻，這次嘗試裡最長的連續取樣區間是 15 個樣本、跨越 63.7 秒（sustainedAboveThreshold 欄位，可直接從 downstream-saturation-r1-900.jsonl 重新算出來）：這段區間內 hikariPending 落在 131-176（中位數 167），hikariActive 同時貼著 30（連線池上限）。這是持續性的排隊，不是單一取樣點的尖峰。reservationMaxMs 全程為 0，代表 Redis 預扣本身沒有變慢。結論：一個副本在 900 rps 下崩潰的直接機制是 Postgres 連線池（HikariCP 上限 30）被打滿、執行緒排隊等連線，而不是 Redis 或 backend 運算本身。"
       },
       "conclusion": "一個 backend 副本無法撐住每秒 900 個請求；這是系統的極限，不是施壓端的極限。"
     }
@@ -655,7 +666,17 @@
       },
       "hikariPending": {
         "peak": 173,
-        "avg": 7.7
+        "avg": 7.7,
+        "sustainedAboveThreshold": {
+          "threshold": 0,
+          "samples": 5,
+          "spanSeconds": 8.69,
+          "min": 1,
+          "max": 19,
+          "median": 15,
+          "startedAt": "2026-09-13T15:51:38.6328935Z",
+          "endedAt": "2026-09-13T15:51:47.3227858Z"
+        }
       },
       "pgBackends": {
         "peak": 32,
@@ -664,7 +685,7 @@
       "reservationMaxMs": {
         "peak": 0
       },
-      "interpretation": "hold 階段後半段 hikariActive 反覆頂到 30、hikariPending 間歇出現非 0（最高 173），即使在「健康」（accept p95=130ms，低於 1000ms 門檻）的這一格，連線池已經在承受壓力；這與 900 rps 時的持續排隊是同一個瓶頸的較輕版本。"
+      "interpretation": "取 hikariPending > 0 為門檻，這一格（健康、accept p95=130ms，低於 1000ms 門檻）裡最長的連續取樣區間只有 5 個樣本、跨越 8.7 秒，數值落在 1-19（中位數 15）——遠比 900 rps 那次的15 樣本、131-176 溫和。真正達到 173 的那個峰值（見上面 hikariPending.peak）是單一取樣點的孤立尖峰，並不在這段最長連續區間內，所以不能說這一格「持續」在排隊——比較準確的說法是「hikariActive 反覆頂到 30、hikariPending 偶爾出現短暫、不連續的尖峰，但沒有形成像 900 rps那樣的持續佇列」。這是同一個瓶頸（Postgres 連線池）在健康速率下的較輕、較不穩定的前兆。"
     },
     "3": {
       "targetRate": 900,
@@ -675,7 +696,17 @@
       },
       "hikariPending": {
         "peak": 0,
-        "avg": 0
+        "avg": 0,
+        "sustainedAboveThreshold": {
+          "threshold": 0,
+          "samples": 0,
+          "spanSeconds": 0,
+          "min": 0,
+          "max": 0,
+          "median": 0,
+          "startedAt": null,
+          "endedAt": null
+        }
       },
       "pgBackends": {
         "peak": 92,
@@ -684,7 +715,7 @@
       "reservationMaxMs": {
         "peak": 0
       },
-      "interpretation": "hikariPending 全程為 0（47 個取樣點），hikariActive 在取樣到的那個副本上偶爾頂到 30，但沒有伴隨排隊，代表三個副本合計 90 條連線足以吸收 900 rps 的負載；pgBackends 峰值 92，接近 3x30，尚未逼近調高後的 300 上限。"
+      "interpretation": "hikariPending 全程為 0（47 個取樣點，sustainedAboveThreshold.samples=0），hikariActive 在取樣到的那個副本上偶爾頂到 30（avg 5.66，因為取樣器每次只打三個副本裡隨機一個），但沒有伴隨排隊，代表三個副本合計 90 條連線足以吸收 900 rps 的負載；pgBackends 峰值 92，接近 3x30，尚未逼近調高後的 300 上限。"
     },
     "5": {
       "targetRate": 900,
@@ -697,7 +728,17 @@
       },
       "hikariPending": {
         "peak": 0,
-        "avg": 0
+        "avg": 0,
+        "sustainedAboveThreshold": {
+          "threshold": 0,
+          "samples": 0,
+          "spanSeconds": 0,
+          "min": 0,
+          "max": 0,
+          "median": 0,
+          "startedAt": null,
+          "endedAt": null
+        }
       },
       "pgBackends": {
         "peak": 152,
@@ -706,11 +747,11 @@
       "reservationMaxMs": {
         "peak": 48.916413
       },
-      "interpretation": "hikariPending 全程為 0，hikariActive 峰值 30 但平均只有 3.26（5 個副本分攤，取樣器每次只打一個隨機副本，所以平均值本來就會被稀釋，不能直接讀成「大部分時間都很閒」）；pgBackends 峰值 152，非常接近 5x30=150，證實 max_connections 調到 300 是必要的、也證實 150 條這個數字本身已經是副本數再往上加就會直接撞到的天花板。reservationMaxMs 峰值僅 48.9ms，Redis/backend 本身不是瓶頸。但取樣是每 ~2 秒隨機挑一個副本，看不到「5 個副本同時全滿」的情況，也看不到兩次取樣之間可能出現又消失的短暫排隊；能下的結論是「沒有觀察到持續性排隊」，不是「連線池完全沒有壓力」。"
+      "interpretation": "hikariPending 全程為 0（47 個取樣點，sustainedAboveThreshold.samples=0），hikariActive 峰值 30 但平均只有 3.26（5 個副本分攤，取樣器每次只打一個隨機副本，所以平均值本來就會被稀釋，不能直接讀成「大部分時間都很閒」）；pgBackends 峰值 152，非常接近 5x30=150，證實 max_connections 調到 300 是必要的、也證實 150 條這個數字本身已經是副本數再往上加就會直接撞到的天花板。reservationMaxMs 峰值僅 48.9ms，Redis/backend 本身不是瓶頸。但取樣是每 ~2 秒隨機挑一個副本，看不到「5 個副本同時全滿」的情況，也看不到兩次取樣之間可能出現又消失的短暫排隊；能下的結論是「沒有觀察到持續性排隊」，不是「連線池完全沒有壓力」。"
     }
   },
   "conclusion": {
     "doesHorizontalScalingHelp": "有幫助，而且幅度很大：在同一個到達率（900）下，accept p95 從一個副本完全撐不住（droppedIterations 無法歸零、系統性排隊）變成三個副本 70.9ms、五個副本 61.0ms。P1 用封閉模型量到的「三副本比一副本更慢」是負載總量被 VU 數鎖死造成的假象，這次的開放模型測試直接推翻了那個結論。",
-    "whereTheBottleneckIs": "一個副本時，瓶頸在 Postgres 連線池（HikariCP 上限 30）：900 rps 下 hikariPending持續維持在 130-176，執行緒在等連線，不是在等 Redis 或 CPU。三、五個副本時，在測試涵蓋的速率內沒有觀察到同樣的排隊，Redis 預扣（reservationMaxMs）全程很快，所以短期內還沒有新的瓶頸浮現——但 pgBackends 峰值（五副本時 152，逼近改前的 100 上限）證明真正的長期限制在 Postgres 的 max_connections：每加一個副本就多綁 30 條連線，這條路線不能無限延伸下去，是後續把購買流程拆成獨立服務、獨立資料庫（P4/P5）的直接依據。"
+    "whereTheBottleneckIs": "一個副本時，瓶頸在 Postgres 連線池（HikariCP 上限 30）：900 rps 下 hikariPending最長連續 15 個取樣點（63.7 秒）維持在 131-176（中位數 167，見 unachievedRates[0]），執行緒在等連線，不是在等 Redis 或 CPU。三、五個副本時，在測試涵蓋的速率內沒有觀察到同樣的持續排隊（hikariPending 的 sustainedAboveThreshold 皆為 0 樣本），Redis 預扣（reservationMaxMs）全程很快，所以短期內還沒有新的瓶頸浮現——但 pgBackends 峰值（五副本時 152，逼近改前的 100 上限）證明真正的長期限制在 Postgres 的 max_connections：每加一個副本就多綁 30 條連線，這條路線不能無限延伸下去，是後續把購買流程拆成獨立服務、獨立資料庫（P4/P5）的直接依據。"
   }
 }
