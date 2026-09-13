@@ -1,0 +1,17 @@
+# backend 的自願性中斷預算。
+#
+# 「自願性」指的是節點排空、叢集升級這類由人或控制器發起的驅逐；Pod 崩潰、節點當機
+# 屬於非自願性中斷，PDB 管不到那些。
+#
+# minAvailable: 2 而不是百分比：副本數會被 HPA 在 3~8 之間調整，固定的下限比較好推理 ——
+# 任何時刻至少有兩個 Pod 在服務，單一節點排空時 kube-proxy 仍有可分配的 Endpoint。
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend
+  namespace: flashsale
+  labels: {flashsale.dev/stage: application}
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: {app: backend}

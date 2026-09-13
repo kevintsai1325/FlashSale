@@ -7,4 +7,5 @@ resources:
   - data.yaml
   - support.yaml
   - application.yaml
+  - availability.yaml
   - gateway.yaml

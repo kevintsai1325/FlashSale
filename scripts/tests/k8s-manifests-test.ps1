@@ -73,7 +73,13 @@ $loadTestResources = @($resources | Where-Object {
 })
 Assert-True ($loadTestResources.Count -eq 0) 'Base kustomization must not render load-test resources.'
 
-Assert-True ($resources.Count -eq 24) "Expected exactly 24 rendered resources, got $($resources.Count)."
+Assert-True ($resources.Count -eq 25) "Expected exactly 25 rendered resources, got $($resources.Count)."
+
+# PDB 是常態設定而不是實驗器材：自願性中斷（節點維護、叢集升級）時要保住最低可用副本數。
+$budgets = @($resources | Where-Object { $_.kind -eq 'PodDisruptionBudget' })
+Assert-True ($budgets.Count -eq 1) "Expected exactly one PodDisruptionBudget, got $($budgets.Count)."
+Assert-True ($budgets[0].metadata.name -eq 'backend') 'The PodDisruptionBudget must target backend.'
+Assert-True ((Get-OptionalProperty -InputObject $budgets[0].spec -Name 'minAvailable') -eq 2) 'backend PDB must keep at least 2 Pods available.'
 
 $secrets = @($resources | Where-Object { $_.kind -eq 'Secret' })
 Assert-True ($secrets.Count -eq 0) 'Rendered resources must not contain Secret objects or values.'
@@ -96,7 +102,7 @@ $expectedStages = @{
         'Service/rabbitmq-headless', 'Service/rabbitmq', 'StatefulSet/rabbitmq',
         'Deployment/mailpit', 'Service/mailpit', 'Deployment/zipkin', 'Service/zipkin'
     )
-    application = @('Deployment/backend', 'Service/backend', 'Deployment/frontend', 'Service/frontend', 'Deployment/nginx', 'Service/nginx')
+    application = @('Deployment/backend', 'Service/backend', 'PodDisruptionBudget/backend', 'Deployment/frontend', 'Service/frontend', 'Deployment/nginx', 'Service/nginx')
 }
 $allowedStages = @($expectedStages.Keys)
 foreach ($resource in $resources) {
@@ -205,4 +211,4 @@ Assert-True ((@($leaseRule.verbs | Sort-Object) -join ',') -eq 'create,get,updat
 Assert-True (@($resources | Where-Object { $_.kind -eq 'ClusterRole' -or $_.kind -eq 'ClusterRoleBinding' }).Count -eq 0) 'The baseline must not grant any cluster-scoped RBAC.'
 Assert-True ($backend.spec.template.spec.serviceAccountName -eq 'flashsale-backend') 'Backend must run under the flashsale-backend ServiceAccount.'
 
-Write-Host 'PASS: Kubernetes rendered-resource contract (24 resources, exact stages, minimal RBAC, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, and backend rollout strategy).'
+Write-Host 'PASS: Kubernetes rendered-resource contract (25 resources, exact stages, minimal RBAC, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, backend rollout strategy, and backend PodDisruptionBudget).'
