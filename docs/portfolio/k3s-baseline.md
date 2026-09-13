@@ -11,7 +11,7 @@
 
 | 項目 | 狀態 | 證據／說明 |
 |---|---|---|
-| 筆電 | 已知 | 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz，總記憶體 32 GB，24 邏輯核心。k6 與 k3s 共用同一台實體筆電，因此 CPU、記憶體、磁碟與網路資源會互相影響。 |
+| 筆電 | 已知 | Intel(R) Core(TM) i7-14650HX，16 核／24 邏輯核心，總記憶體 31.6 GB。k6 與 k3s 共用同一台實體筆電，因此 CPU、記憶體、磁碟與網路資源會互相影響。<br>**注意：這與 [負載特性報告](./performance-report.md) 中記錄的機器不是同一台**（那份是 i7-11800H／16 邏輯核心，於 2026-08-17 收集）。兩份文件的數字不可直接比較。 |
 | Windows | 已知的先前量測 | Microsoft Windows 11 專業版 10.0.26200；來源是既有 [Compose 壓測環境紀錄](./performance-report.md#量測環境)，不是本次 k3s 部署量測。 |
 | `kubectl` 目標 | 已確認 | active context `rancher-desktop`，client v1.36.3、server v1.36.3+k3s1，minor skew 為 0。先前記錄的 `musesaiaks`／client v1.23 已不再是現況。 |
 | Kubernetes 與容器執行環境 | 已確認 | 單節點 `mocuo`，v1.36.3+k3s1；`containerRuntimeVersion` 為 `docker://29.5.3`，即 k3s 以 `--docker` 啟動，使用 Rancher Desktop 的 moby daemon。 |
