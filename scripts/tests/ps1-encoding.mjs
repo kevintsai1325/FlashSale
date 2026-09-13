@@ -19,7 +19,11 @@ import { fileURLToPath } from 'node:url';
 export const UTF8_BOM = Uint8Array.of(0xef, 0xbb, 0xbf);
 
 const SCRIPT_EXTENSIONS = ['.ps1', '.psm1'];
-const SKIPPED_DIRECTORIES = new Set(['.git', 'node_modules', 'build', 'dist', '.gradle', '.idea', 'target']);
+// .worktrees / .claude 底下可能有同一份檔案的其他複本或使用者自己的腳本，
+// 這個檢查只針對 repository 本身追蹤的內容。
+const SKIPPED_DIRECTORIES = new Set([
+  '.git', 'node_modules', 'build', 'dist', '.gradle', '.idea', 'target', '.worktrees', '.claude',
+]);
 
 function hasBom(bytes) {
   return bytes.length >= 3 && bytes[0] === UTF8_BOM[0] && bytes[1] === UTF8_BOM[1] && bytes[2] === UTF8_BOM[2];
