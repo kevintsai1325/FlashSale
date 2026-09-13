@@ -68,13 +68,13 @@ P1 已完成的項目（`replicas: 3`、RollingUpdate 策略、preStop hook、�
 
 ### 與既有文件的衝突（本規格取代之）
 
-`docs/superpowers/specs/2026-08-21-k3s-rancher-desktop-deployment-design.md` 有兩處與現況或本規格不一致，以本規格為準：
+`docs/superpowers/specs/2026-08-21-k3s-rancher-desktop-deployment-design.md` 有三處與現況或本規格不一致，以本規格為準：
 
-1. 該文件規劃 backend `replicas: 2` 與 `requests: 256Mi/250m`；實際 manifest 為 `replicas: 1` 與 `500m/1Gi`。**採用實際 manifest 的資源配額**（256Mi 對 Spring Boot 容易 OOM），副本數由 P1 決定。
+1. 該文件規劃 backend `replicas: 2` 與 `requests: 256Mi/250m`；實際資源配額為 `requests: 500m/1Gi`、`limits: 2/2Gi`（256Mi 對 Spring Boot 容易 OOM）；副本數經 P1 實測後定為 `replicas: 3`。
 2. 該文件設計以 Postgres `pg_try_advisory_lock` 實作 `AdvisoryLockRunner` 解決排程重複執行。**本規格改用 Redisson**，理由見「分散式鎖」一節。該設計不實作。
 3. 該文件規劃 postgres 使用 Deployment 加 PVC（「單 replica 已足夠，非 StatefulSet」）；實際 manifest 中 postgres、redis、rabbitmq 三者皆為 StatefulSet 搭配 headless Service 與 `volumeClaimTemplates`（分別為 10Gi／2Gi／5Gi）。**以實際 manifest 為準**，不回退為 Deployment。
 
-上述三處差異應在 P1 完成後回頭更新 `2026-08-21` 文件，或於其開頭標註已被本規格取代，避免後續工作誤讀。
+上述差異已於 P1 收尾時處理：`2026-08-21` 文件開頭已加上「已被本規格取代」的標註，逐項列出四處差異（含排程互斥的解法）。
 
 ### 執行環境
 
@@ -117,7 +117,8 @@ Rancher Desktop 提供 kubectl v1.36.3 與 helm，容器引擎為 moby。k3s 叢
 Pod 就緒時間；若 Pod 需要 60 秒才 Ready，HPA 的設定方式會與 15 秒的情況完全不同。先寫死後期計畫
 只會產生需要重寫的文件。
 
-下一份要產出的是 P1 的實作計畫。
+已產出：P1（`2026-09-13-week8-p1-k8s-scale-out.md`，已執行完畢）與 P2
+（`2026-09-13-week8-p2-distributed-lock.md`，待執行）。P3 的計畫在 P2 完成後才寫。
 
 ## 設計
 
