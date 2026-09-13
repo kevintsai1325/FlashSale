@@ -7,7 +7,8 @@ spec:
   backoffLimit: 0
   template:
     metadata:
-      labels: {app: k6-e2e}
+      # 同 k6-job.yaml：不使用 app 標籤，避免污染 verify.ps1 的應用 Pod 計數。
+      labels: {flashsale.dev/role: load-test}
     spec:
       restartPolicy: Never
       containers:

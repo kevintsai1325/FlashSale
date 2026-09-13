@@ -7,7 +7,9 @@ spec:
   backoffLimit: 0
   template:
     metadata:
-      labels: {app: k6-purchase-flow}
+      # 刻意不使用 app 標籤：verify.ps1 以 `-l app` 選取「應用工作負載的 Pod」並比對數量，
+      # 壓測 Job 若帶上 app 標籤就會被算進去，讓驗證在壓測後變成假警報。
+      labels: {flashsale.dev/role: load-test}
     spec:
       restartPolicy: Never
       containers:
