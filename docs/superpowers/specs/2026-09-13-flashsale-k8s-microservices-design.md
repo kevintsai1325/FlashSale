@@ -329,7 +329,7 @@ Kafka 與 RabbitMQ 並存：RabbitMQ 保留既有的工作佇列用途（非同�
 |---|---|---|---|---|
 | P1 | `replicas: 1` | `replicas: 3` | 吞吐、p95、p99、各 Pod 請求分配比例 | **已完成**，見 [`k8s-scale-out-results.json`](../../portfolio/data/k8s-scale-out-results.json) |
 | P1 | 無 `preStop` | 有 `preStop` | 滾動更新期間的請求失敗率 | **已完成**：0.60% → 0% |
-| P2 | 未加鎖 | Redisson | 重複執行次數（應為 0）、庫存正確性、鎖競爭延遲 | 待做 |
+| P2 | 未加鎖 | Redisson | 重複執行次數（應為 0）、庫存正確性、鎖競爭延遲 | **已完成**，見 [分散式鎖的故障模式](../../portfolio/distributed-lock-failure-modes.md) 與 [兩種分散式鎖的對照](../../portfolio/lock-mechanism-comparison.md) |
 | P3 | `replicas` 1 / 3 / 5 | — | 吞吐上限、RPS 對 p95 的曲線、瓶頸位置 | **已完成**，見 [`k8s-saturation-results.json`](../../portfolio/data/k8s-saturation-results.json) 與 [水平擴展與自動擴縮](../../portfolio/scaling-and-autoscaling.md) |
 | P3 | 固定副本 | HPA | 擴容反應時間、尖峰期間錯誤率 | **已完成**：決策 12 秒、就緒 43 秒，但擴容動作本身觸發節點級重啟風暴（見上方 P3 驗收） |
 | P5 | 單體 | 微服務 | 端到端延遲（預期上升）、跨服務追蹤完整性 | 待做 |
@@ -405,8 +405,10 @@ P5 的結果預期同樣為負面：拆分微服務後端到端延遲必然上�
   跟得上尖峰，結果無論正負皆記錄。**通過，結果是正負參半**：CPU 確實從 60% 一路衝到
   425%，HPA 在 12 秒內下達 rescale 決策、新副本於 43 秒內就緒——**決策**跟得上 30 秒的
   爬升期。但**擴容動作本身**在單節點、CPU 有限的測試叢集上引發節點級 CPU 搶佔，5 個新
-  Pod 同時冷啟動疊加在忙碌的舊 Pod 之上，觸發全部 8 個 Pod（含未參與擴容的舊 Pod）的
-  liveness 重啟風暴，8 個 Pod 於 16:42:08–16:42:19 同時 NotReady，構成一次真實但短暫的
+  Pod 同時冷啟動疊加在忙碌的舊 Pod 之上，觸發至少 7 個 Pod（含 3 個未參與擴容、原本健康的
+  舊 Pod）確認的 liveness 重啟——第 8 個 Pod（`qj9cn`）只查得到探測失敗事件，重啟與否未
+  確認，且其中 4 次確認重啟的證據隨 Pod 在後續 scale-down 中被刪除而消失。可直接觀察、
+  不受此影響的是：8 個 Pod 於 16:42:08–16:42:19 同時 NotReady，構成一次真實但短暫的
   服務中斷。這次量測本身也未通過 `analyze-saturation.mjs` 的資料品質關卡
   （`droppedIterations>0`），因此絕對延遲數字（p95 2972.9ms）只能當方向性證據，不是乾淨
   的容量數字。
