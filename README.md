@@ -162,6 +162,7 @@ Demo的展示流程(3~5 分鐘)在 [Demo 腳本](docs/portfolio/demo-script.md)�
 | [分散式鎖的故障模式](docs/portfolio/distributed-lock-failure-modes.md) | 排程重複執行造成超賣的證據、修復後驗證,以及四種故障模式的實測 |
 | [兩種分散式鎖的對照](docs/portfolio/lock-mechanism-comparison.md) | Redisson 與 Kubernetes Lease 在正確性、故障行為與運維上的差異 |
 | [量測環境的時鐘準確度](docs/portfolio/wsl2-clock-accuracy.md) | WSL2 VM 時鐘走快約 3.5%:診斷過程、緩解方式,以及哪些數字受影響 |
+| [水平擴展與自動擴縮](docs/portfolio/scaling-and-autoscaling.md) | 飽和式壓測的方法、replicas 1/3/5 的吞吐曲線、瓶頸指認、HPA 與預先擴容的對照 |
 | [k3s 單節點基準](docs/portfolio/k3s-baseline.md) | Rancher Desktop 可重現操作、目前證據邊界與單機限制 |
 | [AWS EC2 k3s 部署](docs/portfolio/aws-ec2-k3s.md) | 單台 EC2 上的 k3s 實際執行結果、OIDC/SSM 的 CD 管線與已知限制 |
 

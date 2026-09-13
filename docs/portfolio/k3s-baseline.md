@@ -18,6 +18,7 @@
 | 本機 images | 已完成 | `flashsale-backend:local`(621MB)、`flashsale-frontend:local`(74.8MB)、`flashsale-nginx:local`(85.5MB) 皆已建置，並由 `deploy.ps1` 逐一驗證其 resolved `imageID`。 |
 | workloads、路由與 PVC 持久化 | 已完成 | `flashsale` namespace 全部 10 個 Pod（backend ×3 加其餘 7 個）Running 且 Ready；3 個 PVC（10Gi／5Gi／2Gi）Bound 於 `local-path`；`verify.ps1` 通過；經 `https://localhost:8443` 走完整購買流程，30 買家搶 10 件，checks 160/160 全過、無超賣。 |
 | 水平擴展 | 已完成 | backend `replicas` 1 與 3 的壓測對照、kube-proxy 的實際負載分配、Pod 就緒耗時與滾動更新中斷率，見 [scale-out 結果](./data/k8s-scale-out-results.json)。 |
+| 飽和式壓測、瓶頸指認與自動擴縮 | 已完成 | `ramping-arrival-rate` 開放模型重新量測 `replicas` 1/3/5 的 RPS 對 p95 曲線、Postgres 連線池瓶頸、HPA 反應延遲與預先擴容對照、PDB 驗證，見 [水平擴展與自動擴縮](./scaling-and-autoscaling.md) 與原始資料 [`k8s-saturation-results.json`](./data/k8s-saturation-results.json)。 |
 | 多副本排程任務 | **已驗證且發現缺陷** | 三副本下 4 個無互斥保護的 `@Scheduled` 排程會重複執行，`PaymentTimeoutScheduler` 的重複回補直接造成庫存超賣。證據見 [排程重複執行證據](./scheduler-duplication-evidence.md)。 |
 | 分散式鎖 | **已修復並驗證** | 四個排程改由 `SchedulerLock` 互斥後，30 筆訂單全部恰好處理一次，庫存回到正確值。四種故障模式的實測見 [分散式鎖的故障模式](./distributed-lock-failure-modes.md)，Redisson 與 Kubernetes Lease 的對照見 [兩種分散式鎖的對照](./lock-mechanism-comparison.md)。 |
 | 量測環境的時鐘 | **已診斷，部分緩解** | WSL2 VM 的時鐘比實際時間快約 3.5%（原為 4.5%），因此**所有在容器內量到的時間長度都高估約 3.5%**；從 Windows 端計時的數字不受影響。診斷、修法與影響範圍見 [量測環境的時鐘準確度](./wsl2-clock-accuracy.md)。 |

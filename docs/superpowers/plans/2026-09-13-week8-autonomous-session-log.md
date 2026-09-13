@@ -835,4 +835,110 @@ BuildKit 會去找一個這個環境不存在的 credential helper —— 即使
 Tomcat 用預設的 200 執行緒 / accept-count 100，100 VU 完全沒有問題 —— 這與「原本的 400/300
 是在解決一個不在 Tomcat 的問題」一致。
 
+---
+
+# 第三段：P3 壓測方法論與自動擴縮（2026-09-13）
+
+## D28：改用開放模型重跑，直接推翻 P1「三副本更慢」的表面結論
+
+P1 的 `purchase-flow.js` 用 `per-vu-iterations`（封閉模型）：負載總量由 VU 數決定，與副本數
+無關，副本再多只是多幾個 JVM 搶同一台機器的 CPU。P3 改用 k6 `ramping-arrival-rate`
+（開放模型，`load-tests/k8s/saturation.js`），到達率外生設定、系統跟不上就排隊。同一到達率
+（900）下重新量測：一個副本完全撐不住、三副本 accept p95=70.9ms、五副本 61.0ms——直接推翻
+「水平擴展沒用」，證實那是量測方式造成的假象。完整曲線與結論見
+[水平擴展與自動擴縮](../../portfolio/scaling-and-autoscaling.md)。
+
+## Q25：`replicas=1`、`targetRate=900` 無論怎麼加碼 VU 都打不進去
+
+第一次嘗試（預設 300/1200）掉了 13526 個 iteration。依序加碼到 800/3000（掉 7135）、
+1500/6000（掉 1461）——持續收斂但從未歸零。診斷：開放模型下所需 VU 數約為
+「到達率 × 延遲」，延遲一旦發散，所需 VU 數也跟著發散，沒有任何有限的 `-MaxVUs` 能讓
+`droppedIterations` 變成 0。**決策**：不繼續加碼，改記為 `unachievedRates`（系統本身撐不住
+900 rps 是結論本身，不是施壓端不夠力），不強行湊進曲線。下游證據佐證：900 rps 這次嘗試裡
+`hikariPending` 連續 15 個樣本（63.7 秒）維持在 131–176，Postgres 連線池被打滿。
+
+## Q26：五副本連種資料都種不進去 —— Postgres `max_connections` 撞牆
+
+`replicas=5` 的壓測在種資料階段就先失敗：`FATAL: sorry, too many clients already`。算術：
+每副本 HikariCP 上限 30 條，五副本需要 150 條同時連線，而 Postgres 預設 `max_connections`
+只有 100——這是一個在任何 CPU 或吞吐瓶頸之前就先出現的硬天花板。**決策**：把
+`k8s/base/data.yaml` 的 `max_connections` 調高到 300 讓量測可以進行，並在 manifest 註解與
+`k8s-saturation-results.json` 的 `environment.postgresMaxConnectionsNote` 裡明講「真正的解法
+是 P4/P5 拆分服務與資料庫，不是無限調高這個數字」。**代價**：本次量到的整條曲線都是在調高後
+的設定下量出來的，跟任何在預設 100 下量到的舊數字不可比較，已寫進作品集文件的誠實聲明一節。
+
+## D29：PDB 用固定 `minAvailable: 2`，不用百分比
+
+副本數會被 HPA 在 3~8 之間調整，固定下限比百分比好推理——任何時刻至少兩個 Pod 在服務，
+單一節點排空時 kube-proxy 仍有可分配的 Endpoint。以完全相同的驅逐請求對照：2 副本（無餘裕）
+被 `TooManyRequests` 拒絕，3 副本（一個餘裕）成功（`"status":"Success","code":201`）。
+
+## Q27：Git Bash 把 `/api/v1/...` 開頭的路徑當成 Windows 路徑轉換
+
+驗證 PDB 時，`kubectl create --raw "/api/v1/namespaces/..."`被 MSYS 路徑轉換改寫成
+`.../Program Files/Git/api/v1/...`，回應變成一個跟 PDB 無關的假 404。**解法**：對這幾個
+`kubectl create --raw` 呼叫設定 `MSYS_NO_PATHCONV=1`，並把 eviction 的 JSON body 寫到
+Windows 路徑（避開 `/tmp`，那個路徑在關掉轉換後也會被重新解讀）。
+
+## Q28：HPA 的判斷沒有跟不上，但擴容動作本身觸發了一次真實的服務中斷
+
+CPU-based HPA（60% 閾值、`scaleUp.stabilizationWindowSeconds: 0`）在負載開始後 12 秒內就
+下達 rescale 決策（3→6→8），新副本 43 秒內就緒——決策速度跟得上 30 秒的 ramp。但完整時間軸
+顯示：5 個新 Pod 同時冷啟動（JVM class loading／JIT／Spring context 初始化本身是重 CPU 階段）
+疊加在已經忙碌的舊 Pod 之上，把單節點的 CPU 需求推到連 kubelet 執行 liveness probe 都排不到
+時間片（`kubectl top node` 量到 78%），觸發全部 8 個 Pod（含 3 個完全沒參與擴容、原本健康
+4 分鐘以上的舊 Pod）因 liveness 逾時被 kubelet 殺掉重啟，8 個 Pod 在 16:42:08–16:42:19
+同時 NotReady。**結論記錄為正負參半，不是「HPA 有效」或「HPA 無效」的單一答案**：判斷快，
+動作在單節點資源受限環境下是自傷的。與「活動前預先擴容到 8」對照：同一到達率 900，HPA 組
+p95=2972.9ms／963 個 failedRequests，預先擴容組 p95=434.2ms／0 個 failedRequests（兩者皆
+未通過 `analyze-saturation.mjs` 的資料品質關卡，只能當方向性證據）。**建議**：本專案情境下
+優先依活動時間預先擴容，不依賴 HPA 現場反應。
+
+## Q29：backend 重啟數字一開始被低估——Pod 被刪除後 `restartCount` 跟著消失
+
+第一次回報「HPA 實驗只造成 backend 3 次重啟」，review 後追查 `kubectl get events` 發現至少
+7 個不同的 backend Pod 曾被 liveness 探測殺掉重啟。差異原因：查詢重啟計數的時間點，已經在
+還原環境的 `kubectl scale --replicas=3` 把 5 個 Pod 刪掉**之後**——`restartCount` 是 Pod
+物件自己的欄位，Pod 一旦被刪除，這個數字就跟著消失，不會累加到任何地方。**教訓**：量測「這次
+實驗造成了多少次重啟」這類數字時，必須在清理環境（尤其是 scale-down、刪 Pod）**之前**先
+用 `kubectl get events` 把證據留下來，不能事後用當下的 `restartCount` 反推。不影響「另外
+29 次重啟跟本實驗無關（zipkin OOM crash-loop + 3 小時前的舊重啟）」這個獨立驗證過的結論。
+
+## Q30：`watch-scaling.ps1` 自己的取樣頻率追不上 HPA 的反應速度
+
+這支工具的取樣週期（實測 2.3–3.6 秒）跟 HPA 的實際反應時間是同一個數量級，回答不了「四個
+時間點精確落在哪裡」，只能告訴你「狀態已經變了」。**決策**：四個時間點改用 Kubernetes 自己
+記錄的事件（`kubectl get events` 的 `SuccessfulRescale`、Pod 的
+`status.conditions[Ready].lastTransitionTime`）與 k6 摘要 JSON 的 `startedAt` 重建，
+`timeline.csv` 只用來確認「有沒有發生」與畫大致趨勢，這個限制也寫進了腳本自己的
+`.DESCRIPTION`。順帶把兩次 `kubectl get`（Deployment、HPA）合併成一次，取樣週期改善到約
+2.3 秒；並把 stdout/stderr 分開接收、每個要寫進 CSV 的欄位都驗證是合法整數，避免 kubectl 的
+錯誤文字（例如 HPA 不存在時的 `NotFound`）混進結果檔。
+
+## Q31：Zipkin 在飽和壓測下重啟 24 次——觀測工具本身也要納入容量規劃
+
+飽和壓測期間 Zipkin 累計重啟 24 次：一個 `512Mi` 記憶體上限的記憶體內追蹤後端，在 100% 取樣
+率加上這個量級的請求速率下被自己要保存的 span 資料撐爆記憶體，OOM crash-loop。不影響任何
+延遲或吞吐數字（Zipkin 不在請求路徑上），但值得記下來作為教訓：**用來觀測系統的工具，自己
+也需要被納入容量規劃**，尤其是全量取樣加高流量的組合。這個問題本身沒有在 P3 範圍內修復。
+
+---
+
+## P3 完成狀態
+
+| 項目 | 狀態 |
+|---|---|
+| 1. `ramping-arrival-rate` 飽和式壓測（分端點標記、預先產生 token） | 完成 |
+| 2. `replicas` 1/3/5 的 RPS 對 p95 曲線與三個飽和點 | 完成（`replicas=1`、`targetRate=900` 記為 `unachievedRates`，見 Q25） |
+| 3. 下游瓶頸指認（Hikari／Postgres／Redis） | 完成：一副本瓶頸在 Postgres 連線池，三、五副本測試範圍內未觀察到同樣排隊，但 `pgBackends` 隨副本數線性成長，是 P4/P5 拆分服務與資料庫的動機 |
+| 4. HPA 反應延遲（四個時間點）與跟不跟得上的結論 | 完成（正負參半，見 Q28） |
+| 5. HPA 與預先擴容對照、建議策略 | 完成 |
+| 6. PodDisruptionBudget 驗證 | 完成（見 D29） |
+| 7. 作品集文件、索引更新、規格驗收標記 | 完成：[水平擴展與自動擴縮](../../portfolio/scaling-and-autoscaling.md) |
+
+測試現況：`ps1-encoding.mjs`／其單元測試、`analyze-saturation.test.mjs`、
+`verify-results.test.mjs`、`k8s-manifests-test.ps1`、`k8s-scripts-test.ps1`、
+`portfolio-docs-test.ps1`、`verify.ps1`、backend `./gradlew test` 全數通過；`verify.ps1`
+顯示 10 個 Pod Running/Ready、0 重啟。
+
 `run-from-windows.ps1` 也驗證了會在結束後刪除 NodePort Service（`service "backend-loadtest" deleted`）。

@@ -320,3 +320,74 @@ the same total spread over a few seconds goes through cleanly. So:
 
 This is the same relay that made the Compose benchmark refuse connections; the full measurement
 is in the [performance report](../docs/portfolio/performance-report.md#windows-到-wsl2-的埠轉發層實際容量).
+
+## Saturation testing: finding the throughput ceiling, not just one latency number
+
+`purchase-flow.js` above is a **closed-model** script (`per-vu-iterations`): total load is
+fixed by VU count, independent of how many backend replicas exist. That is fine for a
+correctness check, but it cannot answer "does horizontal scaling help" — more replicas just
+means more JVMs competing for the same fixed amount of traffic, which is why an earlier
+measurement with this model showed 3 replicas as *slower* than 1 (a measurement artifact, not
+evidence against scaling; see [scaling and autoscaling](../docs/portfolio/scaling-and-autoscaling.md#1-為什麼要先修壓測而不是直接信任-p1-的結論)).
+
+`load-tests/k8s/saturation.js` uses k6's **open-model** `ramping-arrival-rate` executor
+instead: the arrival rate is set externally and ramped up in stages; if the system can't keep
+up, latency rises and iterations get dropped instead of the offered load silently shrinking.
+This is what actually measures "where does the throughput ceiling sit, and at what RPS does
+p95 start to degrade."
+
+### Running a sweep: `run-saturation.ps1`
+
+```powershell
+./load-tests/k8s/run-saturation.ps1 -Replicas 3 -Rates '150,300,600,900' -AdminPassword 'MetricsAdmin123!'
+```
+
+It does, in order: scale `backend` to `-Replicas` (skip with `-SkipScaling`, required when an
+HPA is also managing `spec.replicas`, so the two don't fight over the field) → seed
+`fixtures-saturation.sql` (raises `purchase_limit_per_user` to 1,000,000 so the same token can
+buy repeatedly without hitting `REJECTED`) → clear the Redis stock key → apply the load-test
+NodePort → rebuild the metrics-admin account (the seed step truncates `users`) → pre-generate
+`-Users` buyer tokens with `load-tests/benchmark/prepare.js` (auth traffic is moved out of the
+measurement window this way) → run `saturation.js` once per rate in `-Rates`, sampling
+downstream metrics (`sample-downstream.ps1`) in the background for each run → write
+`saturation-<runId>.json` and `downstream-<runId>.jsonl` per rate into `-OutputDirectory` →
+delete the NodePort again.
+
+**`-StartRate` must stay below 200** (the script throws if you pass 200 or higher). This is
+not an arbitrary safety margin: Rancher Desktop's Windows-side port relay accepts only about
+**210 simultaneous new connections** before RST-ing the rest (see the connection-limit table
+above). `ramping-arrival-rate` opens its first burst of connections at `-StartRate`, so
+starting at or above that ceiling produces connection failures from the relay layer in the
+first few seconds of the ramp — a measurement of the relay, not of the backend. Spreading the
+same number of connections over time has no such ceiling (1,200 new connections/sec measured
+with zero failures), which is why the ramp itself is safe once past the start.
+
+### Reading the results: `analyze-saturation.mjs`
+
+```bash
+node load-tests/k8s/analyze-saturation.mjs load-tests/k8s/results/<sweep-directory>
+```
+
+It loads every `saturation-*.json` in the directory and applies a data-quality gate before
+computing anything — a run that fails the gate is printed as `REJECTED <runId>` with the
+specific reason(s) and excluded from the curve entirely, rather than being silently averaged
+in:
+
+- **Negative or non-increasing latency percentiles** — this machine's WSL2 VM clock has been
+  measured running fast; a run showing this is a clock artifact, not a system behavior (see
+  [clock accuracy](../docs/portfolio/wsl2-clock-accuracy.md)).
+- **`droppedIterations > 0`** — the load generator itself couldn't keep up (VU quota
+  exhausted), so `achievedRps` no longer represents what the system could actually take. This
+  is not the same as the system degrading; escalate `-PreAllocatedVUs`/`-MaxVUs` and re-run
+  that one rate.
+- **`newConnections === 0` or missing `connectionReuse`** — with zero new connections there is
+  nothing to read kube-proxy's per-Pod distribution from, since kube-proxy assigns a Pod once
+  per TCP connection, not once per request.
+- **Any `unexpected5xx`** — a real server error during the run.
+
+Accepted runs are printed as a `replicas / targetRate / achievedRps / acceptP95Ms / failed% /
+degraded` table, followed by each replica count's saturation point (the highest tested rate
+that stayed healthy). The curated, human-annotated version of this data — including the
+`unachievedRates` case where no finite VU budget clears the drop-rate gate — is committed at
+[`docs/portfolio/data/k8s-saturation-results.json`](../docs/portfolio/data/k8s-saturation-results.json),
+and the full writeup is in [horizontal scaling and autoscaling](../docs/portfolio/scaling-and-autoscaling.md).

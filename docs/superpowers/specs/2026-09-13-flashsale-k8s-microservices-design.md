@@ -8,8 +8,9 @@
 - 分六個階段推進（P1–P6），每階段結束都是可運作、可壓測、可展示的系統，並留下 before／after 對照數據。
 - 不做 service mesh、不做 GitOps、不做離線批次（Spark／資料湖），不改動既有業務規則。
 
-**進度：P1 已完成（2026-09-13）。** P1 的量測推翻了本規格原先對 P3 的假設，該節已依實測重寫；
-修訂紀錄見文末。下一步是 P2（分散式鎖），計畫見
+**進度：P1、P3 已完成（2026-09-13）。** P1 的量測推翻了本規格原先對 P3 的假設，該節已依實測
+重寫；P3 的驗收證據見文中「P3 — 已完成」與 [水平擴展與自動擴縮](../../portfolio/scaling-and-autoscaling.md)。
+修訂紀錄見文末。P2（分散式鎖）計畫見
 [`2026-09-13-week8-p2-distributed-lock.md`](../plans/2026-09-13-week8-p2-distributed-lock.md)。
 
 ## 目標
@@ -329,8 +330,8 @@ Kafka 與 RabbitMQ 並存：RabbitMQ 保留既有的工作佇列用途（非同�
 | P1 | `replicas: 1` | `replicas: 3` | 吞吐、p95、p99、各 Pod 請求分配比例 | **已完成**，見 [`k8s-scale-out-results.json`](../../portfolio/data/k8s-scale-out-results.json) |
 | P1 | 無 `preStop` | 有 `preStop` | 滾動更新期間的請求失敗率 | **已完成**：0.60% → 0% |
 | P2 | 未加鎖 | Redisson | 重複執行次數（應為 0）、庫存正確性、鎖競爭延遲 | 待做 |
-| P3 | `replicas` 1 / 3 / 5 | — | 吞吐上限、RPS 對 p95 的曲線、瓶頸位置 | 待做 |
-| P3 | 固定副本 | HPA | 擴容反應時間、尖峰期間錯誤率 | 待做 |
+| P3 | `replicas` 1 / 3 / 5 | — | 吞吐上限、RPS 對 p95 的曲線、瓶頸位置 | **已完成**，見 [`k8s-saturation-results.json`](../../portfolio/data/k8s-saturation-results.json) 與 [水平擴展與自動擴縮](../../portfolio/scaling-and-autoscaling.md) |
+| P3 | 固定副本 | HPA | 擴容反應時間、尖峰期間錯誤率 | **已完成**：決策 12 秒、就緒 43 秒，但擴容動作本身觸發節點級重啟風暴（見上方 P3 驗收） |
 | P5 | 單體 | 微服務 | 端到端延遲（預期上升）、跨服務追蹤完整性 | 待做 |
 | P6 | 直接查 DB | Flink 即時聚合 | 大屏延遲、與 DB 查詢結果的數值一致性 | 待做 |
 
@@ -373,16 +374,52 @@ P5 的結果預期同樣為負面：拆分微服務後端到端延遲必然上�
 - 完成四項深水區驗證並記錄結果：鎖續期、持鎖節點強制刪除後的釋放時間、fencing token、Redis 故障時的行為。
 - K8s Lease 版 leader election 可運作，並產出與 Redisson 的故障模式對照表。
 
-### P3
+### P3 — 已完成（2026-09-13）
+
+證據見 [水平擴展與自動擴縮](../../portfolio/scaling-and-autoscaling.md) 與原始資料
+[`k8s-saturation-results.json`](../../portfolio/data/k8s-saturation-results.json)。
 
 - 存在一套 `ramping-arrival-rate` 的飽和式壓測，能量出系統的吞吐上限而非固定併發下的延遲。
-- 壓測分端點標記，認證流量以預先產生的 token 移出量測區間。
-- 產出 `replicas` 1 / 3 / 5 的「RPS 對 p95」曲線，明確回答水平擴展在什麼負載區間才開始有價值。
+  **通過**：`load-tests/k8s/saturation.js` 使用 k6 `ramping-arrival-rate` executor，
+  `load-tests/k8s/run-saturation.ps1` 封裝完整流程（縮放、種資料、壓測、下游取樣、收檔）。
+- 壓測分端點標記，認證流量以預先產生的 token 移出量測區間。**通過**：`saturation.js` 對
+  accept（`tags: { leg: 'accept' }`）與 poll（`tags: { leg: 'poll' }`）分別標記；
+  `run-saturation.ps1` 呼叫 `load-tests/benchmark/prepare.js` 預先產生買家 token，
+  壓測本體只打搶購與輪詢端點。
+- 產出 `replicas` 1 / 3 / 5 的「RPS 對 p95」曲線，明確回答水平擴展在什麼負載區間才開始有
+  價值。**通過，但有一格量不到**：曲線涵蓋 11 個（replicas、targetRate）組合；
+  `replicas=1`、`targetRate=900` 因系統本身撐不住（開放模型下所需 VU 數隨延遲發散，
+  `droppedIterations` 無法歸零）而記為 `unachievedRates`，不強行湊進曲線。**回答**：
+  到達率 150／300 時三種副本數表現幾乎相同，水平擴展看不出價值；到達率 600 時一副本
+  p95=130.0ms、三副本 p95=6.9ms（慢約 18.8 倍）；到達率 900 時一副本完全無法穩定運作，
+  三副本 70.9ms、五副本 61.0ms 仍健康。價值的轉折點落在到達率 300 到 600 之間，且一旦
+  超過就是數量級差距。
 - 同時記錄下游指標（Postgres 連線數、Hikari 池使用率、Redis 延遲），指認真正的瓶頸位置。
+  **通過**：`sample-downstream.ps1` 背景取樣 `hikariActive`／`hikariPending`／
+  `pgBackends`／`reservationMaxMs`。瓶頸指認：一個副本時是 Postgres 連線池（HikariCP 30
+  條上限，900 rps 下 15 個連續樣本、63.7 秒維持 `hikariPending` 131–176）；三、五個副本在
+  測試範圍內未觀察到同樣的持續排隊，但 `pgBackends` 隨副本數線性成長（92 對 152），逼近
+  Postgres `max_connections`——五副本已迫使該值從預設 100 調高到 300 才能量測，是 P4/P5
+  拆分 purchase-service 與獨立資料庫的直接動機。
 - HPA 可依 CPU 指標自動擴縮，並量出從負載上升到新 Pod 就緒的完整延遲；以實測判斷它是否
-  跟得上尖峰，結果無論正負皆記錄。
-- 與「活動前預先擴容」做對照，給出在本專案情境下的建議策略。
-- PodDisruptionBudget 生效，自願性中斷時維持最低可用副本數。
+  跟得上尖峰，結果無論正負皆記錄。**通過，結果是正負參半**：CPU 確實從 60% 一路衝到
+  425%，HPA 在 12 秒內下達 rescale 決策、新副本於 43 秒內就緒——**決策**跟得上 30 秒的
+  爬升期。但**擴容動作本身**在單節點、CPU 有限的測試叢集上引發節點級 CPU 搶佔，5 個新
+  Pod 同時冷啟動疊加在忙碌的舊 Pod 之上，觸發全部 8 個 Pod（含未參與擴容的舊 Pod）的
+  liveness 重啟風暴，8 個 Pod 於 16:42:08–16:42:19 同時 NotReady，構成一次真實但短暫的
+  服務中斷。這次量測本身也未通過 `analyze-saturation.mjs` 的資料品質關卡
+  （`droppedIterations>0`），因此絕對延遲數字（p95 2972.9ms）只能當方向性證據，不是乾淨
+  的容量數字。
+- 與「活動前預先擴容」做對照，給出在本專案情境下的建議策略。**通過**：同一到達率（900）、
+  同一目標副本數（8）下，HPA 運行中擴容 p95=2972.9ms、963 個 failedRequests，預先擴容到
+  8 則是 p95=434.2ms、0 個 failedRequests（兩者皆未通過資料品質關卡，僅供方向性比較）。
+  建議：本專案情境下優先採用「依活動時間預先擴容」，而非依賴 HPA 現場反應——HPA 的判斷
+  沒有問題，問題在單節點環境下擴容動作本身的代價；預先擴容不依賴指標採集與決策延遲，也
+  不會觸發同時冷啟動造成的搶佔。
+- PodDisruptionBudget 生效，自願性中斷時維持最低可用副本數。**通過**：`minAvailable: 2`
+  的 PDB 在 2 副本（無餘裕）時拒絕驅逐（`Cannot evict pod as it would violate the pod's
+  disruption budget`），在 3 副本（一個餘裕）時允許驅逐（`"status":"Success","code":201`）
+  ——相同請求、唯一變數是副本數，結果從拒絕翻成接受。
 
 ### P4
 
