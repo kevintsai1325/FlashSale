@@ -101,10 +101,21 @@ export default function () {
   const authHeaders = { headers: { Authorization: `Bearer ${accessToken}` } };
   const idempotencyKey = `k6-${suffix}`;
 
+  // PurchaseController requires a PurchaseCreateRequest body ({ quantity }) ever since
+  // "feat: let buyers choose a purchase quantity within their limit". Posting no body makes
+  // Spring answer 400 (Required request body is missing) before any flash-sale logic runs,
+  // which silently turns this whole script into a no-op. benchmark/purchase-load.js was
+  // updated for that change; this script was not.
   const purchaseRes = http.post(
     `${BASE_URL}/api/flash-sales/${FLASH_SALE_ID}/purchase-requests`,
-    null,
-    { headers: { Authorization: `Bearer ${accessToken}`, 'Idempotency-Key': idempotencyKey } }
+    JSON.stringify({ quantity: 1 }),
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+    }
   );
 
   // The core invariant this script proves end-to-end (matches PurchaseConcurrencyIT's

@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-e2e
+  namespace: flashsale
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {app: k6-e2e}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:0.54.0
+          args: ["run", "/scripts/purchase-flow.js"]
+          env:
+            # 走完整對外路徑：Nginx（含 TLS 終止與限流）→ backend → Postgres/Redis/RabbitMQ。
+            # 這是功能驗證，不是效能量測；效能量測一律直接打 backend Service，見 k6-job.yaml。
+            # 腳本本身已設定 insecureSkipTLSVerify（nginx 使用自簽憑證）。
+            - {name: BASE_URL, value: "https://nginx:8443"}
+            - {name: VUS, value: "30"}
+            - {name: STOCK, value: "10"}
+            - {name: FLASH_SALE_ID, value: "1"}
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts}
+          resources: {requests: {cpu: 250m, memory: 128Mi}, limits: {cpu: "1", memory: 512Mi}}
+      volumes:
+        - name: scripts
+          configMap: {name: k6-scripts}
