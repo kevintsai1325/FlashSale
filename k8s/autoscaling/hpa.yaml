@@ -1,0 +1,34 @@
+# backend 的 CPU-based HPA。刻意不放進 k8s/base/kustomization.yaml：
+# base 宣告 replicas: 3，HPA 會寫同一個欄位，兩者互相覆寫；而且做副本數對照實驗時，
+# 基準環境必須是決定性的。需要時明確套用，實驗結束後刪除。
+#
+#   kubectl --context rancher-desktop apply -f k8s/autoscaling/hpa.yaml
+#   kubectl --context rancher-desktop delete -f k8s/autoscaling/hpa.yaml
+#
+# 閾值取 60%：backend 的 requests.cpu 是 500m，所以觸發點約等於單一 Pod 用到 300m。
+# 這個數字要依 Task 5 量到的飽和點回頭檢查 —— 若飽和時 CPU 還遠低於 60%，代表瓶頸不在
+# CPU，CPU-based HPA 對這個系統本來就不會有效。那個結論本身就是 P3 的產出之一。
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend
+  namespace: flashsale
+  labels: {flashsale.dev/role: autoscaling-experiment}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: backend}
+  minReplicas: 3
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 60}
+  behavior:
+    # 擴容不設穩定視窗：秒殺場景要的是反應速度，而 Pod 就緒只要約 10 秒（P1 實測）。
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies: [{type: Percent, value: 100, periodSeconds: 15}]
+    # 縮容保守：活動尖峰常有多波，縮太快會在下一波重新付一次冷啟動成本。
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies: [{type: Pods, value: 1, periodSeconds: 60}]
