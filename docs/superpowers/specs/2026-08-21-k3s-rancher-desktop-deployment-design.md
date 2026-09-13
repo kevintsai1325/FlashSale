@@ -1,5 +1,20 @@
 # Rancher Desktop (k3s) 部署模式設計規格
 
+> **本文件的四個項目已被
+> [Week 8 設計規格](./2026-09-13-flashsale-k8s-microservices-design.md) 取代，以新規格為準：**
+>
+> 1. **副本數**：本文件規劃 backend `replicas: 2`；實際為 `replicas: 3`（Week 8 P1 實測後定案）。
+> 2. **資源配額**：本文件規劃 `requests: 256Mi/250m`；實際為 `requests: 500m/1Gi`、
+>    `limits: 2/2Gi`。256Mi 對 Spring Boot 容易 OOM。
+> 3. **postgres 的工作負載型別**：本文件規劃 Deployment 加 PVC；實際為 StatefulSet 搭配
+>    headless Service 與 `volumeClaimTemplates`，redis 與 rabbitmq 亦同。
+> 4. **排程重複執行的解法**：本文件設計以 Postgres `pg_try_advisory_lock` 實作
+>    `AdvisoryLockRunner`。該設計**不實作**，Week 8 P2 改用 Redisson，理由見新規格的
+>    「分散式鎖」一節。
+>
+> 本文件指出的「排程重複執行」問題本身完全正確，而且已在三副本環境下取得實測證據，
+> 見 [排程重複執行證據](../../portfolio/scheduler-duplication-evidence.md)。
+
 ## 目標
 
 在現有 Docker Compose 之外，新增可用 Rancher Desktop 內建 k3s 跑起來的部署模式。除 backend 外

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata: {name: backend, namespace: flashsale, labels: {flashsale.dev/stage: application}}
 spec:
-  replicas: 1
+  replicas: 3
   strategy:
     type: RollingUpdate
     rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
@@ -10,10 +10,16 @@ spec:
   template:
     metadata: {labels: {app: backend}}
     spec:
+      # Pod 被刪除時，「從 Endpoints 移除」與「收到 SIGTERM」是兩件並行的事，沒有先後保證。
+      # kube-proxy 更新 iptables 規則需要時間，在那之前流量仍會被導向這個 Pod。
+      # preStop 先睡一段時間再讓 SIGTERM 送達，讓規則有時間傳播完畢，避免滾動更新期間掉請求。
+      terminationGracePeriodSeconds: 30
       containers:
         - name: backend
           image: flashsale-backend:local
           imagePullPolicy: Never
+          lifecycle:
+            preStop: {exec: {command: ["sleep", "5"]}}
           envFrom: [{configMapRef: {name: flashsale-config}}]
           env:
             - {name: SPRING_DATASOURCE_PASSWORD, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: POSTGRES_PASSWORD}}}

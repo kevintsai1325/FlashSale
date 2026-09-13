@@ -91,9 +91,14 @@ $expectedWorkloads = @('postgres', 'redis', 'rabbitmq', 'mailpit', 'zipkin', 'ba
 $workloads = @($resources | Where-Object { $_.kind -in @('Deployment', 'StatefulSet') })
 Assert-True ($workloads.Count -eq 8) "Expected exactly eight workloads, got $($workloads.Count)."
 Assert-True ((@($workloads | ForEach-Object { $_.metadata.name } | Sort-Object) -join ',') -eq (($expectedWorkloads | Sort-Object) -join ',')) 'The rendered workload names do not match the baseline contract.'
+# backend 是唯一水平擴展的工作負載（Week 8 P1）。其餘皆為單副本：三個 StatefulSet 是有狀態
+# 相依元件，mailpit/zipkin/frontend/nginx 不在搶購的關鍵路徑上，擴展它們不會改善任何指標。
+$singleReplicaWorkloads = @('postgres', 'redis', 'rabbitmq', 'mailpit', 'zipkin', 'frontend', 'nginx')
 foreach ($workload in $workloads) {
     $name = $workload.metadata.name
-    Assert-True ($workload.spec.replicas -eq 1) "$name must declare exactly one replica."
+    if ($singleReplicaWorkloads -contains $name) {
+        Assert-True ($workload.spec.replicas -eq 1) "$name must declare exactly one replica."
+    }
     $containers = @($workload.spec.template.spec.containers)
     Assert-True ($containers.Count -eq 1) "$name must contain exactly one application container."
     Assert-True ($null -ne (Get-PropertyValue $containers[0] 'readinessProbe')) "$name must define a readiness probe."
@@ -153,5 +158,15 @@ Assert-True ((Get-PropertyValue $backendStrategy 'type') -eq 'RollingUpdate') 'B
 $backendRollingUpdate = Get-PropertyValue $backendStrategy 'rollingUpdate'
 Assert-True ([string](Get-PropertyValue $backendRollingUpdate 'maxUnavailable') -eq '0') 'Backend rolling update must keep every existing replica available (maxUnavailable 0).'
 Assert-True ([string](Get-PropertyValue $backendRollingUpdate 'maxSurge') -eq '1') 'Backend rolling update must add at most one surge Pod at a time.'
+Assert-True ([int](Get-PropertyValue $backend.spec 'replicas') -eq 3) 'Backend must default to three replicas after the Week 8 P1 scale-out.'
+
+# maxUnavailable 0 alone still drops requests during a rollout: removing the Pod from Endpoints
+# and delivering SIGTERM happen in parallel, so traffic keeps arriving until kube-proxy has
+# repropagated its rules. Measured at 0.60% failed requests without this hook, 0% with it.
+$backendPodSpec = $backend.spec.template.spec
+Assert-True ([int](Get-PropertyValue $backendPodSpec 'terminationGracePeriodSeconds') -ge 30) 'Backend must allow at least 30s for graceful termination.'
+$backendLifecycle = Get-PropertyValue $backend.spec.template.spec.containers[0] 'lifecycle'
+$backendPreStop = Get-PropertyValue $backendLifecycle 'preStop'
+Assert-True ($null -ne (Get-PropertyValue $backendPreStop 'exec')) 'Backend must declare a preStop hook so Endpoint removal can propagate before SIGTERM.'
 
 Write-Host 'PASS: Kubernetes rendered-resource contract (21 resources, exact stages, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, and backend rollout strategy).'

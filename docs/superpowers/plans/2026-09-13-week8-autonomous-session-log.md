@@ -124,6 +124,73 @@ Task 3，改為以 Deployment 宣告的副本數為期望值，並逐一驗證�
 
 ---
 
+## 執行期間發現的問題
+
+### Q7：PowerShell 指令碼的中文註解會吃掉下一行程式碼（重要，且是全 repo 的潛在問題）
+
+改完 `build-local.ps1` 後，執行時出現詭異錯誤：`The variable '$runtime' cannot be retrieved
+because it has not been set`，但錯誤回報的行號與檔案實際內容對不上。加診斷輸出後確認：
+`$runtime` 明明有值（`docker://29.5.3`），下一個用到它的判斷卻說變數不存在。
+
+**根因**：本機系統 ANSI 代碼頁是 **950（Big5）**。`.ps1` 檔案若沒有 UTF-8 BOM，
+Windows PowerShell 5.1 會以 ANSI 解讀。UTF-8 中文字的位元組落在 Big5 的 lead byte 範圍
+（0x81–0xFE），解碼時會連同**後面一個位元組**一起吃掉。當中文註解結尾的位元組對齊恰好讓
+lead byte 落在換行符前面時，換行就被吞掉，**下一行程式碼被併入註解而整行消失**。
+
+這解釋了全部症狀：被吞掉的正是 `$runtime = ...` 那一行，所以下一行用到它時變數不存在；
+行號也因為少了一行而全部往前位移。
+
+**決策（D9）**：為本次修改過、且含非 ASCII 字元的 `.ps1` 檔案加上 UTF-8 BOM
+（`build-local.ps1`、`deploy.ps1`、`verify.ps1`）。加上後 PowerShell 正確以 UTF-8 解碼，
+行號與內容完全對上。
+
+**待使用者注意**：這不是只有我改的檔案有問題。**repo 裡所有含中文註解、又沒有 BOM 的
+`.ps1` 都有同樣的地雷**，只是目前的位元組對齊剛好沒踩到。`deploy.ps1`、`verify.ps1` 原本
+就是這個狀態。建議之後把所有 `.ps1` 統一加上 BOM，或在 `.gitattributes` 中規範編碼。
+這是一個「今天沒壞，明天改一個字就壞」的問題。
+
+### Q8：Rancher Desktop 的網路整合層損壞
+
+建置時 buildkit 一直回報 `DeadlineExceeded: context deadline exceeded`，無法取得
+`eclipse-temurin` 的 metadata。分層診斷後發現兩件事：
+
+1. Windows 端的 docker named pipe 不通（`timed out dialing Hyper-V socket`）。
+2. `rancher-desktop` distro 內的 DNS 完全失效：`/etc/resolv.conf` 指向 Rancher Desktop 的
+   閘道解析器 `192.168.127.1`，查詢逾時。但用 `1.1.1.1` 或 `8.8.8.8` 查詢**都正常**，
+   代表對外網路本身是通的，只有 Rancher Desktop 自己的解析器壞掉。
+
+一個容易誤導的現象：`docker manifest inspect` 從 Windows 執行會成功，讓人以為 registry 連得上。
+實際上那是 **CLI 在 Windows 上解析 DNS**，而 buildkit 是在 distro 內解析 —— 兩條不同的路徑。
+
+**決策（D10）**：
+- 以 `rdctl shutdown` + `rdctl start` 重啟 Rancher Desktop。這修好了 Windows 端的 named pipe。
+- DNS 沒有被重啟修復，因此改寫 distro 的 `/etc/resolv.conf`，把 `1.1.1.1`、`8.8.8.8` 放在
+  Rancher Desktop 閘道之前。原檔已備份為 `/etc/resolv.conf.rd-backup`。
+
+**理由**：重啟是針對根因、可逆、且當時 `flashsale` namespace 尚未部署，沒有東西會遺失。
+DNS 的修改同樣可逆。
+
+**待使用者注意**：`/etc/resolv.conf` 的修改可能在 Rancher Desktop 下次重啟時被覆寫。若日後
+建置又出現 metadata 逾時，先檢查這個檔案。`192.168.127.1` 為何失效沒有繼續追查（可能與 VPN、
+防火牆或 Rancher Desktop 的網路模式設定有關），這是留給使用者的線索。
+
+### Q9：`verify.ps1` 同樣硬性要求單一副本（計畫遺漏）
+
+計畫的 Task 3 只點出 `deploy.ps1` 的單一 Pod 斷言。實作時發現 `verify.ps1` 有兩處相同問題：
+
+```powershell
+if ($backendReady -ne '1') { throw "Expected one ready Backend Pod, got $backendReady" }
+if ($appPods.Count -ne 8) { throw "Expected eight application Pods, got $($appPods.Count)" }
+```
+
+**決策（D11）**：`verify.ps1` 改為從各工作負載宣告的 `spec.replicas` 推導期望值
+（三個 StatefulSet 加五個 Deployment 的總和），而不是寫死 8。backend 的就緒副本數也改為與其
+宣告值比較。這樣擴展到三副本時，期望值自動變成 10，不需要再改腳本。
+
+這比原本的寫法更好：它驗證的是「跑起來的與宣告的一致」，而不是「剛好是八個」。
+
+---
+
 ## 計畫自我檢查修正的問題
 
 撰寫 P1 實作計畫後做自我檢查，修正了五處會導致計畫無法執行的錯誤：
