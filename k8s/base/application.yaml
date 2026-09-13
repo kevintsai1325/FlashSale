@@ -10,6 +10,9 @@ spec:
   template:
     metadata: {labels: {app: backend}}
     spec:
+      # 只有 app.scheduling.lock=kubernetes 的 Lease 實作需要這個 SA 的權限；
+      # 預設的 Redisson 實作用不到，但綁著不會有副作用，切換時少一個步驟。
+      serviceAccountName: flashsale-backend
       # Pod 被刪除時，「從 Endpoints 移除」與「收到 SIGTERM」是兩件並行的事，沒有先後保證。
       # kube-proxy 更新 iptables 規則需要時間，在那之前流量仍會被導向這個 Pod。
       # preStop 先睡一段時間再讓 SIGTERM 送達，讓規則有時間傳播完畢，避免滾動更新期間掉請求。

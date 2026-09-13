@@ -530,3 +530,45 @@ using apps/v1: .spec.volumeClaimTemplates
 `kubectl set env`，在資源上留下多個 field manager 與過期的
 `kubectl.kubernetes.io/last-applied-configuration` annotation。已全部清除。
 教訓：**手動 kubectl 操作會污染部署腳本的欄位所有權**，除錯時方便，但事後要清乾淨。
+
+### Q19：Q7 的地雷真的引爆了（同一個檔案，隔一天）
+
+昨晚我記錄 Q7 時寫下：「repo 裡所有含中文註解、又沒有 BOM 的 `.ps1` 都有同樣的地雷，
+只是目前的位元組對齊剛好沒踩到。這是一個『今天沒壞，明天改一個字就壞』的問題。」
+
+今天為了加 RBAC 斷言而修改 `k8s-manifests-test.ps1`，位元組對齊改變，**地雷就引爆了**：
+
+```
+無法取得變數 '$singleReplicaWorkloads'，因為它尚未設定
+於 k8s-manifests-test.ps1:98
+```
+
+第 97 行的變數定義被前面兩行中文註解「吃掉」，第 98 行用它時當然找不到。程式碼看起來
+完全正常，錯誤訊息也完全不指向真正的原因。
+
+**決策（D21）**：不只修這一個檔案，掃過全 repo 的 `.ps1`，把所有含非 ASCII 但缺 BOM 的
+檔案補上 UTF-8 BOM。實際只有這一個檔案（其餘我今天都已經補過了）。
+
+**待使用者注意**：這個問題會在任何人（包括未來的我）編輯這些檔案時重現。建議在
+`.gitattributes` 或 CI 加一道檢查：`.ps1` 若含非 ASCII 就必須有 BOM。我沒有擅自加，
+因為那會動到 CI 設定。
+
+---
+
+### P2 Task 8：Kubernetes Lease 對照實作
+
+三個設計決定：
+
+1. **不引入 Kubernetes Java client。** Lease 是平凡的 REST 資源，leader election 的邏輯是
+   「讀 → 判斷是否過期 → 帶 resourceVersion 寫回」。引入官方 client 連同十幾個傳遞相依會讓
+   映像肥一圈，卻把最值得看懂的部分藏進函式庫。改用 JDK 內建的 `HttpClient`，不到一百行。
+
+2. **正確處理 TLS。** API server 用叢集自己的 CA 簽憑證，從 Pod 掛載的 `ca.crt` 建一個只含
+   該 CA 的 TrustManager。**沒有用「信任一切」繞過** —— 我們正拿著 ServiceAccount token
+   對它說話，被冒充的代價是 token 外洩。
+
+3. **RBAC 收到最小**：只有 `leases`、只有 `get/create/update`、**刻意不給 `delete`**
+   （Lease 靠租約過期釋放，給 delete 只會讓出錯的副本有能力抹掉別人的鎖）、Role 而非
+   ClusterRole。契約測試已加上斷言保護這四點。
+
+`SchedulerLock` 重構為介面，以 `app.scheduling.lock` 切換兩種實作，預設 `redisson`。

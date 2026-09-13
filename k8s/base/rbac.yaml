@@ -1,0 +1,28 @@
+# backend 存取 Kubernetes Lease API 所需的最小權限。
+#
+# 只有在 app.scheduling.lock=kubernetes 時才會被用到（KubernetesLeaseSchedulerLock）。
+# 預設的 redisson 實作不需要這些權限，但 RBAC 先備好，切換時不必改兩個地方。
+#
+# 權限刻意收到最小：
+#   - 只有 coordination.k8s.io/leases，沒有其他資源。
+#   - 只有 get / create / update，沒有 delete —— Lease 的釋放是靠「租約過期」而非刪除，
+#     給 delete 只會讓一個出錯的副本有能力把別人的鎖抹掉。
+#   - Role 而非 ClusterRole，作用範圍限於 flashsale namespace。
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: flashsale-backend, namespace: flashsale, labels: {flashsale.dev/stage: foundation}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: flashsale-scheduler-lease, namespace: flashsale, labels: {flashsale.dev/stage: foundation}}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "create", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: flashsale-scheduler-lease, namespace: flashsale, labels: {flashsale.dev/stage: foundation}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: flashsale-scheduler-lease}
+subjects:
+  - {kind: ServiceAccount, name: flashsale-backend, namespace: flashsale}

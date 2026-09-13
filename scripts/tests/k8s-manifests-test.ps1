@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -50,7 +50,7 @@ $resources = @()
 for ($index = 0; $index -lt $parsedResources.Count; $index++) {
     $resources += $parsedResources[$index]
 }
-Assert-True ($resources.Count -eq 21) "Expected exactly 21 rendered resources, got $($resources.Count)."
+Assert-True ($resources.Count -eq 24) "Expected exactly 24 rendered resources, got $($resources.Count)."
 
 $secrets = @($resources | Where-Object { $_.kind -eq 'Secret' })
 Assert-True ($secrets.Count -eq 0) 'Rendered resources must not contain Secret objects or values.'
@@ -65,7 +65,8 @@ foreach ($resource in $namespacedResources) {
 
 $expectedStages = @{
     bootstrap = @('Namespace/flashsale')
-    foundation = @('ConfigMap/flashsale-config')
+    foundation = @('ConfigMap/flashsale-config',
+        'ServiceAccount/flashsale-backend', 'Role/flashsale-scheduler-lease', 'RoleBinding/flashsale-scheduler-lease')
     dependency = @(
         'Service/postgres-headless', 'Service/postgres', 'StatefulSet/postgres',
         'Service/redis-headless', 'Service/redis', 'StatefulSet/redis',
@@ -169,4 +170,16 @@ $backendLifecycle = Get-PropertyValue $backend.spec.template.spec.containers[0] 
 $backendPreStop = Get-PropertyValue $backendLifecycle 'preStop'
 Assert-True ($null -ne (Get-PropertyValue $backendPreStop 'exec')) 'Backend must declare a preStop hook so Endpoint removal can propagate before SIGTERM.'
 
-Write-Host 'PASS: Kubernetes rendered-resource contract (21 resources, exact stages, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, and backend rollout strategy).'
+# RBAC 的權限必須維持最小。Lease 的釋放是靠租約過期而非刪除，給 delete 只會讓一個出錯的
+# 副本有能力把別人的鎖抹掉；ClusterRole 則會讓權限外溢到其他 namespace。
+$leaseRole = @($resources | Where-Object { $_.kind -eq 'Role' -and $_.metadata.name -eq 'flashsale-scheduler-lease' })[0]
+Assert-True ($null -ne $leaseRole) 'The scheduler Lease Role must exist.'
+Assert-True ($leaseRole.rules.Count -eq 1) 'The scheduler Lease Role must carry exactly one rule.'
+$leaseRule = $leaseRole.rules[0]
+Assert-True ((@($leaseRule.resources) -join ',') -eq 'leases') 'The scheduler Lease Role must only grant access to leases.'
+Assert-True ((@($leaseRule.apiGroups) -join ',') -eq 'coordination.k8s.io') 'The scheduler Lease Role must scope to coordination.k8s.io.'
+Assert-True ((@($leaseRule.verbs | Sort-Object) -join ',') -eq 'create,get,update') 'The scheduler Lease Role must grant exactly get/create/update - never delete.'
+Assert-True (@($resources | Where-Object { $_.kind -eq 'ClusterRole' -or $_.kind -eq 'ClusterRoleBinding' }).Count -eq 0) 'The baseline must not grant any cluster-scoped RBAC.'
+Assert-True ($backend.spec.template.spec.serviceAccountName -eq 'flashsale-backend') 'Backend must run under the flashsale-backend ServiceAccount.'
+
+Write-Host 'PASS: Kubernetes rendered-resource contract (24 resources, exact stages, minimal RBAC, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, and backend rollout strategy).'

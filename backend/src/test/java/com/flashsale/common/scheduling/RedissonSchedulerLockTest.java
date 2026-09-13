@@ -18,12 +18,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class SchedulerLockTest {
+class RedissonSchedulerLockTest {
 
     private final RedissonClient redisson = mock(RedissonClient.class);
     private final RLock lock = mock(RLock.class);
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
-    private final SchedulerLock schedulerLock = new SchedulerLock(redisson, meterRegistry);
+    private final SchedulerLock schedulerLock = new RedissonSchedulerLock(redisson, meterRegistry);
 
     private double outcomeCount(String outcome) {
         return meterRegistry.find("scheduler.lock.outcome")
