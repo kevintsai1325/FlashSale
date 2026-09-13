@@ -53,12 +53,15 @@ case "${1:-}" in
     ttl_before="$(redis pttl "$LOCK_KEY")"
     echo "鎖已被持有，剩餘租約 ${ttl_before} ms"
 
-    # 強制刪掉所有 backend Pod 中的一個。無法從 Redis 得知是哪一個持有，
-    # 所以刪第一個；若刪到非持有者，鎖會繼續存在，腳本會如實記錄「鎖未釋放」。
-    victim="$(k get pods -l app=backend -o jsonpath='{.items[0].metadata.name}')"
-    echo "=== 強制刪除 $victim ==="
+    # 刪除**全部**副本，而不是挑一個。原因：Redisson 的鎖 hash 只記錄
+    # <客戶端UUID>:<執行緒ID>，從 Redis 這側看不出持有者是哪一個 Pod。只刪一個很可能刪到
+    # 非持有者，量到的會是「任務執行時間」而不是「租約到期時間」（2026-09-13 實際踩過）。
+    #
+    # 必須帶 --force --grace-period=0：優雅終止會經過 preStop 的 sleep 5 與 30 秒寬限期，
+    # Pod 活得夠久把任務做完並正常解鎖，同樣量不到租約到期。只有 SIGKILL 才是真正的崩潰。
+    echo "=== 強制刪除全部 backend 副本（SIGKILL，跳過 preStop）==="
     t0="$(now_ms)"
-    k delete pod "$victim" --force --grace-period=0 >/dev/null 2>&1
+    k delete pods -l app=backend --force --grace-period=0 --wait=false >/dev/null 2>&1
 
     echo "=== 等待鎖釋放（由 Windows 計時）==="
     deadline=$(( t0 + 180000 ))
