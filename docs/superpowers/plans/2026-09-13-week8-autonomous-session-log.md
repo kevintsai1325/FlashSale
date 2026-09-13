@@ -59,5 +59,81 @@ mocuo   Ready    control-plane   24d   v1.36.3+k3s1
 所有 docker 指令失敗。Rancher Desktop 的容器引擎設定為 `moby`，應使用 `default` context
 （`npipe:////./pipe/docker_engine`）。
 
-切換為 `default` 後首次仍回報 `timed out dialing Hyper-V socket`，判斷為 WSL 後端尚在暖機。
-處理過程記錄於下方執行紀錄。
+切換為 `default` 後首次仍回報 `timed out dialing Hyper-V socket`，多次重試後仍然不通。
+Rancher Desktop 的 `dockerd` 確實在 `rancher-desktop` WSL distro 內正常執行
+（`/var/run/docker.sock` 存在，`docker version` 回報 Server 29.5.3），只有 Windows 端的
+named pipe 橋接壞掉。
+
+**決策（D5）**：不嘗試修復 Windows named pipe（需要重啟 Rancher Desktop，會連帶重啟 k3s，
+風險與耗時都高），改由 `wsl -d rancher-desktop -e docker` 呼叫。`/mnt/c` 有掛載，建置 context
+可用路徑轉換處理。
+
+### Q3：`build-local.ps1` 與實際容器引擎不相容
+
+`scripts/k8s/build-local.ps1` 硬性要求 `nerdctl` 與 containerd 的 `k8s.io` image namespace，
+取不到就直接拋錯。但本機 Rancher Desktop 的容器引擎設定為 **moby**，k3s 以 `--docker` 啟動，
+節點回報 `containerRuntimeVersion: docker://29.5.3`，containerd socket 不存在，`nerdctl` 失敗：
+
+```
+cannot access containerd socket "/run/k3s/containerd/containerd.sock": no such file or directory
+```
+
+更麻煩的是 `docs/portfolio/k3s-baseline.md` 明文寫著「此基準需要 containerd 的 `k8s.io`
+image namespace；Docker/Moby 不是可替代引擎」——文件與實際環境直接衝突。
+
+**決策（D6）**：不切換 Rancher Desktop 的容器引擎，改為讓建置腳本依**叢集實際回報的 runtime**
+選擇建置工具。
+
+**理由**：切換成 containerd 會讓 Rancher Desktop 不再提供 `docker` 與 `docker compose`，而
+README 把 Docker Compose 稱為「最短、完整的本機啟動方式」，是使用者的主要開發流程。在使用者
+睡覺時破壞其主要工作流程，代價遠高於改一支建置腳本。而且以 k3s 實際回報的 runtime 做判斷，
+本來就比假設某個引擎更正確——這個修正在兩種引擎下都成立。
+
+**待使用者確認**：`k3s-baseline.md` 中「Moby 不是可替代引擎」這句話與實測不符，計畫中安排在
+P1 收尾時修正。若當初有其他理由堅持 containerd（例如 image digest 可重現性），請告知。
+
+### Q4：Windows 上沒有 Python，manifest 測試無法執行
+
+`scripts/tests/k8s-manifests-test.ps1` 需要 `python` 搭配 `PyYAML==6.0.3`（釘選於
+`scripts/tests/requirements-k8s.txt`）來解析 `kubectl kustomize` 的輸出。Windows PATH 上
+沒有 `python`。WSL Ubuntu 有 Python 3.12.3，但 PyYAML 是 6.0.1，版本斷言會失敗。
+
+**決策（D7）**：安裝 Python 3.12 並依 `requirements-k8s.txt` 安裝釘選的 PyYAML。
+
+**理由**：這不是新增相依，而是補齊 repository 自己的測試套件早已宣告的前置條件。沒有它，
+P1 中兩個 manifest 相關的任務無法驗證。安裝可逆，且讓測試對使用者自然可重現。
+
+### Q5：既有壓測工具與 Docker Compose 深度綁定
+
+`load-tests/benchmark/collect.ps1` 會自行拉起一個獨立的 Docker Compose 專案
+（`compose.benchmark.yaml`、獨立 volume 與 port）再施壓，無法直接對 K8s 使用。
+
+**決策（D8）**：P1 不移植 `collect.ps1`，改以 k6 Job 跑在叢集內、直接打 `backend` Service，
+結果另存為 `docs/portfolio/data/k8s-scale-out-results.json`。
+
+**理由**：移植整套 benchmark 工具是獨立的工程，範圍遠超 P1。而且 P1 要量的是
+**kube-proxy 的負載分配**，壓力來源必須在叢集內；用 `kubectl port-forward` 從外部打會讓所有
+流量經過單一 kubectl 代理連線，直接扭曲要量測的對象。沿用既有結果檔的精神（把重跑所需的環境
+事實與量測邊界都寫進檔案），但不共用格式。
+
+### Q6：`deploy.ps1` 斷言單一 Pod，多副本時必定失敗
+
+`deploy.ps1` 在 rollout 後檢查 `if ($pods.Count -ne 1) { throw ... }`。這個斷言的本意是確認
+跑起來的是本機建置的映像，但寫法把副本數寫死成 1，`replicas: 3` 時必定拋錯。已列為 P1 的
+Task 3，改為以 Deployment 宣告的副本數為期望值，並逐一驗證每個 Pod 的映像。
+
+---
+
+## 計畫自我檢查修正的問題
+
+撰寫 P1 實作計畫後做自我檢查，修正了五處會導致計畫無法執行的錯誤：
+
+1. **測試變數名錯誤**：原本寫 `$documents`，實際是 `$resources`。
+2. **StrictMode 下的屬性存取**：測試以 `Set-StrictMode -Version Latest` 執行，直接寫
+   `$x.spec.strategy.type` 在屬性不存在時會拋錯而非回傳 `$null`，必須改用檔案既有的
+   `Get-PropertyValue` helper 逐層取值。
+3. **遺漏前置相依**：Python 缺失（Q4）原本沒被計畫涵蓋，補上 Task 0。
+4. **規格驗收項目遺漏**：規格要求「經 `https://localhost:8443` 完成一次完整購買流程」，
+   原計畫只跑 `verify.ps1`（僅健康檢查），補上走 Nginx 與 TLS 的端到端購買驗證。
+5. **結果檔格式未定義**：原本只寫「把數據寫入 JSON」，沒有給結構。補上完整 schema，
+   並明訂沒量到的欄位寫 `null` 並說明原因，不得以推估值填充。
