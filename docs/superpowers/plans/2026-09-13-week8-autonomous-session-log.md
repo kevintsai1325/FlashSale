@@ -347,3 +347,186 @@ load-tests/k8s/k6-e2e-job.yaml                                            端到
 load-tests/k8s/pod-request-counts.sh                                      每 Pod 請求分配量測
 load-tests/k8s/ensure-metrics-admin.sh                                    量測用管理員帳號
 ```
+
+---
+
+# 第二段無人值守：benchmark 收尾與 P2（2026-09-13 下午）
+
+## benchmark 的三次收集
+
+### Q13：第一次完整收集的資料不能發布 —— 負的延遲
+
+`soak` 的 `completedLatencyMs.min` 是 **−1342 ms**。負延遲物理上不可能。
+
+根因：`completedLatency` 以 `Date.now()` 相減計算，而 `Date.now()` 是**牆鐘不是單調時鐘**。
+k6 現在跑在 WSL2 的容器內，VM 的時鐘校正會讓牆鐘往回跳。
+
+**這是「把 k6 搬進容器」引入的新脆弱性** —— 修好了一個失真（host port proxy 拒絕連線），
+換來另一個（容器內的時鐘）。兩個都必須處理，不能只修一半就發布。
+
+### Q14：第二次的修法不夠 —— 偵測不到的錯誤比偵測得到的危險
+
+第二次我加了「負值就排除並計數」的防護。表面上資料乾淨了（沒有負值），但
+`contention-30x10-5` 露出破綻：`completed max` 只有 42ms（其他四次是 290–800ms），
+而且 `req/s` 是 **−51.4**（負的吞吐量），`clockSkew` 計數為 10（30 筆中有 10 筆被排除）。
+
+原因：防護只攔得住**量成負值**的樣本。時鐘往回跳 1489ms 時，真實耗時 2000ms 的樣本會被量成
+511ms —— **正值、看起來正常、但錯的**。那一次執行有三分之一樣本跨越了校正點，剩下的也不可信。
+
+### 根因量化
+
+以緊密迴圈取樣 30 秒：
+
+| 環境 | 時鐘回跳次數 | 最大回跳 |
+|---|---|---|
+| Windows 原生（1.2 億次取樣） | **0** | — |
+| WSL VM 容器內（9,100 萬次取樣） | **1** | **−1489 ms** |
+
+WSL2 的 VM 時鐘大約每 30 秒被校正一次。17 分鐘的 benchmark 會遇到 30 幾次。
+`performance.now()` 在 k6 2.2.0 不可用（已實測），所以腳本內沒有單調時鐘可直接使用。
+
+**決策（D15）**：改為累加兩個單調來源 —— k6 自己量的 `response.timings.duration`
+（Go runtime 的單調時鐘）與我們自己指定的 sleep 間隔，完全不碰 `Date.now()`。
+負值在數學上變成不可能，因此上一輪加的 `clockSkew` 偵測與計數整組移除（已成死碼，
+留著一個永遠是 0 的欄位只會誤導）。
+
+**誠實的代價**：這個數字不含 VU 被 k6 調度器擱置的空檔，因此略小於真實牆鐘耗時。
+這是指標定義的改變，發布時會寫進量測邊界。
+
+**待使用者注意**：這個時鐘問題在 **P4／P6 會更嚴重**。Kafka 的事件時間戳與 Flink 的
+watermark 都假設時鐘單調遞增。壓測腳本可以繞過牆鐘，事件時間處理繞不過去。
+建議在進 P4 之前處理掉 VM 的時鐘問題。
+
+### Q15：兩台機器的資料不可比較
+
+新舊 benchmark 的環境比對發現 **CPU 不同**：舊資料是 i7-11800H（11 代、16 執行緒），
+這台是 i7-14650HX（14 代、24 執行緒）。新數據快 30–50% **主要是硬體換代**，不是量測改動。
+
+差一點就把「快了 43%」寫成我的修正帶來的改善。使用者指示以目前這台為基準機器。
+
+**連帶修正**：我在第一段無人值守時更新 `k3s-baseline.md`，把舊 CPU 型號與這台的執行緒數
+寫在同一行，組成了一個不存在的機器規格。已修正並標註兩份文件不是同一台機器。
+
+---
+
+## P2 的決策
+
+### D16：`@Transactional` 從排程移到 repository 方法
+
+`ApiAuditRetentionScheduler.purgeExpiredLogs()` 原本帶 `@Transactional`。把工作改成
+`schedulerLock.runIfLocked(..., this::doPurgeExpiredLogs)` 之後，內層是以方法參考呼叫的，
+**會繞過 Spring 的代理，寫在外層方法上的 `@Transactional` 不會套用到內層**。
+而 `deleteByOccurredAtBefore` 是 `@Modifying` 的 delete，沒有交易會失敗。
+
+決策：把 `@Transactional` 加到 `ApiAuditLogJpaRepository.deleteByOccurredAtBefore` 上。
+`@Modifying` 的 delete 本來就該自帶交易，這樣呼叫端怎麼包都安全，而且「取鎖」不會被包在
+一個開著的資料庫交易裡。
+
+### D17：各排程的租約長度
+
+| 排程 | 鎖名稱 | 租約 | 理由 |
+|---|---|---|---|
+| `PaymentTimeoutScheduler` | `expireOverduePayments` | 60s | 叢集實測 30 筆訂單數十毫秒處理完；租約為任務間隔（30s）的兩倍，崩潰後最多晚一輪接手 |
+| `NotificationRetryScheduler` | `retryDueNotifications` | 120s | 會實際送出郵件，SMTP 往返較慢 |
+| `InventoryReconciliationScheduler` | `reconcileInventory` | 120s | 需掃描所有進行中活動並比對 Redis 與 Postgres |
+| `ApiAuditRetentionScheduler` | `purgeExpiredAuditLogs` | 300s | 大量刪除可能耗時；每日一次，租約長不影響 |
+
+不使用 Redisson 的看門狗自動續期：續期會讓「持鎖副本崩潰後多久釋放」變得不可預測，
+而這些排程本來就允許晚一輪執行。
+
+### Q16：我的批次改寫腳本弄壞了一個檔案
+
+用 Python 批次把三個排程包上鎖時，腳本以「找第一個 `{`」定位建構子主體，但
+`ApiAuditRetentionScheduler` 的建構子參數含有 `@Value("${app.audit.retention-days:30}")`，
+那個 `${` 讓定位錯位，產生語法錯誤的程式碼。
+
+逐檔審閱時發現並手動重寫該檔。**教訓**：用字串比對批次改 Java 原始碼時，
+註解與字串常值裡的括號會破壞天真的括號比對；改完必須逐檔看過，不能只看腳本回報成功。
+
+### Q17：又踩到 cp950 編碼問題，這次是 PowerShell 寫檔
+
+為了驗證「重現超賣的測試在加鎖前真的會紅」，我用 PowerShell 暫時把 `PaymentTimeoutScheduler`
+的鎖繞過：
+
+```powershell
+(Get-Content $f -Raw) -replace '...' | Set-Content $f -Encoding utf8
+```
+
+結果**整個檔案的中文註解變成亂碼**。`Get-Content -Raw` 在這台機器上以 cp950 解碼一個 UTF-8
+檔案，再以 UTF-8 寫回，中文全毀。測試因為編譯失敗而以 exit 255 收場。
+
+這與 Q7 是同一個根源（系統 ANSI 代碼頁 950），但表現形式不同：Q7 是 PowerShell **讀取並執行**
+`.ps1` 時吃掉換行，這次是 PowerShell **讀寫檔案內容**時破壞字元。
+
+**決策（D18）**：在這台機器上，**一律不用 PowerShell 讀寫含非 ASCII 的檔案**。改用 Python
+並明確指定 `encoding="utf-8"`。已從備份還原，改用 Python 重做。
+
+**待使用者注意**：這個地雷會在任何「用 PowerShell 批次改檔案」的場合重現。專案裡有不少
+`.ps1` 腳本，如果哪天要寫一支會改動原始碼或設定檔的 PowerShell 腳本，必須顯式指定編碼
+（`[IO.File]::ReadAllText($p, [Text.Encoding]::UTF8)` 與 `WriteAllText` 搭配 UTF8Encoding），
+不能用 `Get-Content` / `Set-Content` 的預設行為。
+
+### P2 Task 2 驗證：失敗測試確實抓得到缺陷
+
+把 `PaymentTimeoutScheduler` 的鎖暫時繞過後執行 `PaymentTimeoutSchedulerConcurrencyIT`：
+
+```
+java.lang.AssertionError: [庫存被回補的次數必須等於逾時訂單數...]
+Expecting actual:
+  2
+to be less than or equal to:
+  1
+```
+
+`available_quantity = 2` 而 `total_quantity = 1` —— 叢集上那個「庫存憑空生出」的缺陷，
+被縮進一個單一 JVM、兩條執行緒、可在 CI 重跑的測試裡了。
+
+這是 P2 最有價值的產出：**叢集實驗無法在 CI 重跑，但這個測試可以**。日後任何人拿掉鎖，
+或改動 `OrderCompensationService` 讓它不再冪等，這個測試就會紅。
+
+驗證手法本身也記一下：暫時繞過鎖 → 確認紅 → 還原 → 確認綠。只看「加了鎖之後測試是綠的」
+不足以證明測試有效 —— 一個永遠不會紅的測試等於沒有測試。
+
+### D19：Task 7 的故障模式量測不能用牆鐘
+
+計畫的 Task 7 要量「持鎖副本被強制刪除後，其他副本多久才取得鎖」。原本的直覺做法是記錄
+刪除 Pod 的時刻與下一次取得鎖的時刻相減 —— 但**那要跨 Windows 與容器兩個時鐘**，而我們
+今天已經證明 VM 的牆鐘每約 30 秒往回跳 1.5 秒（見 Q13–Q15）。1.5 秒的誤差對一個「預期
+約等於剩餘租約」的量測是致命的。
+
+決策：改用**只在 Windows 這一側量時間**。做法是從 Windows 以固定間隔輪詢 Redis 的鎖鍵是否
+存在（`kubectl exec redis -- redis-cli exists scheduler:xxx`），起訖時間都由 Windows 的
+時鐘決定。Windows 的時鐘今天實測 30 秒內 0 次回跳，是可信的。
+
+同理，「租約到期導致雙重執行」那一項不量時間，改為觀察
+`scheduler.lock.outcome{outcome="expired"}` 這個計數器有沒有增加 —— 計數不受時鐘影響。
+
+### Q18：`deploy.ps1` 無法重新部署（P1 沒發現的缺陷）
+
+要把含 Redisson 的新映像部署上去時，`deploy.ps1` 失敗：
+
+```
+Apply failed with 1 conflict: conflict with "kubectl-client-side-apply"
+using apps/v1: .spec.volumeClaimTemplates
+```
+
+根因：`deploy.ps1` **實際套用時用 client-side apply**（`Apply-Stage` 的 `kubectl apply -k`），
+但**驗證 schema 時用 server-side dry-run**。兩者的欄位所有權模型不同，server-side apply 會
+因為欄位已被 `kubectl-client-side-apply` 持有而拒絕。
+
+**為什麼 P1 沒發現**：第一次部署時資源還不存在，dry-run 對不存在的資源沒有衝突。
+這個缺陷只有在**第二次以後的部署**才會浮現，而 P1 只部署了一次。
+
+**決策（D20）**：在那個 dry-run 加上 `--force-conflicts`。
+
+理由：這一步的目的是「讓 API server 驗證 manifest 結構」，不是接管欄位所有權。它是 dry-run，
+`--force-conflicts` 不會寫入任何東西。改動範圍最小，也不需要把整支腳本改成 server-side apply
+（那會是更大的變更，且有自己的風險）。
+
+`k8s-scripts-test.ps1` 立刻抓到這個改動（kubectl shim 的引數比對不符），已一併更新 shim 與
+對應的順序斷言 —— 測試發揮了它該有的作用。
+
+**順帶清理**：我在 P1 與今天的實驗中用過 `kubectl apply -f -`、`kubectl scale`、
+`kubectl set env`，在資源上留下多個 field manager 與過期的
+`kubectl.kubernetes.io/last-applied-configuration` annotation。已全部清除。
+教訓：**手動 kubectl 操作會污染部署腳本的欄位所有權**，除錯時方便，但事後要清乾淨。

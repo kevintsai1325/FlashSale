@@ -106,7 +106,13 @@ $tlsSecret = [ordered]@{
 } | ConvertTo-Json -Depth 5
 
 Apply-Stage -Stage 'bootstrap'
-Invoke-KubectlChecked -Arguments @('--context', 'rancher-desktop', 'apply', '--server-side', '--dry-run=server', '-k', $base) -Operation 'server-side schema dry-run of the rendered baseline' | Out-Null
+# 這一步的目的是讓 API server 驗證算繪出來的 manifest 結構，不是要接管欄位所有權。
+# 必須帶 --force-conflicts：本腳本實際套用時用的是 client-side apply（Apply-Stage），
+# 於是資源的欄位由 kubectl-client-side-apply 持有；server-side apply 在第二次以後的部署
+# 會因為欄位所有權而衝突（例如 StatefulSet 的 .spec.volumeClaimTemplates）。
+# 這是 dry-run，--force-conflicts 不會寫入任何東西，只是讓驗證能在既有資源上完成。
+# 第一次部署時資源還不存在，所以這個問題直到重新部署才會浮現。
+Invoke-KubectlChecked -Arguments @('--context', 'rancher-desktop', 'apply', '--server-side', '--force-conflicts', '--dry-run=server', '-k', $base) -Operation 'server-side schema dry-run of the rendered baseline' | Out-Null
 Apply-Stage -Stage 'foundation'
 Apply-SecretJson -Json $runtimeSecret -Description 'runtime secrets'
 Apply-SecretJson -Json $tlsSecret -Description 'the TLS secret'

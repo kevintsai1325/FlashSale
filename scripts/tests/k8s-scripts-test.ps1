@@ -146,7 +146,7 @@ if (($Arguments -join ' ') -like '--context rancher-desktop get nodes -o jsonpat
     else { 'containerd://2.1.4' }
     exit 0
 }
-if (($Arguments -join ' ') -like '--context rancher-desktop apply --server-side --dry-run=server -k *') {
+if (($Arguments -join ' ') -like '--context rancher-desktop apply --server-side --force-conflicts --dry-run=server -k *') {
     if ($mode -eq 'server-dry-run-failure') { [Console]::Error.WriteLine('server schema rejected the rendered baseline'); exit 1 }
     'server dry-run passed'; exit 0
 }
@@ -349,7 +349,7 @@ try {
     $deployResult = Invoke-LocalScript $deployScript $commonEnvironment
     Assert-True ($deployResult.ExitCode -eq 0) "First deploy must pass under the current host ($currentPowerShellLabel) with complete initial secret inputs. Output: $($deployResult.Output)"
     $deployLines = Get-LogLines $kubectlLog
-    $dryRunIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match 'apply\t--server-side\t--dry-run=server' })
+    $dryRunIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match 'apply\t--server-side\t--force-conflicts\t--dry-run=server' })
     $firstApplyIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match '--context\trancher-desktop\tapply\t-k' })
     $bootstrapIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match 'stage=bootstrap' })
     $foundationIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match 'stage=foundation' })

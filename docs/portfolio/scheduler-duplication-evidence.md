@@ -136,16 +136,67 @@ SELECT * FROM outbox_events WHERE published_at IS NULL ORDER BY id LIMIT :limit 
 資料庫的行鎖讓每一列只會被一個副本取走，其餘副本直接跳過。**這個做法不需要任何外部協調服務，
 也不需要分散式鎖。** 能用資料庫行鎖解決的互斥，就不該引入 Redis 或 ZooKeeper。
 
+## 修復後驗證（2026-09-13，Week 8 P2）
+
+`SchedulerLock`（Redisson `RLock`）套用到四個排程之後，**以完全相同的步驟重跑上述實驗**：
+同樣三副本、同樣同時刪除 Pod 讓計時器對齊（三個 Pod 的 `startTime` 皆為
+`2026-09-13T10:25:36Z`）、同樣 30 筆訂單一次設為逾時。
+
+| 指標 | 修復前 | **修復後** | 正確值 |
+|---|---|---|---|
+| `EXPIRED` 訂單數 | 30 | 30 | 30 |
+| `order_status_history` 筆數 | **117** | **60** | 60 |
+| `inventory.available_quantity` | **87**（總量只有 30） | **30** | 30 |
+| `inventory.sold_quantity` | −27 | **0** | 0 |
+| `StockReleaseRequested` 事件數 | **87** | **30** | 30 |
+
+每筆訂單被寫入的 `EXPIRED` 狀態歷史筆數分佈：
+
+| 每筆訂單的處理次數 | 修復前 | 修復後 |
+|---|---|---|
+| 1 次 | 0 | **30** |
+| 2 次 | 3 | 0 |
+| 3 次 | 27 | 0 |
+
+**30 筆訂單全部恰好被處理一次。** 庫存回補到 30，等於總量，`sold_quantity` 回到 0。
+不超賣的保證恢復了。
+
+### 互斥確實發生了，不是碰巧沒有競爭
+
+只看「結果正確」不足以證明鎖有效 —— 如果三個副本的排程剛好錯開，沒有鎖也會得到正確結果。
+`scheduler.lock.outcome` 指標排除了這個可能：
+
+| outcome | 全叢集次數 | 意義 |
+|---|---|---|
+| `acquired` | 10 | 取得鎖並執行 |
+| **`skipped`** | **2** | **有兩次因為別的副本持有鎖而跳過** |
+| `expired` | 0 | 沒有任何一次租約在任務執行中到期 |
+
+`skipped = 2` 是直接證據：競爭真實發生過，而鎖擋下了它。
+`expired = 0` 則說明 60 秒的租約對這個任務足夠寬裕。
+
+### 可在 CI 重跑的回歸保護
+
+叢集實驗無法進 CI。`backend/src/test/java/com/flashsale/order/application/PaymentTimeoutSchedulerConcurrencyIT`
+把同一個缺陷縮進單一 JVM：兩條執行緒以 `CyclicBarrier` 同時進入排程方法，斷言庫存的
+`available <= total` 且 `sold >= 0`。
+
+這個測試的有效性經過驗證：暫時把鎖繞過後它會失敗，訊息是
+`Expecting actual: 2 to be less than or equal to: 1` —— 正是叢集上那個「庫存憑空生出」的
+縮影。還原鎖之後轉綠。**只確認「加鎖後是綠的」不足以證明測試有效；一個永遠不會紅的測試
+等於沒有測試。**
+
+---
+
 ## 結論與後續
 
 1. 四個沒有互斥保護的排程任務必須加上互斥機制，其中 `PaymentTimeoutScheduler` 是正確性缺陷，
    不是效能問題。
 2. 互斥機制的選擇不是只有分散式鎖一種。`OutboxPublisher` 證明了「逐列取用」型的工作可以用
    `SKIP LOCKED` 解決；但「整批掃描後逐筆處理」型的排程無法這樣改寫，需要真正的互斥。
-3. 這四個排程的修正屬於 Week 8 P2 的範圍，設計見
+3. 這四個排程的修正已於 Week 8 P2 完成（見上方「修復後驗證」），設計見
    [Week 8 設計規格](../superpowers/specs/2026-09-13-flashsale-k8s-microservices-design.md#分散式鎖p2)。
-4. P2 完成後，本文件的實驗必須能重跑並得到「每筆訂單恰好一次、`available_quantity` 等於
-   `total_quantity`」的結果，作為修正有效的證明。
+4. 上述驗收條件已達成：重跑後每筆訂單恰好一次、`available_quantity` 等於 `total_quantity`。
 
 ## 重現步驟
 
