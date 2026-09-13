@@ -716,3 +716,123 @@ P2 的鎖故障模式時間（刻意從 Windows 端輪詢）、以及所有正�
 
 `verify-results.mjs` 現在會擋掉負延遲與非正的吞吐量。那是必要的下限，但它擋得住
 「不可能的值」，擋不住「看起來合理但整體偏斜的值」—— 後者只能靠對環境本身的量測。
+
+---
+
+## Q22：我先前寫下的「NodePort 2000 條同時連線 0 失敗」是錯的
+
+使用者決定把 K8s 的施壓端移回 Windows，理由是我在 `performance-report.md` 裡寫的
+「從 Windows 經 NodePort 打 2000 條同時連線 0 失敗」。動手前先驗證這個前提 —— **結果推翻了它**。
+
+| 施壓方式 | 目標 | 被接受 | 被拒 |
+|---|---|---|---|
+| 瞬間同時連線 | 200 | 200 | 0 |
+| 瞬間同時連線 | 250 | 210 | 40 |
+| 瞬間同時連線 | 300 | 210 | 90 |
+| 瞬間同時連線 | 400 | 207 | 193 |
+| 持續 400 新連線/秒 | — | 5,114 | 0 |
+| 持續 1,200 新連線/秒 | — | 15,100 | 0 |
+| 持續 2,000 新連線/秒 | — | 23,070 | 1,975 |
+
+同一時間從 VM 內部打同一個 NodePort：300/300 全通。
+
+**兩個新發現：**
+
+1. **上限卡的是「同時建立中的連線數」，不是連線速率。** 不論打 250、300 或 400，被接受的
+   都是約 210 條；但把同樣多的連線攤在時間上，每秒 1,200 條可以 0 失敗。
+2. **「300 個請求只收到 2 百初」有了精確數字：210。** 這正是使用者當初回報的現象。
+
+Windows 上持有該 listener 的是 Rancher Desktop 的使用者空間中繼行程。也試了 WSL2 的
+`networkingMode=mirrored`（Windows 11 build 26200 支援）—— **沒有改善**（同樣約 210），
+因為 Rancher Desktop 仍以自己的行程轉發服務埠。該設定已還原，`clocksource` 那行保留。
+
+**決策（D24）**：壓測分成兩條路，而不是全部搬回 Windows。
+
+| 情境 | 施壓端 |
+|---|---|
+| 吞吐量／延遲（arrival-rate 模型或會重用連線的腳本） | Windows（時鐘準確） |
+| 刻意製造 >200 條同時新連線 | 叢集內的 k6 Job（接受 3.5% 時間偏差） |
+
+`purchase-flow.js` 屬於前者：每個 VU 的連線在錯開的 register/login 階段就已建立，
+之後「所有 VU 同時送出購買請求」是重用既有連線，不會觸發同時建立連線的上限。
+
+新增 `load-tests/k8s/run-from-windows.ps1` 封裝這條路徑；它會在壓測結束後把
+NodePort Service 刪掉（那個 Service 刻意不在 `k8s/base/kustomization.yaml` 裡 ——
+讓 backend 繞過 Nginx 暴露在節點上可以是壓測手段，不該是常態）。
+
+**通則**：這是我第二次在同一個問題上寫下未經確認的數字（第一次是把時鐘問題歸因為「牆鐘會跳」）。
+兩次都是「量到一個結果，推論出一個機制，然後把推論當成量測結果寫進文件」。
+**寫進文件的每個數字都該能指出它是哪一次執行量到的。**
+
+## Q23：使用者調降 Tomcat 參數的決定 —— 證據支持「調回預設值」
+
+使用者說「都行，看一般公司會怎麼設定」。
+
+**決策（D25）**：改回 Spring Boot 預設的 `threads.max=200`、`accept-count=100`，
+並在 `application.yml` 裡明寫出來加上理由，而不是刪掉這段設定。
+
+理由有三層：
+
+1. **原本的 400/300 是為了解決一個不在 Tomcat 的問題。** 連線是被 Windows↔WSL2 的中繼層
+   在 TCP 握手階段 RST 的，Tomcat 從頭到尾沒看到那些連線。
+2. **`accept-count` 幾乎不可能是瓶頸。** NIO 的 Tomcat 先接受連線直到 `max-connections`
+   （預設 8192），`accept-count` 管的是超過之後的 OS backlog。300 條突發連線根本碰不到它。
+3. **`threads.max` 不該憑感覺放大。** 同步路徑的下游上限是 HikariCP 的 30 條連線。
+   400 個工作執行緒只會讓 370 個在應用程式內部排隊等連線池，把「快速失敗」變成「長尾延遲」。
+
+一般公司的做法也是這樣：沒有量測支持就不要動預設值；真的要調，就以下游容量（連線池、
+外部 API 的併發上限）為依據，而不是以「看起來不夠大」為依據。
+
+## Q24：BuildKit 在這個環境找不到 credential helper
+
+重建映像時失敗：
+
+```
+error getting credentials - err: fork/exec .../docker-credential-secretservice: no such file or directory
+```
+
+Windows 端的 docker named pipe 當時不通（`timed out dialing Hyper-V socket`），
+`build-local.ps1` 因此走 `wsl -d rancher-desktop -e docker` 這條備援路徑。而在 VM 內，
+BuildKit 會去找一個這個環境不存在的 credential helper —— 即使把 `DOCKER_CONFIG` 指向一份
+空設定也一樣。本專案只拉公開映像、不推送任何映像，根本不需要憑證。
+
+**決策（D26）**：備援路徑改用傳統建置器（`DOCKER_BUILDKIT=0`），實測可以正常拉取基底映像。
+
+## D27：為 cp950 那類問題加上 CI 守門
+
+使用者同意加。做法是 `scripts/tests/ps1-encoding.mjs`：任何含非 ASCII 位元組的 `.ps1` /
+`.psm1` 都必須以 UTF-8 BOM 開頭，另外也擋「整個檔案不是合法 UTF-8」（那表示被存成 Big5）。
+
+刻意用 Node 而不是 PowerShell 實作，這樣可以在 CI 的 ubuntu runner 上跑。
+`ci.yml` 新增 `scripts` job 執行它與它自己的單元測試。
+
+兩個設計選擇：
+
+- **單元測試的 fixture 是位元組字面值，不是磁碟上的檔案。** 一個「故意存成 Big5」的測試檔
+  很容易被編輯器或下一個看到它的人「好心修好」，那樣守門就會在不知不覺中失效。
+- **`--fix` 只補 BOM，不猜測原始編碼。** 對於已經不是合法 UTF-8 的檔案，盲目補上 BOM
+  只會把一個壞掉的檔案偽裝成好的，所以那種情況一律要求人工處理。
+
+驗證方式是把一個現有腳本的 BOM 拿掉：守門偵測到 → `--fix` 修好 → 結果與原檔位元組完全相同。
+
+### Tomcat 改回預設值後的閉環驗證
+
+重建映像、重新部署（三個 Pod 都跑新的 image ID），滾動重啟所有工作負載讓重啟計數歸零
+（先前 19 次重啟全部來自今天兩次刻意的 WSL 重啟），`verify.ps1` 通過。
+
+從 Windows 用 `run-from-windows.ps1` 跑 100 VU 搶 30 件：
+
+| 指標 | 結果 |
+|---|---|
+| checks | **530 / 530 全過** |
+| http_req_failed | **0 / 330** |
+| 延遲（Windows 時鐘） | avg 188.65 ms、med 63.84 ms、p95 562.64 ms、max 580.8 ms |
+| 結果分布 | 30 SUCCEEDED、70 SOLD_OUT |
+| 庫存 | total 30、available 0、reserved 0、**sold 30** |
+| 訂單 | 30 |
+| 未發佈的 outbox | 0 |
+
+Tomcat 用預設的 200 執行緒 / accept-count 100，100 VU 完全沒有問題 —— 這與「原本的 400/300
+是在解決一個不在 Tomcat 的問題」一致。
+
+`run-from-windows.ps1` 也驗證了會在結束後刪除 NodePort Service（`service "backend-loadtest" deleted`）。

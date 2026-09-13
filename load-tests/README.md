@@ -232,3 +232,91 @@ There is no quantitative target here per the design spec — the numbers above
 (70ms avg request latency, 19.2s wall-clock for the whole run, 5.2 req/s
 aggregate `http_reqs` rate) are recorded as observed, for later reference
 (e.g. Week 6's portfolio writeup), not as a pass/fail bar.
+
+---
+
+## Running against k3s: generate load from Windows, not from inside the cluster
+
+`load-tests/k8s/k6-job.yaml` runs k6 **inside** the cluster. That was the only option for a
+while, but it has a measurement problem: this machine's WSL2 VM clock runs roughly **3.5%
+fast**, so every duration k6 reports from inside a container is overstated by about that much
+(see [measurement clock accuracy](../docs/portfolio/wsl2-clock-accuracy.md)). The Windows host
+clock was verified accurate against `time.windows.com`.
+
+`load-tests/k8s/run-from-windows.ps1` runs k6 **on Windows** instead, keeping the same
+measurement boundary — straight to the backend Service, no Nginx and no TLS, so kube-proxy's
+distribution across Pods is still what is being measured:
+
+```powershell
+./load-tests/k8s/run-from-windows.ps1 -Vus 100 -Stock 30
+```
+
+Seed the fixture first — same shape as Step 1 above, but through `kubectl` instead of
+`docker compose`, and sized for the VU count you are about to run:
+
+```bash
+kubectl --context rancher-desktop -n flashsale exec -i postgres-0 -- psql -U flashsale -d flashsale <<'EOF'
+TRUNCATE TABLE purchase_requests, order_items, orders, inventory, flash_sales, products, users RESTART IDENTITY CASCADE;
+INSERT INTO products (id, name, description) VALUES (1, 'Limited Sneakers', 'Only 100 pairs');
+INSERT INTO flash_sales (id, product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status)
+VALUES (1, 1, 9.99, now() - interval '1 minute', now() + interval '1 hour', 1, 'ACTIVE');
+INSERT INTO inventory (id, flash_sale_id, total_quantity, available_quantity, reserved_quantity, sold_quantity, version)
+VALUES (1, 1, 30, 30, 0, 0, 0);
+EOF
+```
+
+kubectl --context rancher-desktop -n flashsale exec -i postgres-0 -- psql -U flashsale -d flashsale <<'EOF'
+
+It applies `k8s/loadtest/backend-nodeport.yaml`, waits for the port to answer, runs k6, writes
+`k6.log`, `k6-summary.json` and `run.json` under `load-tests/k8s/results/<timestamp>/`, and then
+**deletes the NodePort Service again** (pass `-KeepService` to keep it). The Service is
+deliberately not part of `k8s/base/kustomization.yaml`: it exposes the backend on the node
+without going through Nginx, which is fine for a load test and not fine as a standing default.
+
+### Recorded run (2026-09-13, from Windows against k3s)
+
+100 VUs against 30 units of stock, three backend replicas, Tomcat at Spring Boot defaults
+(`threads.max=200`, `accept-count=100`):
+
+```
+checks_total.......: 530     checks_succeeded: 100.00% (530/530)
+http_reqs..........: 330     http_req_failed:    0.00% (0/330)
+http_req_duration..: avg=188.65ms min=3.03ms med=63.84ms p(95)=562.64ms p(99)=573.02ms max=580.8ms
+iterations.........: 100     wall-clock: 54.7s (dominated by the deliberate register/login stagger)
+```
+
+Outcome split: 30 `SUCCEEDED`, 70 `SOLD_OUT`, no raw 5xx, no stuck `PENDING`.
+
+Invariants immediately afterwards:
+
+```
+ total_quantity | available_quantity | reserved_quantity | sold_quantity
+             30 |                  0 |                 0 |            30
+ orders: 30     unpublished outbox events: 0
+```
+
+These durations are measured by the Windows clock, so unlike the in-cluster numbers they carry
+no ~3.5% inflation. They are not comparable with the older in-cluster figures for that reason —
+and the path differs too (this one adds the relay hop, the in-cluster one does not).
+
+### When you must still generate load inside the cluster
+
+Traffic from Windows goes through Rancher Desktop's user-space port relay, which has a hard
+limit that Tomcat has nothing to do with:
+
+| How the connections arrive | Limit |
+|---|---|
+| All at once ("N simultaneous new connections") | about **210** accepted; the rest get a TCP RST |
+| Spread over time (new connections per second) | **1,200/s** measured with zero failures |
+
+The limit is on connections being established *at the same instant*, not on connection rate —
+the same total spread over a few seconds goes through cleanly. So:
+
+- **Arrival-rate scenarios, or scripts that reuse connections** (`purchase-flow.js` establishes
+  each VU's connection during its staggered register/login, so its simultaneous purchase burst
+  reuses connections that already exist) → run from Windows.
+- **A deliberate connection storm above ~200 simultaneous new connections** → use
+  `k6-job.yaml` inside the cluster and note the ~3.5% clock bias on the resulting durations.
+
+This is the same relay that made the Compose benchmark refuse connections; the full measurement
+is in the [performance report](../docs/portfolio/performance-report.md#windows-到-wsl2-的埠轉發層實際容量).

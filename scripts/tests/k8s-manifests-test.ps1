@@ -50,6 +50,29 @@ $resources = @()
 for ($index = 0; $index -lt $parsedResources.Count; $index++) {
     $resources += $parsedResources[$index]
 }
+# 壓測用的 NodePort 讓 backend 繞過 Nginx 直接暴露在節點上。它是壓測期間才套用、
+# 用完就刪的東西，絕不能出現在 base kustomization 裡。
+# 這裡用 PSObject.Properties 檢查欄位是否存在，因為本檔案在 Set-StrictMode 下執行，
+# 直接存取不存在的屬性（例如沒有 labels 的資源）會拋 PropertyNotFoundException。
+function Get-OptionalProperty {
+    param([object]$InputObject, [string]$Name)
+    if ($null -eq $InputObject) { return $null }
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $null }
+    return $property.Value
+}
+
+$nodePortServices = @($resources | Where-Object {
+    ($_.kind -eq 'Service') -and ((Get-OptionalProperty -InputObject $_.spec -Name 'type') -eq 'NodePort')
+})
+Assert-True ($nodePortServices.Count -eq 0) "Base kustomization must not render NodePort Services; found $($nodePortServices.Count)."
+
+$loadTestResources = @($resources | Where-Object {
+    $labels = Get-OptionalProperty -InputObject $_.metadata -Name 'labels'
+    $null -ne (Get-OptionalProperty -InputObject $labels -Name 'flashsale.dev/role')
+})
+Assert-True ($loadTestResources.Count -eq 0) 'Base kustomization must not render load-test resources.'
+
 Assert-True ($resources.Count -eq 24) "Expected exactly 24 rendered resources, got $($resources.Count)."
 
 $secrets = @($resources | Where-Object { $_.kind -eq 'Secret' })

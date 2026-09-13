@@ -159,6 +159,9 @@ Demo的展示流程(3~5 分鐘)在 [Demo 腳本](docs/portfolio/demo-script.md)�
 | [截圖說明](docs/portfolio/assets/README.md) | 六張截圖的擷取條件、資安檢查與重現步驟 |
 | [壓測工具](load-tests/benchmark/README.md) | 產生上述數字的隔離 benchmark harness |
 | [k6 端到端腳本](load-tests/README.md) | 走完整 Nginx 路徑的壓力測試腳本 |
+| [分散式鎖的故障模式](docs/portfolio/distributed-lock-failure-modes.md) | 排程重複執行造成超賣的證據、修復後驗證,以及四種故障模式的實測 |
+| [兩種分散式鎖的對照](docs/portfolio/lock-mechanism-comparison.md) | Redisson 與 Kubernetes Lease 在正確性、故障行為與運維上的差異 |
+| [量測環境的時鐘準確度](docs/portfolio/wsl2-clock-accuracy.md) | WSL2 VM 時鐘走快約 3.5%:診斷過程、緩解方式,以及哪些數字受影響 |
 | [k3s 單節點基準](docs/portfolio/k3s-baseline.md) | Rancher Desktop 可重現操作、目前證據邊界與單機限制 |
 | [AWS EC2 k3s 部署](docs/portfolio/aws-ec2-k3s.md) | 單台 EC2 上的 k3s 實際執行結果、OIDC/SSM 的 CD 管線與已知限制 |
 

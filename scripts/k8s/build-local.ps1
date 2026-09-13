@@ -65,7 +65,15 @@ function Invoke-ImageBuild {
     switch ($Builder.Kind) {
         'nerdctl'    { & $Builder.Command --namespace k8s.io build --tag $Tag $ContextPath }
         'docker'     { & $Builder.Command build --tag $Tag $ContextPath }
-        'wsl-docker' { & $Builder.Command -d rancher-desktop -e docker build --tag $Tag (ConvertTo-WslPath $ContextPath) }
+        'wsl-docker' {
+            # 在 VM 內用 BuildKit 建置時，解析基底映像會失敗：
+            #   error getting credentials - err: fork/exec .../docker-credential-secretservice: no such file
+            # BuildKit 會去找一個這個環境沒有的 credential helper，即使 DOCKER_CONFIG 指向一份
+            # 空設定也一樣。本專案只拉公開映像、不推送任何映像，不需要任何憑證。
+            # 傳統建置器（DOCKER_BUILDKIT=0）走不同的驗證路徑，實測可以正常拉取。
+            $shell = "DOCKER_BUILDKIT=0 docker build --tag $Tag $(ConvertTo-WslPath $ContextPath)"
+            & $Builder.Command -d rancher-desktop -e sh -c $shell
+        }
         default      { throw "Unknown image builder kind: $($Builder.Kind)" }
     }
     if ($LASTEXITCODE -ne 0) { throw "Image build failed: $Tag" }

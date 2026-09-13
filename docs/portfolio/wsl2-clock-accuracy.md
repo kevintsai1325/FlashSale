@@ -98,14 +98,35 @@ kernelCommandLine = clocksource=hyperv_clocksource_tsc_page
 P2 的故障模式量測刻意這樣做（從 Windows 輪詢 Redis 的鎖鍵狀態），因此不受影響。
 Windows 主機的時鐘已驗證為準確。
 
-### K8s 壓測可以把施壓端移回 Windows
+### K8s 壓測把施壓端移回 Windows —— 但有明確的適用範圍
 
-P1 發現「壓力來源必須在叢集內」是因為 Compose 發布到 Windows 的 host port 會在 300 條
-瞬間新連線下拒絕約 25–30%。但那是 **Docker Compose 的 port 發布層**的問題。
+當初把 k6 搬進容器，是因為 Compose 發布到 Windows 的 host port 會在 300 條瞬間新連線下
+拒絕約 25~30%。2026-09-13 重新量測後確認：**k3s 的 NodePort 也一樣**，因為兩者都經過
+Rancher Desktop 在 Windows 端的使用者空間中繼行程。
 
-實測過的另一條路徑不同：**從 Windows 經 K8s NodePort 打，2000 條同時連線 0 失敗**。
-因此 P3 重做壓測工具時，K8s 這條路可以把 k6 放回 Windows —— 同時得到準確的時鐘與
-不失真的連線。Compose benchmark 則仍必須在容器內執行，該路徑的 3.5% 偏差要如實標註。
+量到的上限（細節見 [負載特性報告](./performance-report.md#windows-到-wsl2-的埠轉發層實際容量)）：
+
+| 施壓方式 | 上限 |
+|---|---|
+| 瞬間「同時」建立新連線 | 約 **210 條**，超過的部分在 TCP 握手階段被 RST |
+| 持續的新連線速率 | **1,200 / 秒** 實測 0 失敗；2,000 / 秒 開始有 8% 被拒 |
+
+**關鍵是這兩者被卡的不是同一件事**：受限的是「同時建立中的連線數」，不是連線速率。
+把同樣多的連線攤在時間上就不會被拒。
+
+因此壓測分成兩條路：
+
+| 情境 | 施壓端 | 理由 |
+|---|---|---|
+| 吞吐量與延遲（arrival-rate 模型、或會重用連線的腳本） | **Windows** | 時鐘準確，且不會碰到同時連線上限 |
+| 刻意製造「N 條連線同時到達」且 N > 200 | **叢集內的 k6 Job** | Windows 這條路過不去；接受 3.5% 的時間偏差 |
+
+Windows 這條路由 `load-tests/k8s/run-from-windows.ps1` 封裝，量測邊界與叢集內的 Job 相同
+（直接打 backend，不經 Nginx 與 TLS），因此 kube-proxy 的分配仍是被量測的對象。
+
+順帶一提，也試過 WSL2 的 `networkingMode=mirrored`（Windows 11 build 26200 支援），
+**對這個上限沒有幫助**（同樣約 210）—— Rancher Desktop 仍以自己的行程轉發 Kubernetes 服務埠，
+mirrored 模式並不會把那一層拿掉。該設定已還原。
 
 ### P4／P6 之前必須重新評估
 

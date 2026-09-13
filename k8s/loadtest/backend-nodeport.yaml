@@ -1,0 +1,23 @@
+# 只在壓測期間套用的 NodePort Service，預設不屬於任何 kustomization。
+#
+# 為什麼需要它：壓測的量測邊界必須是「直接打 backend，不經 Nginx 與 TLS」，
+# 這樣 kube-proxy 的分配才是被量測的對象，數字也才能和既有的 Compose benchmark 比較。
+# 叢集內的 k6 Job 打 http://backend:8080 就能做到，但那會用到 WSL2 VM 的時鐘 ——
+# 該時鐘實測比實際時間快約 3.5%（docs/portfolio/wsl2-clock-accuracy.md）。
+# 把 k6 移到 Windows 可以用準確的時鐘，代價是需要一個從主機可達的入口。
+#
+# 安全性：這個 Service 讓 backend 繞過 Nginx 直接暴露在節點的 30880 埠。
+# 因此它刻意不放進 k8s/base/kustomization.yaml，run-from-windows.ps1 會在壓測結束後刪掉它。
+# 若要手動操作，記得收尾：
+#   kubectl --context rancher-desktop delete -f k8s/loadtest/backend-nodeport.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-loadtest
+  namespace: flashsale
+  labels: {flashsale.dev/role: load-test}
+spec:
+  type: NodePort
+  selector: {app: backend}
+  ports:
+    - {name: http, port: 8080, targetPort: 8080, nodePort: 30880}
