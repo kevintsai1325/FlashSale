@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    壓測期間每秒取樣一次下游指標，輸出 JSON Lines。
+    壓測期間定期取樣下游指標，輸出 JSON Lines。
 
 .DESCRIPTION
     P1 量到「加副本沒有讓吞吐變好」，最可能的解釋是瓶頸在下游而不是 backend 本身。
@@ -22,6 +22,12 @@
     不需要每個副本都同時取樣到。若要精確拆解「哪個副本、各自的池用量」，
     需要在叢集內常駐一個探針 Pod 分別打各 Pod 的 /actuator/metrics，
     這超出本腳本範圍，刻意不做。
+
+    關於取樣週期：IntervalSeconds 是「兩次取樣之間的睡眠秒數」，不是取樣週期本身。
+    每一輪迴圈的實際耗時 = 收集一個樣本的成本（5 次網路呼叫，其中對 postgres-0 的
+    kubectl exec 最慢，實測約 1 秒）+ IntervalSeconds 的睡眠，所以 IntervalSeconds=1
+    時，實際週期大約是 1.8～2 秒，不是每秒一次。這裡不追求精準的每秒取樣：每筆樣本
+    都帶自己的 sampledAt，用來判讀一段約 90 秒穩態壓測期間下游是否飽和已經足夠。
 #>
 [CmdletBinding()]
 param(
@@ -59,16 +65,28 @@ function Get-MetricValue {
         if ($null -eq $measurement) { return $null }
         return [double]$measurement.value
     } catch {
+        # 取樣失敗一律回傳 null，讓迴圈繼續跑（時間軸比任何單一樣本重要），但不能悄悄地
+        # 把「token 過期」「指標名稱打錯」「gateway 中斷」都變成看起來一樣的 null——
+        # 否則 180 秒壓測中途的一次 gateway 抖動，會被誤讀成「這個時間點下游沒有負載」。
+        Write-Warning "取樣指標 '$Metric' 失敗：$($_.Exception.Message)"
         return $null
     }
 }
 
 function Get-PostgresBackends {
     $output = & kubectl --context $Context -n $Namespace exec postgres-0 -- psql -U flashsale -d flashsale -t -A -c "SELECT count(*) FROM pg_stat_activity WHERE datname = 'flashsale';" 2>&1
-    if ($LASTEXITCODE -ne 0) { return $null }
+    if ($LASTEXITCODE -ne 0) {
+        # 同樣道理：kubectl exec 失敗（Pod 重啟中、連不上 API server 等）不能悄悄變成 null，
+        # 否則跟「Postgres 真的回了合法數字」的樣本在輸出檔裡長得一模一樣。
+        Write-Warning "取得 pgBackends 失敗（kubectl exec 結束碼 $LASTEXITCODE）：$(($output | Out-String).Trim())"
+        return $null
+    }
     $text = ($output | Out-String).Trim()
     $parsed = 0
     if ([int]::TryParse($text, [ref]$parsed)) { return $parsed }
+    # exec 本身成功（結束碼 0），但輸出不是整數——這是不同於指令失敗的另一種失敗模式
+    # （例如 psql 印出警告訊息混進輸出），要能跟上面那種區分開來，才好排查。
+    Write-Warning "取得 pgBackends 失敗：kubectl exec 成功但輸出無法解析為整數：'$text'"
     return $null
 }
 
@@ -77,7 +95,7 @@ if ([string]::IsNullOrWhiteSpace($token)) { throw "無法以 $AdminEmail 登入�
 
 $deadline = (Get-Date).AddSeconds($DurationSeconds)
 New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
-Write-Host "取樣中：每 $IntervalSeconds 秒一次，共 $DurationSeconds 秒 -> $OutputPath"
+Write-Host "取樣中：每次取樣間隔 $IntervalSeconds 秒睡眠（實際週期另加收集成本），共 $DurationSeconds 秒 -> $OutputPath"
 
 while ((Get-Date) -lt $deadline) {
     $reservationSeconds = Get-MetricValue -Token $token -Metric 'purchase.reservation.latency' -Statistic 'MAX'
