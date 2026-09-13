@@ -172,9 +172,24 @@ function validateMetrics(run, errors) {
         errors.push(`${label}: metrics.${trend}.${statistic} is missing or not a number`);
       }
     }
+    // 延遲不可能是負的。會出現負值只有一個原因：量測跨越了一次往回跳的時鐘。
+    // 2026-09-13 實測 k6 在 WSL2 容器內時，VM 的牆鐘約每 30 秒被校正一次、每次往回約 1.5 秒。
+    // 腳本這一側已改為累加 k6 的單調計時而免疫，但這道檢查要留著：它是最後一道防線，
+    // 確保不可能的數字不會被寫進作品集。min 一併檢查，因為負值最先出現在那裡。
+    for (const statistic of ['avg', 'min', 'med', 'p90', 'p95', 'max']) {
+      const value = metrics[trend][statistic];
+      if (isFiniteNumber(value) && value < 0) {
+        errors.push(`${label}: metrics.${trend}.${statistic} is negative (${value}ms) — a latency cannot be negative; the clock moved backwards during the run`);
+      }
+    }
   }
   if (!isFiniteNumber(metrics.requestsPerSecond)) {
     errors.push(`${label}: metrics.requestsPerSecond is missing or not a number`);
+  }
+  else if (metrics.requestsPerSecond <= 0) {
+    // requestsPerSecond 來自 k6 內建的 http_reqs.rate，是 k6 自己以執行時間為分母算的，
+    // 腳本改不到。時鐘往回跳會讓那個分母變成負數或零。一次送出過請求的執行不可能是 0 req/s。
+    errors.push(`${label}: metrics.requestsPerSecond is ${metrics.requestsPerSecond} — a run that issued requests cannot have a non-positive rate; the clock moved backwards during the run`);
   }
   if (!isFiniteNumber(metrics.iterations)) {
     errors.push(`${label}: metrics.iterations is missing or not a number`);

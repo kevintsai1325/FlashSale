@@ -183,6 +183,36 @@ test('accepts a well-formed full 15-run + soak result', () => {
   assert.equal(outcome.valid, true);
 });
 
+// 時鐘相關的資料品質檢查。
+// 2026-09-13 實測：k6 跑在 WSL2 的容器內時，VM 的牆鐘大約每 30 秒被校正一次、每次往回跳
+// 約 1.5 秒。那讓 k6 內建的 http_reqs.rate 算出負的吞吐量，也曾讓以 Date.now() 相減的延遲
+// 算出負值。延遲那一側已改為單調累加而免疫，但 rate 是 k6 內部計算的，腳本改不到。
+// 驗證器的職責就是擋下不能發布的結果 —— 物理上不可能的數字必須讓整份結果失效，
+// 而不是靜靜地被寫進作品集。
+test('rejects a non-positive request rate (clock went backwards during the run)', () => {
+  const result = validSmokeResult();
+  result.runs[0].metrics.requestsPerSecond = -1437.4;
+  assertRejects(result, 'requestsPerSecond');
+});
+
+test('rejects a zero request rate', () => {
+  const result = validSmokeResult();
+  result.runs[0].metrics.requestsPerSecond = 0;
+  assertRejects(result, 'requestsPerSecond');
+});
+
+test('rejects a negative latency statistic', () => {
+  const result = validSmokeResult();
+  result.runs[0].metrics.completedLatencyMs.min = -1342;
+  assertRejects(result, 'completedLatencyMs.min');
+});
+
+test('rejects a negative latency average', () => {
+  const result = validSmokeResult();
+  result.runs[0].metrics.acceptedLatencyMs.avg = -0.5;
+  assertRejects(result, 'acceptedLatencyMs.avg');
+});
+
 test('rejects oversell: more orders created than seeded stock', () => {
   const result = validSmokeResult();
   result.runs[0].invariants.ordersCreated = 11;
