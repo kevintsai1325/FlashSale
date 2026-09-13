@@ -3,20 +3,32 @@
     跑一組飽和式壓測：同一個副本數下逐階段提高到達率，每階段產出一份結果檔。
 
 .DESCRIPTION
-    流程：設定副本數 -> 等就緒 -> 種資料 -> 清 Redis -> 建管理員 -> 產 token -> 套 NodePort ->
+    流程：設定副本數 -> 等就緒 -> 種資料 -> 清 Redis -> 套 NodePort -> 建管理員 -> 產 token ->
     每個速率各跑一次（同時背景取樣下游指標）-> 收檔 -> 刪 NodePort。
 
     施壓端在 Windows，量測邊界是 NodePort 直達 backend Service。
     不要把 StartRate 設到 200 以上：那個區間會撞上 Rancher Desktop 中繼層的同時連線上限
     （約 210 條），量到的不是系統行為（見 docs/portfolio/wsl2-clock-accuracy.md）。
 
+    -Rates 用逗號分隔的字串（例如 '150,300,600,900'），不是 [int[]]：Windows PowerShell 5.1
+    以 -File 從外部行程（Bash、排程器）呼叫本腳本時，逗號分隔的陣列引數會被當成單一純量，
+    用文化特定的千分位規則轉成一個整數（例如 "50,100" -> 50100），而不是兩個元素；反過來，
+    在 PowerShell 工作階段內用 & 呼叫、不加引號時，逗號又會先被解析成陣列、再以空白重組成
+    字串（"50,100" -> "50 100"）。宣告成字串、自己解析兩種分隔符號，兩種呼叫方式都能得到
+    一致、正確的結果。
+
+    務必幫 -Rates 的值加上引號（如上面 .EXAMPLE）：用 & 呼叫時若不加引號，本腳本的
+    [CmdletBinding()] 會讓 PowerShell 直接把解析好的陣列物件拿去綁定字串參數，綁不了會
+    立刻丟出 ParameterBindingArgumentTransformationException 而中止——這是好事（吵、不會
+    誤跑），但只有加引號才能兩種呼叫方式都正常執行到底。
+
 .EXAMPLE
-    ./load-tests/k8s/run-saturation.ps1 -Replicas 3 -Rates 150,300,600,900 -AdminPassword 'MetricsAdmin123!'
+    ./load-tests/k8s/run-saturation.ps1 -Replicas 3 -Rates '150,300,600,900' -AdminPassword 'MetricsAdmin123!'
 #>
 [CmdletBinding()]
 param(
     [int]$Replicas = 3,
-    [int[]]$Rates = @(150, 300, 600, 900),
+    [string]$Rates = '150,300,600,900',
     [Parameter(Mandatory = $true)][string]$AdminPassword,
     [string]$BenchPassword = 'SaturationBench123!',
     [int]$Users = 200,
@@ -50,6 +62,37 @@ function Resolve-K6 {
     throw 'k6 not found on PATH.'
 }
 
+function ConvertTo-RateList {
+    # 把 -Rates 的逗號（或已經被 PowerShell 重組成空白分隔）字串拆成一組正整數。
+    # 拆分同時接受逗號與空白，理由見 .DESCRIPTION：兩種呼叫方式（-File 外部呼叫 / 工作階段內
+    # 用 & 呼叫）分別會把同一個引數變成 "50,100" 或 "50 100"，缺一種都會誤判成單一元素。
+    param([string]$Raw)
+    $parts = $Raw -split '[,\s]+' | Where-Object { $_ -ne '' }
+    if ($parts.Count -eq 0) {
+        throw "Rates='$Raw' 解析不出任何速率；請用逗號分隔的正整數列表，例如 '150,300,600,900'。"
+    }
+    $parsed = @()
+    foreach ($part in $parts) {
+        $value = 0
+        if (-not [int]::TryParse($part, [ref]$value)) {
+            throw "Rates 裡的 '$part' 不是整數；請用逗號分隔的正整數列表，例如 '150,300,600,900'。"
+        }
+        if ($value -le 0) {
+            throw "Rates 裡的 $value 不是正整數；到達率必須大於 0。"
+        }
+        $parsed += $value
+    }
+    if ($parsed.Count -eq 1 -and $parsed[0] -gt 10000) {
+        # 只解析出一個異常大的值，是「逗號分隔陣列被呼叫方式吃成一個數字」的典型特徵
+        # （例如原本想傳 50,100，卻被轉成 50100）——這裡直接點名這個已知的坑，
+        # 讓下一個人不必重新花一小時除錯才發現。
+        throw "Rates='$Raw' 只解析出一個異常大的速率（$($parsed[0])），超過上限 10000。這通常" +
+              "代表逗號分隔的列表被呼叫方式併成了一個數字（例如 -Rates 50,100 被吃成 50100）。" +
+              "若原意是多個速率，請確認引數真的以逗號分隔；若真的只要測單一速率，請用 10000 以下的值。"
+    }
+    return $parsed
+}
+
 function Resolve-Bash {
     # PATH 上排在前面的 bash 通常是 C:\Windows\System32\bash.exe（WSL 的殼），不是 Git Bash。
     # 這台機器沒有可用的 WSL 散布版，執行它會直接失敗在 execvpe(/bin/bash): No such file or
@@ -66,6 +109,7 @@ try {
     if ($StartRate -ge 200) {
         throw "StartRate=$StartRate 會在起步就產生逼近中繼層上限的同時連線；請用 200 以下的值。"
     }
+    $rateValues = ConvertTo-RateList -Raw $Rates
     $k6 = Resolve-K6
     if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
         $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
@@ -112,7 +156,7 @@ try {
         -e "BENCH_PASSWORD=$BenchPassword" -e "TOKENS_OUT=$tokensPath"
     if ($LASTEXITCODE -ne 0) { throw 'prepare.js 失敗' }
 
-    foreach ($rate in $Rates) {
+    foreach ($rate in $rateValues) {
         $runId = "saturation-r$Replicas-$rate"
         Write-Host ''
         Write-Host "=== $runId ==="
@@ -144,7 +188,7 @@ try {
     [pscustomobject]@{
         finishedAt  = (Get-Date).ToUniversalTime().ToString('o')
         replicas    = $Replicas
-        rates       = $Rates
+        rates       = $rateValues
         users       = $Users
         startRate   = $StartRate
         rampSeconds = $RampSeconds
