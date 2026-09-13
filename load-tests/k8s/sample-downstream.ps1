@@ -62,7 +62,15 @@ function Get-MetricValue {
     try {
         $response = Invoke-RestMethod -Uri "$Gateway/actuator/metrics/$Metric" -Headers @{ Authorization = "Bearer $Token" }
         $measurement = $response.measurements | Where-Object { $_.statistic -eq $Statistic } | Select-Object -First 1
-        if ($null -eq $measurement) { return $null }
+        if ($null -eq $measurement) {
+            # 指標本身存在（HTTP 呼叫成功），但要求的統計量（例如 MAX）不在回傳的 measurements
+            # 裡——這在滾動視窗型的 Timer 上會發生（例如視窗內沒有新樣本，MAX 直接不出現，
+            # 而不是回傳 0）。這裡曾經悄悄回傳 null、被呼叫端當成「這個時間點沒有負載」，
+            # 實際上是完全不同的一種失敗：指標查得到，但問的統計量查不到。必須跟其他失敗路徑
+            # 一樣明講出來，否則會被誤讀成一個真正量到的 0（見 P3 review Critical 1）。
+            Write-Warning "指標 '$Metric' 存在，但統計量 '$Statistic' 不在回傳結果裡"
+            return $null
+        }
         return [double]$measurement.value
     } catch {
         # 取樣失敗一律回傳 null，讓迴圈繼續跑（時間軸比任何單一樣本重要），但不能悄悄地

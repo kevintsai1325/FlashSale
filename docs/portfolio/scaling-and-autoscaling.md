@@ -6,7 +6,10 @@ P1 用固定併發（`per-vu-iterations`）量到「三副本比單副本 p95 �
 以及它跟預先擴容的對照。
 
 所有數字的來源：除非另有標註，皆取自 [`docs/portfolio/data/k8s-saturation-results.json`](./data/k8s-saturation-results.json)
-（P3 的曲線、飽和點、下游瓶頸證據）。HPA 與 PDB 的實測另外標明出處。
+（P3 的曲線、飽和點、下游瓶頸證據）。HPA 反應延遲、HPA 對照預先擴容、PDB 驅逐證據（第 4、5、6 節）
+取自 [`docs/portfolio/data/k8s-hpa-results.json`](./data/k8s-hpa-results.json)——這些原始執行檔
+（`timeline.csv`、k6 摘要 JSON）本身位於 `load-tests/k8s/results/` 底下，該目錄整體被
+`.gitignore` 排除，所以另外把會被引用的數字連同出處抄錄進這份有 commit 的 JSON。
 
 ---
 
@@ -86,7 +89,7 @@ P1 用封閉模型量到的「三副本更慢」，是因為那套壓測從來�
 副本的 metrics 端點），欄位為 HikariCP 的 `hikariActive`／`hikariPending`、Postgres 的
 `pgBackends`、Redis 庫存預扣延遲 `reservationMaxMs`。
 
-### `replicas=1`：Postgres 連線池是唯一瓶頸
+### `replicas=1`：Postgres 連線池是瓶頸
 
 `replicas=1`、`targetRate=900`（打不進去的那次嘗試）的下游取樣：31 個樣本裡，`hikariActive`
 貼著 30（HikariCP 每副本上限）、`pgBackends` 峰值 31、`reservationMaxMs` 全程為 0。取
@@ -96,11 +99,24 @@ P1 用封閉模型量到的「三副本更慢」，是因為那套壓測從來�
 對照它自己健康的飽和點（`targetRate=600`）：同樣的門檻下，最長連續區間只有 **5 個樣本、
 跨越 8.7 秒**，數值 1–19（中位數 15）；`hikariPending` 曾經衝到 173 的峰值，但那是**孤立的
 單一取樣尖峰**，不在任何連續排隊區間內。也就是說，即使是「健康」的那一格，連線池已經在
-偶爾喘不過氣，只是還沒有形成持續排隊。
+偶爾喘不過氣，只是還沒有形成持續排隊。這一格的 `reservationMaxMs` 同樣讀到 0——原因見下段，
+這個 0 不能當成「Redis 這時確實是 0ms」的證據。
 
-`reservationMaxMs` 兩次都是 0，代表 Redis 的庫存預扣本身沒有變慢。**結論：一個副本在高負載
-下的瓶頸明確是 Postgres 連線池（HikariCP 30 條上限）被打滿、執行緒在等連線，不是 Redis
-或 backend 運算本身。**
+**`reservationMaxMs` 讀到 0，不代表 Redis 變快了，很可能代表這個指標在高負載下沒有回報。**
+把同一個 `replicas=1` sweep 攤開看（`downstream-saturation-r1-*.jsonl`）：150 rps 與
+300 rps 這兩個健康、低負載的階段，`reservationMaxMs` 全程穩定讀到 **32.09 ms**；一旦進到
+600 rps 之後（包含這次 900 rps 的崩潰嘗試），**每一個樣本都變成 0.000000**。`replicas=3`
+與 `replicas=5` 的 sweep 是同一個模式：150/300 rps 分別穩定在 41.64ms／47.59ms，600/900 rps
+則全程為 0（詳見 `k8s-saturation-results.json` 的 `interpretation` 欄位）。這個轉折點卡在
+到達率而不是卡在「Redis 突然變快」，是一個更可信的解釋是統計量本身的問題：
+`purchase.reservation.latency` 是 Micrometer 的 `Timer`，其 `MAX` 統計量會隨捲動視窗衰減；
+`sample-downstream.ps1` 的 `Get-MetricValue` 在指定的統計量不存在時只會靜默回傳 `null`，
+取樣器再把 `null` 收斂成 0——高負載下讀到的 0 更可能是「這個統計量沒有回報」，而不是「Redis
+的庫存預扣延遲真的是 0ms」。**結論：Redis 在高負載下實際上沒有被這個指標測到，不能用
+`reservationMaxMs` 排除它是瓶頸。一個副本在高負載下的瓶頸明確是 Postgres 連線池
+（HikariCP 30 條上限）被打滿、執行緒在等連線——但這個結論只靠上面 `hikariPending`
+131–176、持續 63.7 秒的正面證據成立，不依賴 `reservationMaxMs` 這個看似支持、實則不可信
+的旁證。**
 
 ### `replicas=3` 與 `replicas=5`：測試範圍內沒有觀察到同樣的排隊
 
@@ -111,7 +127,11 @@ P1 用封閉模型量到的「三副本更慢」，是因為那套壓測從來�
 
 `replicas=5`、`targetRate=900`（**重跑版本**，說明見下）：同樣 47 個樣本、
 `hikariPending` 全程為 0；`hikariActive` 峰值 30、平均 3.26（五個副本分攤，稀釋更明顯）。
-`reservationMaxMs` 峰值僅 48.9 ms，Redis 依然很快。但 `pgBackends` 峰值 **152**——非常接近
+`reservationMaxMs` 峰值 48.9 ms——這是本文件所有 900 rps 附近的取樣裡，唯一一次讀到非零值
+的 `reservationMaxMs`（`replicas=1`／`3` 在 600、900 rps 讀到的都是全程 0，理由見上一節：
+這更可能是統計量衰減出捲動視窗、沒有回報，而不是 Redis 真的是 0ms）。48.9ms 本身不慢，但
+因為其他組別的 0 不可信，這裡只能說「五副本、每副本負載最輕的情況下 Redis 預扣是快的」，
+不能推廣成「Redis 在任何負載下都不是瓶頸」。`pgBackends` 峰值 **152**——非常接近
 `5 × 30 = 150`，這個數字本身就是一個關鍵發現（見下）。
 
 取樣是每約 2 秒隨機挑一個副本，看不到「多個副本同時全滿」的瞬間，也看不到兩次取樣之間可能
@@ -119,9 +139,10 @@ P1 用封閉模型量到的「三副本更慢」，是因為那套壓測從來�
 完全沒有壓力」。
 
 **為什麼這一格是重跑的，以及這對比較的意義**：這是本文件曲線裡唯一一個跟其他十格用不同
-施壓端設定量出來的點。其餘每一格都用 `run-saturation.ps1` 的預設
-`-PreAllocatedVUs 300 -MaxVUs 1200`；`replicas=5`、`targetRate=900` 最初也用同樣的預設值
-跑過一次，但那次只掉了 15 個 iteration、p95 僅 85.2 ms——跟 `replicas=1`、`targetRate=900`
+施壓端設定量出來的點。其餘每一格都是明確傳入 `-PreAllocatedVUs 300 -MaxVUs 1200`
+（這是測試者手動指定的值，**不是** `run-saturation.ps1` 的預設值——腳本本身的預設是
+`-PreAllocatedVUs 200 -MaxVUs 600`，見第 7 節）；`replicas=5`、`targetRate=900` 最初也用
+同樣的 300/1200 跑過一次，但那次只掉了 15 個 iteration、p95 僅 85.2 ms——跟 `replicas=1`、`targetRate=900`
 那次「無論怎麼加碼到 1500/6000 都掉 1461、14468，從未歸零」（見第 2 節）比起來，15 對
 14468 相差三個數量級。這個差距本身就是判斷依據：15 個掉的 iteration 判定為施壓端自己的
 VU 配額不夠撐住這個到達率（generator headroom 不足），不是系統的容量極限；因此改用
@@ -130,8 +151,8 @@ VU 配額不夠撐住這個到達率（generator headroom 不足），不是系�
 不採用（原始判斷記在 JSON 的 `downstreamPeaks["5"].rerunReason`）。**對比較的意義**：
 VU 配額理論上只決定施壓端撐不撐得住既定的到達率，不直接改變後端實際處理每個請求的延遲，
 所以把這一格的 accept p95 拿來跟同一到達率下的 `replicas=3`（也是 900）比較仍然合理；但
-它是曲線裡唯一一個沒有用預設設定量到的點，讀者若要做更嚴格的逐格比較，應該知道這個差異
-存在，而不是預設十一格都用同一套施壓端設定量出來的。
+它是曲線裡唯一一個沒有用 300/1200 這套設定量到的點，讀者若要做更嚴格的逐格比較，應該知道
+這個差異存在，而不是假設十一格都用同一套施壓端設定量出來的。
 
 ### 真正的天花板：Postgres `max_connections`，在任何 CPU 或吞吐瓶頸之前就先撞到
 
@@ -157,6 +178,8 @@ Postgres 預設 `max_connections=100`。每個 backend 副本的 HikariCP 上限
 ---
 
 ## 4. HPA 的完整反應延遲
+
+本節與第 5 節的數字取自 [`k8s-hpa-results.json`](./data/k8s-hpa-results.json)。
 
 實驗設定：`k8s/autoscaling/hpa.yaml`，CPU 閾值 60%（對應單一 Pod 用到 300m，因為
 `requests.cpu=500m`），`scaleUp` 無穩定視窗（`stabilizationWindowSeconds: 0`）、每 15 秒
@@ -205,18 +228,25 @@ rescale 決策。整段反應（決策 12 秒、新副本就緒 43 秒）都發�
 不受這個問題影響、可以直接從 `timeline.csv` 讀到的是：8 個 Pod 在 16:42:08–16:42:19 之間
 **同時 NotReady**——這是一次真正的服務中斷，不是單純變慢。
 
-機制：`kubectl top node` 在重啟風暴期間量到節點 CPU 使用率 78%（單節點 k3s，24 邏輯核心）。
-backend `limits.cpu=2`，8 個副本理論上限就要 16 核心，加上 5 個新 Pod 同時冷啟動（JVM class
-loading／JIT／Spring context 初始化本身是重 CPU 的階段）疊加在 3 個已經在 161–295% 忙碌的舊
-Pod 之上，把節點整體 CPU 需求推到連 kubelet 執行 liveness probe 這種輕量 HTTP 呼叫都排不到
-時間片——**連完全沒有被擴容影響、原本健康的舊 Pod 也被拖下水重啟**。
+**機制（假說，未被隔離驗證）**：`kubectl top node` 在重啟風暴期間量到節點 CPU 使用率 78%
+（單節點 k3s，24 邏輯核心）——這個數字本身留了約五個核心的餘裕，不足以單獨解釋「連 kubelet
+都排不到時間片」。更直接的機制在 Pod 層級：backend 的 `resources.requests.cpu=500m`、
+`limits.cpu=2`（2000m），`timeline.csv` 記錄的 425% CPU 使用率換算成單一 Pod 大約是
+2125m，已經頂到或超過該 Pod 自己的 CFS 配額；`livenessProbe` 沒有設定 `timeoutSeconds`，
+繼承 Kubernetes 預設的 1 秒。一個被 CFS 節流、正在忙著處理秒殺流量的 JVM，很可能就是連
+1 秒內都回不了一個輕量的 HTTP liveness 探測——這比「節點整體 78% 導致 kubelet 排不到時間
+片」更能直接解釋觀察到的 kill，因為 78% 這個節點級數字並沒有被特別隔離驗證過（沒有量測
+kubelet 自身的排程延遲、也沒有排除是純粹的單一 Pod CFS 節流）。**八個 Pod 同時 NotReady
+這個觀察本身是紮實的、直接量到的**；節點級 CPU 搶佔是否也有貢獻，目前的證據無法排除，但
+不是本文件能確認的機制。
 
 **「跟不跟得上」的結論，正負都講**：HPA 的**判斷**沒有跟不上——CPU 越過閾值到下達 rescale
 決策只花 12 秒，遠快於 30 秒的爬升期。但**擴容這個動作本身**，在這個單節點、CPU 資源有限的
-測試叢集上是自傷性的：同時冷啟動多個 JVM 造成的節點級 CPU 搶佔，觸發了至少 7 個 Pod
-（含 3 個未參與擴容、原本健康的舊 Pod）已確認的 liveness 重啟，加上第 8 個 Pod 重啟與否未
-獲確認；8 個 Pod 同時 NotReady、構成一次真實但短暫的服務中斷，這一點是直接觀察到的，不在
-爭議範圍內。這是一個負面但誠實的結果。
+測試叢集上是自傷性的：同時冷啟動多個 JVM（更直接的機制可能是單一 Pod 的 CPU 配額被
+CFS 節流、疊加 1 秒的預設 liveness timeout，見上段；節點級 CPU 搶佔是否也有貢獻未被隔離
+驗證），觸發了至少 7 個 Pod（含 3 個未參與擴容、原本健康的舊 Pod）已確認的 liveness 重啟，
+加上第 8 個 Pod 重啟與否未獲確認；8 個 Pod 同時 NotReady、構成一次真實但短暫的服務中斷，
+這一點是直接觀察到的，不在爭議範圍內。這是一個負面但誠實的結果。
 
 ---
 
@@ -262,7 +292,9 @@ Pod 之上，把節點整體 CPU 需求推到連 kubelet 執行 liveness probe �
 
 ## 6. PodDisruptionBudget 的證據
 
-`k8s/base/availability.yaml` 定義 `minAvailable: 2` 的 PDB，選中 `app: backend`。以完全
+本節的驅逐請求與回應原文取自 [`k8s-hpa-results.json`](./data/k8s-hpa-results.json) 的
+`pdbEviction` 區塊。`k8s/base/availability.yaml` 定義 `minAvailable: 2` 的 PDB，選中
+`app: backend`。以完全
 相同的驅逐請求對照兩種副本數：
 
 ### 2 副本、無餘裕——驅逐被拒
@@ -353,7 +385,8 @@ Postgres 的 `max_connections` 在本次量測期間從預設 100 調高到 300�
   變數都不同，不能拿來跟本文件的曲線做任何形式的直接比較。
 - **HPA 實驗與預先擴容對照組的絕對延遲數字**（第 5 節）：兩者都沒有通過
   `analyze-saturation.mjs` 的資料品質關卡，且 `-PreAllocatedVUs`／`-MaxVUs` 用的是
-  800/3000（Task 5 乾淨的 `r3-900` 用的是預設 200/600），k6 在 Windows host 上開到接近
+  800/3000（Task 5 乾淨的 `r3-900` 用的是明確傳入的 300/1200，**不是**
+  `run-saturation.ps1` 的預設值——腳本預設是 200/600），k6 在 Windows host 上開到接近
   3000 VU 是否反過來壓縮了 Rancher Desktop VM 能拿到的實際運算資源沒有被排除——第 5 節的
   數字只能當方向性證據（HPA 造成的中斷量級遠大於預先擴容），不能拿來跟 Task 5 乾淨的
   `replicas=3`、`targetRate=900` 飽和點（p95 70.9 ms）做「HPA 讓系統變慢了 40 倍」這種

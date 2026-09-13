@@ -186,17 +186,22 @@ try {
     }
 
     [pscustomobject]@{
-        finishedAt  = (Get-Date).ToUniversalTime().ToString('o')
-        replicas    = $Replicas
-        rates       = $rateValues
-        users       = $Users
-        startRate   = $StartRate
-        rampSeconds = $RampSeconds
-        holdSeconds = $HoldSeconds
-        loadSource  = 'windows-host'
-        clockSource = 'windows'
-        baseUrl     = $baseUrl
-        gitSha      = (& git -C $repoRoot rev-parse HEAD 2>$null)
+        finishedAt      = (Get-Date).ToUniversalTime().ToString('o')
+        replicas        = $Replicas
+        rates           = $rateValues
+        users           = $Users
+        startRate       = $StartRate
+        rampSeconds     = $RampSeconds
+        holdSeconds     = $HoldSeconds
+        # 這兩個欄位曾經漏記：run.json 沒寫下實際傳入的 VU 配額，導致「這次跑的到底是不是
+        # 腳本預設值」只能靠事後回想或翻 k6 的命令列紀錄，Critical 2／Important 3 這兩個
+        # review 問題的根源都在這裡。往後每次執行都把實際用的值寫進 run.json，不留給記憶。
+        preAllocatedVUs = $PreAllocatedVUs
+        maxVUs          = $MaxVUs
+        loadSource      = 'windows-host'
+        clockSource     = 'windows'
+        baseUrl         = $baseUrl
+        gitSha          = (& git -C $repoRoot rev-parse HEAD 2>$null)
     } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'run.json') -Encoding UTF8
 
     Write-Host ''

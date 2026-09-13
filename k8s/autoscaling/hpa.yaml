@@ -8,6 +8,14 @@
 # 閾值取 60%：backend 的 requests.cpu 是 500m，所以觸發點約等於單一 Pod 用到 300m。
 # 這個數字要依 Task 5 量到的飽和點回頭檢查 —— 若飽和時 CPU 還遠低於 60%，代表瓶頸不在
 # CPU，CPU-based HPA 對這個系統本來就不會有效。那個結論本身就是 P3 的產出之一。
+# maxReplicas 的天花板跟 Postgres 的 max_connections 是耦合的，不是獨立可調的數字：
+# 每個 backend 副本的 HikariCP 上限是 30 條連線（backend/src/main/resources/application.yml），
+# k8s/base/data.yaml 把 max_connections 調到 300。maxReplicas=8 代表 HPA 自己就能把連線數
+# 推到 8 x 30 = 240 條——這次量測（P3 HPA 實驗）的下游取樣（downstream-*.jsonl）實測
+# pgBackends 峰值就是 242，跟這個算式吻合，不是理論值。
+# 真正的上限是 300 / 30 = 10 個副本；在把 k8s/base/data.yaml 的 max_connections 調高之前，
+# 不要把 maxReplicas 調過 10，否則 HPA 會在達到 CPU 閾值前先把 Postgres 的連線數撞爆
+# （FATAL: sorry, too many clients already，見 docs/portfolio/scaling-and-autoscaling.md 第 3 節）。
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

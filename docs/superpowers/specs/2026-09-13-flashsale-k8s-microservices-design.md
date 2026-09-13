@@ -8,9 +8,11 @@
 - 分六個階段推進（P1–P6），每階段結束都是可運作、可壓測、可展示的系統，並留下 before／after 對照數據。
 - 不做 service mesh、不做 GitOps、不做離線批次（Spark／資料湖），不改動既有業務規則。
 
-**進度：P1、P3 已完成（2026-09-13）。** P1 的量測推翻了本規格原先對 P3 的假設，該節已依實測
+**進度：P1、P2、P3 已完成（2026-09-13）。** P1 的量測推翻了本規格原先對 P3 的假設，該節已依實測
 重寫；P3 的驗收證據見文中「P3 — 已完成」與 [水平擴展與自動擴縮](../../portfolio/scaling-and-autoscaling.md)。
-修訂紀錄見文末。P2（分散式鎖）計畫見
+修訂紀錄見文末。P2（分散式鎖）已完成，驗收證據見文中「P2」與
+[分散式鎖的故障模式](../../portfolio/distributed-lock-failure-modes.md)、
+[兩種分散式鎖的對照](../../portfolio/lock-mechanism-comparison.md)；原始計畫見
 [`2026-09-13-week8-p2-distributed-lock.md`](../plans/2026-09-13-week8-p2-distributed-lock.md)。
 
 ## 目標

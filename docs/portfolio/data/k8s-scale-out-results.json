@@ -82,7 +82,7 @@
     "note": "上述不變量僅適用於 backend 正常服務請求的情境。排程任務在三副本下會破壞不超賣保證，見 docs/portfolio/scheduler-duplication-evidence.md"
   },
   "findings": [
-    "三副本的 p95 比單副本慢 41%（274.97ms → 388.03ms），吞吐量持平。在固定併發且下游（單一 Postgres/Redis）未飽和的情況下，水平擴展只增加了資源競爭，沒有帶來好處。",
+    "三副本的 p95 比單副本慢 41%（274.97ms → 388.03ms），吞吐量持平。在固定併發且下游（單一 Postgres/Redis）未飽和的情況下，水平擴展只增加了資源競爭，沒有帶來好處。這是封閉模型（per-vu-iterations，負載總量由 VU 數鎖死、與副本數無關）下的量測結果，P3 用開放模型（ramping-arrival-rate）重新量測後推翻了「水平擴展沒用」這個結論——同一到達率下水平擴展確實有數量級的價值，只是這套封閉模型的壓測方法量不出來，細節見 docs/portfolio/scaling-and-autoscaling.md。",
     "kube-proxy 的 iptables 模式是隨機選取而非輪詢，393 個請求的分配為 34.9% / 37.4% / 27.7%，最大偏離完美均分 12.2%。",
     "Pod 從建立到 Ready 只需 10 秒，遠低於設計階段假設的 30–60 秒。這推翻了「CPU-based HPA 對秒殺場景一定來不及」的預設，P3 需要重新評估。",
     "maxUnavailable 0 不等於零中斷，仍需 preStop hook 讓 Endpoints 變更有時間傳播。"
