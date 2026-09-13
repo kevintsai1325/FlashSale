@@ -1,0 +1,15 @@
+diff --git a/backend/src/main/resources/application.yml b/backend/src/main/resources/application.yml
+index 156dff6..ce4c712 100644
+--- a/backend/src/main/resources/application.yml
++++ b/backend/src/main/resources/application.yml
+@@ -54,8 +54,8 @@ server:
+   port: 8080
+   tomcat:
+     threads:
+-      max: 400
+-    accept-count: 300
++      max: 300
++    accept-count: 100
+ 
+ management:
+   endpoints:
