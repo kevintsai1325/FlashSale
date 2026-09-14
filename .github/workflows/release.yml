@@ -50,7 +50,12 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.component }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}
 
+  # 雲端環境停掉時，部署要能整段跳過，而不是讓 SSM 對著一台關機的 EC2 輪詢十分鐘再失敗。
+  # 開關是 repository variable DEPLOY_ENABLED；沒設定時值是空字串，條件不成立 ——
+  # 也就是說預設不部署，要部署必須明確把它設成 true（Settings > Secrets and variables >
+  # Actions > Variables）。建映像不受影響，ghcr 上的映像照樣跟著 main 更新。
   deploy:
+    if: vars.DEPLOY_ENABLED == 'true'
     needs: images
     runs-on: ubuntu-latest
     timeout-minutes: 20

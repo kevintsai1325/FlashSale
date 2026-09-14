@@ -68,13 +68,18 @@ zipkin     docker.io/openzipkin/zipkin@sha256:d17e856dcbba7ffeefbbfc252f89ab78a4
 
 ```
 git push main
-  → CI（後端 169 + 前端 70 個測試）
-  → Release: 三個 image 平行建置並推上 GHCR，tag = 該 commit sha
+  → CI（後端 172 + 前端 70 個測試）
+  → Release: 四個 image 平行建置並推上 GHCR，tag = 該 commit sha
   → GitHub OIDC → sts:AssumeRoleWithWebIdentity → 臨時憑證
   → ssm:SendCommand → EC2 執行 scripts/k8s/ec2-deploy.sh <sha>
       git checkout -f <sha> → kubectl apply -k k8s/overlays/aws
       → rollout status ×3 → curl https://localhost/
 ```
+
+**部署那一段預設是關的。** 開關是 repository variable `DEPLOY_ENABLED`，沒設定時值是空字串、
+條件不成立，`deploy` job 整段跳過；要部署必須明確把它設成 `true`。
+理由是這台 EC2 平常是停機的，而對著一台關機的機器送 SSM 指令不會快速失敗 —— 它會輪詢十分鐘
+才逾時，在 Actions 上留下一個紅燈。建映像不受影響，GHCR 上的映像照樣跟著 main 更新。
 
 IAM 角色的信任政策把 `sub` 鎖在本 repo 的 main 分支，權限只有指定 instance 上的
 `ssm:SendCommand` 與讀取執行結果。
