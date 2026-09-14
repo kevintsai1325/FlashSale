@@ -470,9 +470,9 @@ if (-not (Test-Path -LiteralPath $readmePath)) {
         }
     }
 
-    # 10.3 真實測試數字（後端 169 / 前端 70），並且標示為「最後已知」而非本次重跑
-    if (-not $readmeText.Contains('169 個測試')) {
-        Add-Failure 'README.md: missing the real backend test count (169 個測試)'
+    # 10.3 真實測試數字（後端 177 / 前端 70），並且標示為「最後已知」而非本次重跑
+    if (-not $readmeText.Contains('177 個測試')) {
+        Add-Failure 'README.md: missing the real backend test count (177 個測試)'
     }
     if (-not $readmeText.Contains('70 個測試')) {
         Add-Failure 'README.md: missing the real frontend test count (70 個測試)'
@@ -596,10 +596,24 @@ if (-not (Test-Path -LiteralPath $readmePath)) {
             Add-Failure ('README.md: missing the real benchmark run count ({0} 次)' -f $expectedRuns)
         }
 
-        # 引用 300 VU 的數字時必須把資料品質警語一起帶上
-        if ($readmeText.Contains('300 個買家') -or $readmeText.Contains('474.1')) {
-            if (-not $readmeText.Contains('212')) {
-                Add-Failure 'README.md: cites a 300-VU number without carrying the ~212 effective buyers caveat'
+        # 引用 300 VU 的數字時，若資料真的顯示連線遺失，必須把資料品質警語一起帶上。
+        #
+        # 這裡原本寫死「必須出現 212」。那個數字來自 ee01e0e 那一版的資料：每次約 88 筆請求
+        # 在建立 TCP 連線階段就被拒絕，300 個買家實際只有約 212 個有效。後來 32c65a9 重新
+        # 收集，15 次競爭執行全部 accepted == vus、零遺失，README 的但書也就正確地拿掉了 ——
+        # 但這條規則被留了下來，於是它開始要求 README 標註一個已經不存在的問題。
+        #
+        # 改為從 benchmark 資料推導：有遺失才要求但書，遺失多少就要求標註多少。
+        # 這樣未來若某次收集又出現連線被拒，規則會自動重新發作，而且會指出正確的數字。
+        $lossyRuns = @($benchmark.runs | Where-Object {
+            $_.kind -eq 'contention' -and $null -ne $_.vus -and $null -ne $_.outcomes.accepted -and
+            [int]$_.outcomes.accepted -lt [int]$_.vus
+        })
+        if (($lossyRuns.Count -gt 0) -and ($readmeText.Contains('300 個買家') -or $readmeText.Contains('474.1'))) {
+            $worst = @($lossyRuns | Sort-Object { [int]$_.outcomes.accepted })[0]
+            $effective = [int]$worst.outcomes.accepted
+            if (-not $readmeText.Contains([string]$effective)) {
+                Add-Failure ('README.md: benchmark data shows connection loss (as few as {0} of {1} buyers landed in {2}) but README carries no caveat naming that number' -f $effective, [int]$worst.vus, $worst.runId)
             }
         }
     }
@@ -625,8 +639,13 @@ if (-not (Test-Path -LiteralPath $readmePath)) {
     if (-not $readmeText.Contains('SLA')) {
         Add-Failure 'README.md: limitations must state that the numbers are not a production capacity/SLA claim'
     }
-    if (-not $readmeText.Contains('沒有做飽和測試')) {
-        Add-Failure 'README.md: limitations must state that no saturation test was performed'
+    # Week 8 P3 之後飽和測試已經做了，這裡改成守住真正還成立的那個邊界：
+    # 「現況與證據」那一節的 soak/競爭負載數字本身沒有加壓到飽和，不能當吞吐上限。
+    if (-not $readmeText.Contains('沒有加壓到飽和')) {
+        Add-Failure 'README.md: limitations must state that the headline load numbers were not driven to saturation'
+    }
+    if (-not $readmeText.Contains('scaling-and-autoscaling.md')) {
+        Add-Failure 'README.md: limitations must point at where the saturation measurement actually lives'
     }
 
     # 10.12 深入設定要收在 <details> 裡，維持第一屏精簡

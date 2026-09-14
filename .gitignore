@@ -13,5 +13,10 @@ frontend/dist/
 # every run it just produced.
 load-tests/benchmark/results/
 
+# 飽和式壓測輸出：tokens.json 裡是真實帳號的 bearer token，加上每次執行的摘要，
+# 同樣理由——沒忽略的話 run-saturation.ps1 每次執行後都會讓工作目錄變 dirty，
+# 而且 git add -A 會不小心把活的 token 收進版控歷史。
+load-tests/k8s/results/
+
 # Kubernetes runtime secrets and generated TLS material
 k8s/runtime/

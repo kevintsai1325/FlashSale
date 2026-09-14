@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Runs the FlashSale load benchmark inside the isolated `flashsale-benchmark`
@@ -74,7 +74,16 @@ $BackendPort = 18080
 if ($env:BENCHMARK_BACKEND_PORT) {
     $BackendPort = [int]$env:BENCHMARK_BACKEND_PORT
 }
+# $BaseUrl 給 PowerShell 這一側用：健康檢查、建立帳號、actuator 探針。這些都是低頻的循序
+# 請求，不會踩到 host port 發布層的連線佇列上限。
 $BaseUrl = "http://127.0.0.1:$BackendPort"
+
+# $InternalBaseUrl 給 k6 用：k6 跑在 compose 網路內的容器裡，以服務名直接連 backend。
+# 施壓流量絕對不能經過 Windows 的 host port，詳見 Invoke-K6 的註解。
+$InternalBaseUrl = 'http://backend:8080'
+$BenchmarkNetwork = "${BenchmarkProject}_default"
+# 與開發者本機的 k6 版本對齊，讓「把 k6 搬進容器」這個改動只影響網路路徑，不影響 k6 行為。
+$K6Image = 'grafana/k6:2.2.0'
 
 # The contention matrix. Each profile is repeated $RepeatsPerProfile times so Task 5
 # can report spread rather than a single lucky run.
@@ -138,8 +147,26 @@ function Assert-BenchmarkIsolation {
     if (-not (Test-Path -LiteralPath $EnvFile)) {
         throw "refusing to run: $EnvFile not found; the benchmark backend needs JWT_PRIVATE_KEY/JWT_PUBLIC_KEY exactly like the normal stack (see README.md)"
     }
-    if (-not (Get-Command k6 -ErrorAction SilentlyContinue)) {
-        throw "refusing to run: k6 is not on PATH (see load-tests/benchmark/README.md, Prerequisites)"
+    # k6 不再需要裝在 host 上：它以容器形式跑在 compose 網路內（見 Invoke-K6）。
+    # 這裡只確認映像取得得到，讓缺映像在第一次施壓前就失敗，而不是跑到一半才爆。
+    #
+    # 探測期間必須把 $ErrorActionPreference 降為 Continue：Windows PowerShell 5.1 會把原生
+    # 命令寫到 stderr 的每一行包成 ErrorRecord，在 Stop 之下「映像不存在」會直接拋例外，
+    # 讓底下的 docker pull 永遠不會執行 —— 也就是說這個檢查會把它本來要處理的情況變成硬錯誤。
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & docker image inspect $K6Image 2>&1 | Out-Null
+        $imagePresent = ($LASTEXITCODE -eq 0)
+        if (-not $imagePresent) {
+            Write-Host "pulling $K6Image ..."
+            & docker pull $K6Image 2>&1 | Out-Host
+            $imagePresent = ($LASTEXITCODE -eq 0)
+        }
+    }
+    finally { $ErrorActionPreference = $previousPreference }
+    if (-not $imagePresent) {
+        throw "refusing to run: cannot obtain the k6 image $K6Image (see load-tests/benchmark/README.md, Prerequisites)"
     }
 }
 
@@ -409,11 +436,33 @@ function Get-ActuatorMetrics {
 # ---------------------------------------------------------------------------
 
 function Invoke-K6 {
-    param([string]$Script, [string[]]$EnvArgs)
-    $arguments = @('run', $Script) + $EnvArgs
+    param([string]$Script, [string[]]$EnvArgs, [string]$SessionDir)
+
+    # k6 跑在 compose 網路內的容器裡，直接打 backend:8080，不經過發布到 Windows 的 host port。
+    #
+    # 為什麼：從 Windows 打 127.0.0.1:18080 時，300 條瞬間到達的新連線中約有 25-30% 會在 TCP
+    # 握手階段就被拒絕（ECONNREFUSED）。被拒的是 Windows 的 port 發布層，Tomcat 從來沒看到
+    # 那些連線，但 k6 會把它們記成請求失敗 —— 於是量測工具自己的限制被當成受測系統的行為。
+    #
+    # 實測（同一個 backend 容器、同一支腳本、相隔數秒）：
+    #   VM 內部 → backend:8080        0 / 300 失敗
+    #   Windows → 127.0.0.1:18080    75 / 300 失敗
+    # 這也解釋了為什麼「調大 Tomcat accept-count」從來沒有可靠地解決這件事，以及為什麼
+    # 「停掉同機其他工作負載」有效 —— 同機干擾正是透過這一層作用的。
+    $scriptName = Split-Path -Leaf $Script
+    $scriptMount = (Get-Item -LiteralPath $ScriptDir).FullName.Replace('\', '/')
+    $sessionMount = (Get-Item -LiteralPath $SessionDir).FullName.Replace('\', '/')
+    $arguments = @(
+        'run', '--rm',
+        '--network', $BenchmarkNetwork,
+        '-v', "${scriptMount}:/scripts:ro",
+        '-v', "${sessionMount}:/out",
+        $K6Image,
+        'run', "/scripts/$scriptName"
+    ) + $EnvArgs
     # Out-Host, not the pipeline: otherwise k6's console output would be returned
     # alongside the exit code and the caller's `-ne 0` check would compare an array.
-    & k6 @arguments | Out-Host
+    & docker @arguments | Out-Host
     return $LASTEXITCODE
 }
 
@@ -462,6 +511,10 @@ function Invoke-BenchmarkRun {
 
     $tokensFile = Join-Path $SessionDir "tokens-$RunId.json"
     $k6SummaryFile = Join-Path $SessionDir "k6-$RunId.json"
+    # k6 跑在容器裡，看到的是掛載點 /out，不是 Windows 的路徑。PowerShell 這一側仍然用
+    # Windows 路徑讀回摘要，兩者指向同一個檔案。
+    $tokensFileInK6 = "/out/" + (Split-Path -Leaf $tokensFile)
+    $k6SummaryFileInK6 = "/out/" + (Split-Path -Leaf $k6SummaryFile)
     # Record only the file name: results.json is a publishable artifact, so it must
     # never carry the absolute path of the machine that produced it. The file always
     # lives next to results.json in the same session directory.
@@ -473,12 +526,12 @@ function Invoke-BenchmarkRun {
 
         # --- prepare: accounts and tokens, outside the measured window ---
         $benchPassword = [guid]::NewGuid().ToString('N')
-        $prepareExit = Invoke-K6 -Script $PrepareScript -EnvArgs @(
+        $prepareExit = Invoke-K6 -Script $PrepareScript -SessionDir $SessionDir -EnvArgs @(
             '-e', "USERS=$Users",
             '-e', "RUN_ID=$RunId",
-            '-e', "BASE_URL=$BaseUrl",
+            '-e', "BASE_URL=$InternalBaseUrl",
             '-e', "BENCH_PASSWORD=$benchPassword",
-            '-e', "TOKENS_OUT=$tokensFile"
+            '-e', "TOKENS_OUT=$tokensFileInK6"
         )
         if ($prepareExit -ne 0) {
             throw "prepare.js exited with code $prepareExit"
@@ -486,22 +539,22 @@ function Invoke-BenchmarkRun {
 
         # --- measure ---
         if ($Kind -eq 'contention') {
-            $exitCode = Invoke-K6 -Script $PurchaseScript -EnvArgs @(
+            $exitCode = Invoke-K6 -Script $PurchaseScript -SessionDir $SessionDir -EnvArgs @(
                 '-e', "VUS=$Users",
                 '-e', "STOCK=$Stock",
                 '-e', "RUN_ID=$RunId",
-                '-e', "BASE_URL=$BaseUrl",
-                '-e', "TOKENS_FILE=$tokensFile",
-                '-e', "SUMMARY_OUT=$k6SummaryFile"
+                '-e', "BASE_URL=$InternalBaseUrl",
+                '-e', "TOKENS_FILE=$tokensFileInK6",
+                '-e', "SUMMARY_OUT=$k6SummaryFileInK6"
             )
         }
         else {
-            $exitCode = Invoke-K6 -Script $SoakScript -EnvArgs @(
+            $exitCode = Invoke-K6 -Script $SoakScript -SessionDir $SessionDir -EnvArgs @(
                 '-e', "RUN_ID=$RunId",
                 '-e', "STOCK=$Stock",
-                '-e', "BASE_URL=$BaseUrl",
-                '-e', "TOKENS_FILE=$tokensFile",
-                '-e', "SUMMARY_OUT=$k6SummaryFile"
+                '-e', "BASE_URL=$InternalBaseUrl",
+                '-e', "TOKENS_FILE=$tokensFileInK6",
+                '-e', "SUMMARY_OUT=$k6SummaryFileInK6"
             )
         }
         $run.k6.exitCode = $exitCode
@@ -592,7 +645,8 @@ function Get-EnvironmentMetadata {
         gitSha               = Get-CommandOutput -Command 'git' -Arguments @('-C', $RepoRoot, 'rev-parse', 'HEAD')
         gitBranch            = Get-CommandOutput -Command 'git' -Arguments @('-C', $RepoRoot, 'rev-parse', '--abbrev-ref', 'HEAD')
         gitDirty             = [bool]($gitStatus.Trim())
-        k6Version            = Get-CommandOutput -Command 'k6' -Arguments @('version')
+        # 記錄實際施壓的那個 k6（容器內的），不是 host 上可能存在的另一個版本。
+        k6Version            = Get-CommandOutput -Command 'docker' -Arguments @('run', '--rm', $K6Image, 'version')
         dockerVersion        = Get-CommandOutput -Command 'docker' -Arguments @('version', '--format', '{{.Server.Version}}')
         dockerComposeVersion = Get-CommandOutput -Command 'docker' -Arguments @('compose', 'version', '--short')
         os                   = $osName

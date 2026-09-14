@@ -1,0 +1,168 @@
+{
+  "environment": {
+    "cpu": "Intel Core i7-14650HX, 16C/24T",
+    "memoryGb": 31.6,
+    "os": "Microsoft Windows 11 10.0.26200",
+    "kubernetes": "v1.36.3+k3s1",
+    "loadSource": "windows-host",
+    "clockSource": "windows",
+    "measurementBoundary": "NodePort 30880 -> backend Service -> kube-proxy",
+    "note": "本檔補的是 scaling-and-autoscaling.md 第 4、5、6 節引用、但沒有被 commit 進 repo 的原始數據來源。原始檔案（timeline.csv、兩份 saturation-*.json 摘要）都在 load-tests/k8s/results/ 底下，該目錄整體被 .gitignore 排除，因此在乾淨的 clone 上不存在；本檔把其中會被文件引用的數字與出處抄錄下來，讓引用可追溯。"
+  },
+  "hpaReactionTimeline": {
+    "note": "四個時間點不是直接從 timeline.csv 的取樣讀出來的：load-tests/k8s/watch-scaling.ps1 自身的取樣週期實測約 2.3-3.6 秒，跟 HPA 的實際反應時間是同一個數量級，量不到「剛好變的那一刻」。下面的時間點改用 Kubernetes 自己記錄的事件（kubectl get events 的 SuccessfulRescale、Pod 的 status.conditions[Ready].lastTransitionTime）與 k6 摘要 JSON 的 startedAt 欄位重建；timeline.csv 只用來確認「有沒有發生」與大致趨勢。",
+    "rawSource": "load-tests/k8s/results/hpa-experiment/timeline.csv（git-ignored，欄位：sampledAt,desiredReplicas,readyReplicas,cpuUtilizationPercent）",
+    "events": [
+      {
+        "seq": 1,
+        "event": "負載開始（k6 從 50 rps 往 900 爬升）",
+        "timestampUtc": "2026-09-13T16:39:10.927Z",
+        "source": "k6 摘要 JSON 的 startedAt 欄位（毫秒精度），見 load-tests/k8s/results/hpa-experiment/saturation-r3-900.json（git-ignored）"
+      },
+      {
+        "seq": 2,
+        "event": "CPU 首次超過 60%（上界，非精確跨越時刻）",
+        "timestampUtc": "2026-09-13T16:39:23Z",
+        "source": "由事件 3 反推——HPA 一定在這一刻或更早就觀察到過閾值；timeline.csv 的取樣空窗（16:39:23.2638687Z 仍是 cpuUtilizationPercent=2，下一筆 16:39:26.4743812Z 已是 161）本身量不到確切跨越時刻"
+      },
+      {
+        "seq": 3,
+        "event": "desiredReplicas 首次改變（3→6）",
+        "timestampUtc": "2026-09-13T16:39:23Z",
+        "source": "kubectl get events 的 SuccessfulRescale（K8s API 事件時間戳，秒精度）"
+      },
+      {
+        "seq": 4,
+        "event": "新副本 readyReplicas 到位（第一批新 Pod 轉 Ready）",
+        "timestampUtc": "2026-09-13T16:39:54Z",
+        "source": "新 Pod（qj9cn／zxnq6，建立時間戳 16:39:23）的 status.conditions[Ready].lastTransitionTime（Kubernetes 自己記錄）"
+      }
+    ],
+    "secondRescale": {
+      "event": "第二次 rescale（6→8）",
+      "timestampUtc": "2026-09-13T16:39:38Z",
+      "newPodsReadyAtUtc": "2026-09-13T16:40:13Z",
+      "pods": ["64dcv", "lctf8"],
+      "podCreateToReadySeconds": 35
+    },
+    "reactionLatency": {
+      "loadStartToFirstRescaleSeconds": 12,
+      "loadStartToFirstPodsReadySeconds": 43
+    }
+  },
+  "comparison": {
+    "targetRate": 900,
+    "targetReplicas": 8,
+    "note": "兩次執行都沒有通過 analyze-saturation.mjs 的資料品質關卡（droppedIterations>0），所以下面的絕對延遲數字只能當方向性證據，不是乾淨的容量量測。",
+    "hpaRun": {
+      "runId": "saturation-r3-900",
+      "label": "HPA 運行中擴容（3→8，含重啟風暴）",
+      "source": "load-tests/k8s/results/hpa-experiment/saturation-r3-900.json（git-ignored）",
+      "startedReplicas": 3,
+      "preAllocatedVUs": 800,
+      "maxVUs": 3000,
+      "startedAt": "2026-09-13T16:39:10.927Z",
+      "finishedAt": "2026-09-13T16:42:43.292Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "med": 1062.6132499999999,
+          "p95": 2972.93461,
+          "p99": 3794.7412419999996,
+          "max": 10001.6415,
+          "avg": 1234.7097181588001,
+          "count": 166718
+        },
+        "achievedRps": 1568.8764560194113,
+        "httpRequests": 332898,
+        "newConnections": 4644,
+        "droppedIterations": 9522,
+        "failedRequests": 963,
+        "non202Responses": 538,
+        "unexpected5xx": 0
+      },
+      "dataQualityGate": "REJECTED（analyze-saturation.mjs：droppedIterations > 0）"
+    },
+    "preScaledRun": {
+      "runId": "saturation-r8-900",
+      "label": "預先擴容到 8（無 HPA，無擴容延遲）",
+      "source": "load-tests/k8s/results/pre-scaled-8/saturation-r8-900.json（git-ignored）",
+      "startedReplicas": 8,
+      "preAllocatedVUs": 800,
+      "maxVUs": 3000,
+      "startedAt": "2026-09-13T16:45:24.563Z",
+      "finishedAt": "2026-09-13T16:48:54.744Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "med": 74.3969,
+          "p95": 434.176739999999,
+          "p99": 721.6882039999991,
+          "max": 2457.1386,
+          "avg": 130.7596275098377,
+          "count": 176137
+        },
+        "achievedRps": 1677.0246434185494,
+        "httpRequests": 352274,
+        "newConnections": 3599,
+        "droppedIterations": 100,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      },
+      "dataQualityGate": "REJECTED（analyze-saturation.mjs：droppedIterations > 0）"
+    },
+    "pgBackendsPeakDuringBothRuns": {
+      "peak": 242,
+      "source": "load-tests/k8s/results/hpa-experiment/downstream-saturation-r3-900.jsonl 與 pre-scaled-8/downstream-saturation-r8-900.jsonl（皆為 git-ignored），兩份取樣檔的 pgBackends 峰值都是 242"
+    }
+  },
+  "restartEvidence": {
+    "note": "本節數字為 review 後修正版：最初的 task-7 報告誤把 16:39:54 那次 readyReplicas 3→2 的下滑當成重啟證據，但那其實晚了近 90 秒才發生的 liveness kill 事件對不上時間，真正對得上的是 3 個舊 Pod 幾乎同時開始的 readiness 探測逾時。真正的重啟（kubelet 因 liveness 探測失敗殺容器）發生在 16:41:18 之後。restartCount 是 Pod 物件自己的欄位，Pod 一旦被刪除這個數字就跟著消失，不代表重啟沒發生過，只代表證據隨 Pod 一起消失。",
+    "source": ".superpowers/sdd/2026-09-13-week8-p3-load-testing-and-autoscaling/task-7-report.md 的 Fix Report／Finding 1（review 後補記）",
+    "confirmedRestarts": 7,
+    "unconfirmedRestarts": 1,
+    "podsInvisibleInLaterRestartCounts": 4,
+    "podsInvisibleInLaterRestartCountsReason": "這 4 個 Pod 的重啟已被 Killing 事件確認，但在後續還原環境的 kubectl scale --replicas=3 把它們刪掉之後，就從任何事後查詢的 restartCount 裡消失了。",
+    "killingEvents": [
+      { "pod": "bsb9g", "timestampUtc": "2026-09-13T16:41:18Z", "message": "Killing: failed liveness probe, will be restarted" },
+      { "pod": "kf6cl", "timestampUtc": "2026-09-13T16:41:20Z", "message": "Killing: failed liveness probe, will be restarted" },
+      { "pod": "bp6hj", "timestampUtc": "2026-09-13T16:41:27Z", "message": "Killing: failed liveness probe, will be restarted" },
+      { "pod": "2pn97", "timestampUtc": "2026-09-13T16:42:09Z", "message": "Killing: failed liveness probe, will be restarted" },
+      { "pod": "zxnq6", "timestampUtc": "2026-09-13T16:42:19Z", "message": "Killing: failed liveness probe, will be restarted" },
+      { "pod": "64dcv", "timestampUtc": "2026-09-13T16:42:24Z", "message": "Killing: failed liveness probe, will be restarted" },
+      { "pod": "lctf8", "timestampUtc": "2026-09-13T16:42:24Z", "message": "Killing: failed liveness probe, will be restarted" }
+    ],
+    "pods": [
+      { "pod": "bp6hj", "role": "原本 3 個之一", "createdAtUtc": "2026-09-13T15:54:04Z", "killingEventUtc": "2026-09-13T16:41:27Z", "finalState": "存活，留在最終 3 個裡", "confirmed": true, "countedInFinalRestartCount": true },
+      { "pod": "kf6cl", "role": "原本 3 個之一", "createdAtUtc": "2026-09-13T16:33:25Z", "killingEventUtc": "2026-09-13T16:41:20Z", "finalState": "存活，留在最終 3 個裡", "confirmed": true, "countedInFinalRestartCount": true },
+      { "pod": "bsb9g", "role": "原本 3 個之一", "createdAtUtc": "2026-09-13T16:33:52Z", "killingEventUtc": "2026-09-13T16:41:18Z", "finalState": "被刪除", "confirmed": true, "countedInFinalRestartCount": false },
+      { "pod": "2pn97", "role": "HPA 新增，第一批", "createdAtUtc": "2026-09-13T16:39:23Z", "killingEventUtc": "2026-09-13T16:42:09Z", "finalState": "存活，留在最終 3 個裡", "confirmed": true, "countedInFinalRestartCount": true },
+      { "pod": "qj9cn", "role": "HPA 新增，第一批", "createdAtUtc": "2026-09-13T16:39:23Z", "killingEventUtc": null, "note": "只查得到 readiness／liveness 探測失敗事件（16:39:29、16:41:41、16:41:59），沒有查到對應的 Killing 事件", "finalState": "被刪除", "confirmed": false, "countedInFinalRestartCount": false },
+      { "pod": "zxnq6", "role": "HPA 新增，第一批", "createdAtUtc": "2026-09-13T16:39:23Z", "killingEventUtc": "2026-09-13T16:42:19Z", "finalState": "被刪除", "confirmed": true, "countedInFinalRestartCount": false },
+      { "pod": "64dcv", "role": "HPA 新增，第二批", "createdAtUtc": "2026-09-13T16:39:38Z", "killingEventUtc": "2026-09-13T16:42:24Z", "finalState": "被刪除", "confirmed": true, "countedInFinalRestartCount": false },
+      { "pod": "lctf8", "role": "HPA 新增，第二批", "createdAtUtc": "2026-09-13T16:39:38Z", "killingEventUtc": "2026-09-13T16:42:24Z", "finalState": "被刪除", "confirmed": true, "countedInFinalRestartCount": false }
+    ],
+    "allEightPodsNotReadyWindowUtc": { "start": "2026-09-13T16:42:08Z", "end": "2026-09-13T16:42:19Z", "source": "timeline.csv，不受 restartCount 遺失問題影響，可直接讀到" }
+  },
+  "pdbEviction": {
+    "manifest": "k8s/base/availability.yaml（minAvailable: 2，selector app: backend）",
+    "source": ".superpowers/sdd/2026-09-13-week8-p3-load-testing-and-autoscaling/task-6-report.md",
+    "twoReplicasNoSlack": {
+      "replicas": 2,
+      "pdbStatusCommand": "kubectl --context rancher-desktop -n flashsale get pdb backend",
+      "pdbStatus": "NAME      MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE\nbackend   2               N/A               0                     23s",
+      "evictionCommand": "kubectl --context rancher-desktop create --raw \"/api/v1/namespaces/flashsale/pods/backend-5b4578d658-88c4z/eviction\" -f eviction.json",
+      "evictionResponse": "Error from server (TooManyRequests): Cannot evict pod as it would violate the pod's disruption budget.",
+      "exitCode": 1,
+      "podStateAfter": "Running，0 restarts——請求對正在跑的 Pod 沒有任何效果"
+    },
+    "threeReplicasOneSlack": {
+      "replicas": 3,
+      "pdbStatusCommand": "kubectl --context rancher-desktop -n flashsale get pdb backend",
+      "pdbStatus": "NAME      MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE\nbackend   2               N/A               1                     2m6s",
+      "evictionCommand": "kubectl --context rancher-desktop create --raw \"/api/v1/namespaces/flashsale/pods/backend-5b4578d658-88c4z/eviction\" -f eviction2.json",
+      "evictionResponse": "{\"kind\":\"Status\",\"apiVersion\":\"v1\",\"metadata\":{},\"status\":\"Success\",\"code\":201}",
+      "exitCode": 0
+    },
+    "conclusion": "相同的驅逐請求、相同的 PDB，唯一改變的變數（副本數 2→3，餘裕 0→1）把結果從拒絕翻成接受——這是 PDB 生效的直接證據。"
+  }
+}

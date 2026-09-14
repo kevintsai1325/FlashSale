@@ -35,8 +35,14 @@ outbox 資料列、RabbitMQ 各佇列深度(含兩條 DLQ)、Actuator 的搶購�
 
 ## 前置需求
 
-- Docker Desktop(Compose v2)。
-- [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/),需在 `PATH` 上。
+- 能跑 Compose v2 的容器引擎(Docker Desktop 或 Rancher Desktop 皆可)。
+- **k6 不需要裝在本機。** `collect.ps1` 以容器形式執行 k6(`grafana/k6:2.2.0`),把它接進
+  compose 網路,直接連 `backend:8080`。施壓流量**不會**經過發布到 Windows 的 host port。
+
+  這不是為了省事,是正確性問題:從 Windows 打 `127.0.0.1:18080` 時,300 條瞬間到達的新連線
+  中約有 25–30% 會在 TCP 握手階段被 host port 發布層拒絕(`ECONNREFUSED`)。Tomcat 從來沒
+  看到那些連線,但 k6 會把它們記成請求失敗——量測工具自己的限制被當成受測系統的行為。
+  同一個 backend 容器、同一支腳本的對照:從容器網路內打 0/300 失敗,從 Windows 打 75/300 失敗。
 - [Node.js](https://nodejs.org/),需在 `PATH` 上(用來跑驗證器)。不需要安裝任何 npm 套件,
   驗證器沒有相依套件,測試也是用 Node 內建的 test runner。
 - repo 根目錄要有 `.env`,內含 `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY`,跟一般啟動整套服務時

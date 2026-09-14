@@ -1,0 +1,49 @@
+# backend 的 CPU-based HPA。刻意不放進 k8s/base/kustomization.yaml：
+# base 宣告 replicas: 3，HPA 會寫同一個欄位，兩者互相覆寫；而且做副本數對照實驗時，
+# 基準環境必須是決定性的。需要時明確套用，實驗結束後刪除。
+#
+#   kubectl --context rancher-desktop apply -f k8s/autoscaling/hpa.yaml
+#   kubectl --context rancher-desktop delete -f k8s/autoscaling/hpa.yaml
+#
+# 閾值取 60%：backend 的 requests.cpu 是 500m，所以觸發點約等於單一 Pod 用到 300m。
+# 這個數字要依 Task 5 量到的飽和點回頭檢查 —— 若飽和時 CPU 還遠低於 60%，代表瓶頸不在
+# CPU，CPU-based HPA 對這個系統本來就不會有效。那個結論本身就是 P3 的產出之一。
+# 副本數上限取 3，是專案範圍決定的，不是資源算出來的：這個專案要練的是「多個副本共用同一份
+# 狀態時會不會出錯」（分散式鎖、排程 Lease、庫存扣減），那件事在 2~3 個副本就完整成立，
+# 加到第 8 個副本只是把同一件事重做一次。上限收到 3 同時消掉了 P3 量到的那次自傷：
+# 擴容一次只多啟動 1 個 JVM，不會像 3→8 那樣五個 JVM 同時冷啟動把節點 CPU 榨乾、
+# 連原本健康的 Pod 都被 liveness 探測殺掉（見 docs/portfolio/scaling-and-autoscaling.md 第 4 節）。
+#
+# 另一道獨立的天花板仍然存在，調高 maxReplicas 前要先算：每個副本的 HikariCP 上限是 30 條
+# 連線（backend/src/main/resources/application.yml），全部指向同一個 Postgres。3 x 30 = 90，
+# 連 Postgres 的預設 max_connections 100 都還撐得住（k8s/base/data.yaml 目前設 300，是 P3 掃描
+# 到 5 副本時撞牆後調高的，留著不動——下游取樣自己也要佔連線）。真正的上限是 300 / 30 = 10 個副本，
+# 超過就會在 CPU 到閾值之前先撞爆連線數（FATAL: sorry, too many clients already，
+# 見 docs/portfolio/scaling-and-autoscaling.md 第 3 節）。
+#
+# minReplicas 取 2 而不是 1：低於 2 就沒有「多個副本共用狀態」可練，而且 PDB 的 minAvailable 是 2
+# （k8s/base/availability.yaml），停在 2 副本時允許的自願性中斷會是 0——這是預期行為，不是壞掉。
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend
+  namespace: flashsale
+  labels: {flashsale.dev/role: autoscaling-experiment}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: backend}
+  minReplicas: 2
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 60}
+  behavior:
+    # 擴容不設穩定視窗：秒殺場景要的是反應速度，而 Pod 就緒只要約 10 秒（P1 實測）。
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies: [{type: Percent, value: 100, periodSeconds: 15}]
+    # 縮容保守：活動尖峰常有多波，縮太快會在下一波重新付一次冷啟動成本。
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies: [{type: Pods, value: 1, periodSeconds: 60}]

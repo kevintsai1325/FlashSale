@@ -1,0 +1,23 @@
+# backend 的自願性中斷預算。
+#
+# 「自願性」指的是節點排空、叢集升級這類由人或控制器發起的驅逐；Pod 崩潰、節點當機
+# 屬於非自願性中斷，PDB 管不到那些。
+#
+# minAvailable: 2 而不是百分比：副本數會被 HPA 在 3~8 之間調整，固定的下限比較好推理 ——
+# 任何時刻至少有兩個 Pod 在服務。
+#
+# 這個理由是針對「未來的多節點叢集」寫的，不是現在這個單節點 k3s（Rancher Desktop）：
+# 單節點排空會把該節點上的每一個 Pod 都一起清掉，minAvailable: 2 在這裡只會擋住排空本身
+# （見 docs/portfolio/scaling-and-autoscaling.md 第 6 節的驅逐實驗），不會有「其中兩個 Pod
+# 留在別的節點上繼續服務、kube-proxy 仍有可分配的 Endpoint」這種情況。等叢集真的變成多節點，
+# 這條 PDB 才會發揮它原本設計要做的事：把驅逐限制在不影響服務可用性的範圍內。
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend
+  namespace: flashsale
+  labels: {flashsale.dev/stage: application}
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: {app: backend}

@@ -1,5 +1,6 @@
 package com.flashsale.common.config;
 
+import com.flashsale.common.scheduling.SchedulerLock;
 import com.flashsale.common.web.ApiAuditLogJpaRepository;
 import com.flashsale.common.web.ApiAuditRetentionScheduler;
 import com.flashsale.flashsale.application.FlashSaleRepository;
@@ -20,6 +21,8 @@ import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
 
 import java.time.Instant;
 import java.util.List;
+
+import java.time.Duration;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -42,7 +45,7 @@ class SchedulerObservabilityTest {
         OrderRepository orderRepository = mock(OrderRepository.class);
         when(orderRepository.findPendingPaymentPastDue(any(Instant.class))).thenReturn(List.of());
         PaymentTimeoutScheduler scheduler = observedProxy(
-            new PaymentTimeoutScheduler(orderRepository, mock(OrderCompensationService.class)));
+            new PaymentTimeoutScheduler(orderRepository, mock(OrderCompensationService.class), grantingLock()));
 
         scheduler.expireOverduePayments();
 
@@ -55,7 +58,8 @@ class SchedulerObservabilityTest {
         FlashSaleRepository flashSaleRepository = mock(FlashSaleRepository.class);
         when(flashSaleRepository.findAll()).thenReturn(List.of());
         InventoryReconciliationScheduler scheduler = observedProxy(
-            new InventoryReconciliationScheduler(flashSaleRepository, mock(InventoryRepository.class), mock(InventoryStockGateway.class)));
+            new InventoryReconciliationScheduler(flashSaleRepository, mock(InventoryRepository.class),
+                mock(InventoryStockGateway.class), grantingLock()));
 
         scheduler.reconcileActiveFlashSales();
 
@@ -68,7 +72,7 @@ class SchedulerObservabilityTest {
         NotificationDeliveryRepository deliveryRepository = mock(NotificationDeliveryRepository.class);
         when(deliveryRepository.findFailedWithAttemptsBelow(anyInt())).thenReturn(List.of());
         NotificationRetryScheduler scheduler = observedProxy(
-            new NotificationRetryScheduler(deliveryRepository, mock(NotificationSender.class)));
+            new NotificationRetryScheduler(deliveryRepository, mock(NotificationSender.class), grantingLock()));
 
         scheduler.retryDueNotifications();
 
@@ -80,12 +84,29 @@ class SchedulerObservabilityTest {
     void apiAuditRetentionSchedulerRunIsObserved() {
         ApiAuditLogJpaRepository repository = mock(ApiAuditLogJpaRepository.class);
         when(repository.deleteByOccurredAtBefore(any(Instant.class))).thenReturn(0);
-        ApiAuditRetentionScheduler scheduler = observedProxy(new ApiAuditRetentionScheduler(repository, 30));
+        ApiAuditRetentionScheduler scheduler = observedProxy(new ApiAuditRetentionScheduler(repository, grantingLock(), 30));
 
         scheduler.purgeExpiredLogs();
 
         TestObservationRegistryAssert.assertThat(registry)
             .hasObservationWithNameEqualTo("scheduler.purgeExpiredLogs");
+    }
+
+    /**
+     * 總是放行的 SchedulerLock：直接執行傳進來的工作。
+     *
+     * <p>用真的執行而不是空的 mock，是為了讓這些測試仍然涵蓋排程的實際內容 —— 若只回傳
+     * false 而不跑 Runnable，測試就只驗證了「@Observed 有掛上」，排程本身是死的也會通過。
+     * 互斥行為本身由 {@code SchedulerLockTest} 負責。
+     */
+    private SchedulerLock grantingLock() {
+        SchedulerLock lock = mock(SchedulerLock.class);
+        when(lock.runIfLocked(any(String.class), any(Duration.class), any(Runnable.class)))
+            .thenAnswer(invocation -> {
+                invocation.getArgument(2, Runnable.class).run();
+                return true;
+            });
+        return lock;
     }
 
     private <T> T observedProxy(T target) {

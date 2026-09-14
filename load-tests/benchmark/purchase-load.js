@@ -103,13 +103,18 @@ function purchaseOnce(user, idempotencyKey) {
     'Idempotency-Key': idempotencyKey,
   };
 
-  const startedAtMs = Date.now();
   const response = http.post(
     `${BASE_URL}/api/flash-sales/${FLASH_SALE_ID}/purchase-requests`,
     JSON.stringify({ quantity: 1 }),
     { headers: authHeaders, tags: { leg: 'accept' } }
   );
   acceptedLatency.add(response.timings.duration);
+  // 不以 Date.now() 計算耗時：容器內的牆鐘會被 WSL2 的時鐘校正往回跳（2026-09-13 實測
+  // 每約 30 秒一次、最大 -1489ms）。牆鐘相減不只可能得到負值，回跳幅度小於真實耗時時還會
+  // 得到「偏小的正值」，那種樣本無法被偵測，比負值更危險。
+  // 改為累加兩個單調來源：k6 自己量的請求耗時（Go runtime 的單調時鐘）與我們自己指定的
+  // sleep 間隔。代價是這個數字不含 VU 被 k6 調度器擱置的空檔，因此略小於真實牆鐘耗時。
+  let elapsedMs = response.timings.duration;
 
   if (response.status >= 500) {
     unexpected5xxCount.add(1);
@@ -136,12 +141,14 @@ function purchaseOnce(user, idempotencyKey) {
 
   const wasAsync = status === 'PENDING';
   const pollHeaders = { Authorization: `Bearer ${user.token}` };
-  while (TERMINAL_STATUSES.indexOf(status) === -1 && Date.now() - startedAtMs < POLL_TIMEOUT_MS) {
+  while (TERMINAL_STATUSES.indexOf(status) === -1 && elapsedMs < POLL_TIMEOUT_MS) {
     sleep(POLL_INTERVAL_MS / 1000);
+    elapsedMs += POLL_INTERVAL_MS;
     const poll = http.get(`${BASE_URL}/api/purchase-requests/${requestId}`, {
       headers: pollHeaders,
       tags: { leg: 'poll' },
     });
+    elapsedMs += poll.timings.duration;
     if (poll.status >= 500) {
       unexpected5xxCount.add(1);
       console.error(`${RUN_ID}: poll -> ${poll.status} ${String(poll.body).slice(0, 200)}`);
@@ -155,7 +162,6 @@ function purchaseOnce(user, idempotencyKey) {
     }
   }
 
-  const elapsedMs = Date.now() - startedAtMs;
   if (TERMINAL_STATUSES.indexOf(status) === -1) {
     pendingTimeoutCount.add(1);
     return;

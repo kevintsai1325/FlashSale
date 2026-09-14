@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "phase": "Week 8 P1 — 單體上 K8s 與水平擴展",
+  "environment": {
+    "gitSha": "6d34e529920e104dd2108ecf2929e0d19c7cf8ca",
+    "measuredOn": "2026-09-13",
+    "kubernetesVersion": "v1.36.3+k3s1",
+    "containerRuntime": "docker://29.5.3",
+    "node": "mocuo",
+    "cpuLogicalCores": 24,
+    "memoryGb": 31.6,
+    "k6Image": "grafana/k6:0.54.0",
+    "loadScript": "load-tests/purchase-flow.js",
+    "jobManifest": "load-tests/k8s/k6-job.yaml"
+  },
+  "boundaries": [
+    "壓力直接打 backend Service，不經 Nginx 與 TLS，與既有 Compose benchmark 的量測邊界一致",
+    "k6 Job 跑在叢集內，避免 kubectl port-forward 的單一代理連線扭曲負載分配",
+    "單節點 k3s，Postgres/Redis/RabbitMQ 皆為單副本，非高可用組態",
+    "k6 與叢集共用同一台實體機器，CPU 與記憶體互相影響",
+    "purchase-flow.js 為固定併發（100 VU、每 VU 一次迭代、0.5 秒錯開註冊），量的是固定併發下的延遲，不是最大吞吐量。因此本次數據無法顯示水平擴展對吞吐上限的影響",
+    "http_req_duration 混合了註冊、登入、搶購與輪詢四種端點，未分端點標記；兩組執行使用完全相同的腳本與參數，因此仍可互相比較"
+  ],
+  "runs": {
+    "replicas1": {
+      "replicas": 1,
+      "vus": 100,
+      "stock": 30,
+      "httpReqs": { "count": 330, "ratePerSecond": 6.48196 },
+      "httpReqDurationMs": { "avg": 95.71, "min": 0.46197, "med": 62.22, "p95": 274.97, "p99": 362.46, "max": 371.23 },
+      "httpReqFailedRate": 0.0,
+      "checksPassRate": 1.0,
+      "checksPassed": 530,
+      "checksTotal": 530,
+      "iterations": 100,
+      "podRequestDistribution": { "backend-566c986864-4vqq7": 350 }
+    },
+    "replicas3": {
+      "replicas": 3,
+      "vus": 100,
+      "stock": 30,
+      "scaleUpSeconds": 11.2,
+      "perPodReadySeconds": 10,
+      "httpReqs": { "count": 330, "ratePerSecond": 6.49917 },
+      "httpReqDurationMs": { "avg": 121.19, "min": 0.72302, "med": 61.84, "p95": 388.03, "p99": 472.48, "max": 479.28 },
+      "httpReqFailedRate": 0.0,
+      "checksPassRate": 1.0,
+      "checksPassed": 530,
+      "checksTotal": 530,
+      "iterations": 100,
+      "podRequestDistribution": {
+        "backend-566c986864-47zmg": 137,
+        "backend-566c986864-4vqq7": 147,
+        "backend-566c986864-wj9xv": 109
+      },
+      "podRequestSharePercent": { "min": 27.7, "max": 37.4, "perfectlyEven": 33.3, "maxDeviationPercent": 12.2 }
+    }
+  },
+  "rollingUpdateUnderLoad": {
+    "withoutPreStopHook": {
+      "httpReqs": 329,
+      "httpReqFailed": 2,
+      "httpReqFailedRate": 0.006,
+      "checksPassed": 525,
+      "checksTotal": 527,
+      "note": "maxUnavailable 0 不足以避免掉請求：Pod 從 Endpoints 移除與收到 SIGTERM 是並行的，kube-proxy 規則尚未傳播完畢時流量仍被導向終止中的 Pod"
+    },
+    "withPreStopHook": {
+      "httpReqs": 330,
+      "httpReqFailed": 0,
+      "httpReqFailedRate": 0.0,
+      "checksPassed": 530,
+      "checksTotal": 530,
+      "note": "preStop sleep 5 加上 terminationGracePeriodSeconds 30 之後完全零中斷"
+    }
+  },
+  "invariants": {
+    "noOversell": true,
+    "noDuplicateOrders": true,
+    "noResidualPending": true,
+    "outboxFullyPublished": true,
+    "note": "上述不變量僅適用於 backend 正常服務請求的情境。排程任務在三副本下會破壞不超賣保證，見 docs/portfolio/scheduler-duplication-evidence.md"
+  },
+  "findings": [
+    "三副本的 p95 比單副本慢 41%（274.97ms → 388.03ms），吞吐量持平。在固定併發且下游（單一 Postgres/Redis）未飽和的情況下，水平擴展只增加了資源競爭，沒有帶來好處。這是封閉模型（per-vu-iterations，負載總量由 VU 數鎖死、與副本數無關）下的量測結果，P3 用開放模型（ramping-arrival-rate）重新量測後推翻了「水平擴展沒用」這個結論——同一到達率下水平擴展確實有數量級的價值，只是這套封閉模型的壓測方法量不出來，細節見 docs/portfolio/scaling-and-autoscaling.md。",
+    "kube-proxy 的 iptables 模式是隨機選取而非輪詢，393 個請求的分配為 34.9% / 37.4% / 27.7%，最大偏離完美均分 12.2%。",
+    "Pod 從建立到 Ready 只需 10 秒，遠低於設計階段假設的 30–60 秒。這推翻了「CPU-based HPA 對秒殺場景一定來不及」的預設，P3 需要重新評估。",
+    "maxUnavailable 0 不等於零中斷，仍需 preStop hook 讓 Endpoints 變更有時間傳播。"
+  ]
+}

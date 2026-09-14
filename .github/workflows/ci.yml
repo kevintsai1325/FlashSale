@@ -53,3 +53,22 @@ jobs:
         run: npm run build
       - name: Run frontend tests
         run: npm test
+
+  scripts:
+    # 這台開發機的系統 ANSI 代碼頁是 950（Big5）。沒有 BOM 的 .ps1 若含中文，
+    # Windows PowerShell 5.1 會用 Big5 解碼，可能把註解行尾的換行吃掉、讓下一行程式碼
+    # 被併進註解。本專案踩過兩次，症狀是與真正原因無關的「變數未定義」錯誤。
+    # 這個檢查不依賴 PowerShell，因此可以在 ubuntu runner 上跑。
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: PowerShell 腳本編碼檢查
+        run: node scripts/tests/ps1-encoding.mjs
+      - name: 檢查程式本身的單元測試
+        run: node --test scripts/tests/ps1-encoding.test.mjs
+      - name: 壓測資料品質守門的單元測試
+        run: node --test load-tests/k8s/analyze-saturation.test.mjs

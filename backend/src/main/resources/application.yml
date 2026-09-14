@@ -52,10 +52,23 @@ app:
 
 server:
   port: 8080
+  # Tomcat 維持 Spring Boot 的預設值，這裡明寫出來是為了記錄「為什麼不調」。
+  #
+  # 曾經把 threads.max 調到 400、accept-count 調到 300，想解決壓測時大量連線建立不起來的問題。
+  # 後來證實那個症狀的根因在 Windows 與 WSL2 之間的埠轉發層（約 225 條同時新連線後回 RST），
+  # 連線根本沒到 Tomcat。從 VM 內部施壓時，即使用預設值也是 300/300 全通。
+  # 詳見 docs/portfolio/performance-report.md 的「離群值與資料品質」。
+  #
+  # 而且 accept-count 本來就很少是瓶頸：NIO 的 Tomcat 會先接受連線直到 max-connections
+  # （預設 8192），accept-count 管的是超過之後的 OS backlog。300 條突發連線碰不到它。
+  #
+  # threads.max 也不該憑感覺放大。同步路徑的下游上限是 HikariCP 的 30 條連線，
+  # 400 個工作執行緒只會讓 370 個在應用程式內部排隊等連線池，把「快速失敗」變成「長尾延遲」。
+  # 200 這個預設值相對於下游容量已經有足夠餘裕。
   tomcat:
     threads:
-      max: 400
-    accept-count: 300
+      max: 200
+    accept-count: 100
 
 management:
   endpoints:

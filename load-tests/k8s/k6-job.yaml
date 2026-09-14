@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-purchase-flow
+  namespace: flashsale
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      # 刻意不使用 app 標籤：verify.ps1 以 `-l app` 選取「應用工作負載的 Pod」並比對數量，
+      # 壓測 Job 若帶上 app 標籤就會被算進去，讓驗證在壓測後變成假警報。
+      labels: {flashsale.dev/role: load-test}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:0.54.0
+          args: ["run", "--summary-trend-stats", "avg,min,med,p(95),p(99),max", "/scripts/purchase-flow.js"]
+          env:
+            # 直接打 backend Service，不經 Nginx 與 TLS。這與既有 Compose benchmark 的量測邊界
+            # 一致（docs/portfolio/performance-report.md），兩邊的數字才有可比性；同時讓
+            # kube-proxy 對 backend Pod 的分配成為被量測的對象。
+            - {name: BASE_URL, value: "http://backend:8080"}
+            - {name: VUS, value: "100"}
+            - {name: STOCK, value: "30"}
+            - {name: FLASH_SALE_ID, value: "1"}
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts}
+          resources: {requests: {cpu: 500m, memory: 256Mi}, limits: {cpu: "2", memory: 1Gi}}
+      volumes:
+        - name: scripts
+          configMap: {name: k6-scripts}

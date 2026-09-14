@@ -2,19 +2,27 @@
 
 這是 FlashSale 在 Windows + Rancher Desktop 上的可重現 Kubernetes lab 操作紀錄。Docker Compose 的[快速開始](../../README.md#快速開始)仍是最短、完整的本機啟動方式，沒有被這份文件取代。
 
-## 證據狀態（截至 2026-08-21）
+## 證據狀態（截至 2026-09-13）
 
 本節刻意把確認過的環境事實與尚未取得的 live 結果分開；離線 manifest／script 測試不是部署成功的證據。
 
+2026-09-13 完成了本文件原本全部標示為「未完成」的項目：映像建置、部署、rollout、路由與 PVC
+持久化都已在實機執行過。在此之前，這套 k3s 部署流程從來沒有真正跑起來過。
+
 | 項目 | 狀態 | 證據／說明 |
 |---|---|---|
-| 筆電 | 已知 | 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz，總記憶體 32 GB。k6 與 k3s 共用同一台實體筆電，因此 CPU、記憶體、磁碟與網路資源會互相影響。 |
+| 筆電 | 已知 | Intel(R) Core(TM) i7-14650HX，16 核／24 邏輯核心，總記憶體 31.6 GB。k6 與 k3s 共用同一台實體筆電，因此 CPU、記憶體、磁碟與網路資源會互相影響。<br>**注意：這與 [負載特性報告](./performance-report.md) 中記錄的機器不是同一台**（那份是 i7-11800H／16 邏輯核心，於 2026-08-17 收集）。兩份文件的數字不可直接比較。 |
 | Windows | 已知的先前量測 | Microsoft Windows 11 專業版 10.0.26200；來源是既有 [Compose 壓測環境紀錄](./performance-report.md#量測環境)，不是本次 k3s 部署量測。 |
-| `kubectl` 目標 | 已確認但不相容 | active context 目前是 `musesaiaks`；PATH 上的 client 是 v1.23，而 Rancher Desktop server 是 v1.36。這超過支援的 minor skew，因此本次沒有執行 build、server dry-run、deploy 或 workload verify。 |
-| RD CPU／RAM 配額、RD／Kubernetes 版本 | 尚未記錄 | 請在真正執行當次從 Rancher Desktop Settings 與下方擷取指令記錄；本文件不臆測數值。 |
-| 本機 images | 未完成 | `nerdctl` 目前不在 `PATH`，`flashsale-*:local` 尚未建立或列出。 |
-| workloads、路由與 PVC 持久化 | 未完成 | 尚未部署 `flashsale` namespace，未執行 rollout、Nginx 路由或 PostgreSQL PVC 持久化驗證。 |
-| 回歸證據 | 已通過離線檢查 | Kubernetes manifest contract 與 k8s scripts 的 offline tests 已通過。Backend 與 frontend suites 也在這次實作前通過；兩者都不是本次重新跑出的 live k3s 證據。 |
+| `kubectl` 目標 | 已確認 | active context `rancher-desktop`，client v1.36.3、server v1.36.3+k3s1，minor skew 為 0。先前記錄的 `musesaiaks`／client v1.23 已不再是現況。 |
+| Kubernetes 與容器執行環境 | 已確認 | 單節點 `mocuo`，v1.36.3+k3s1；`containerRuntimeVersion` 為 `docker://29.5.3`，即 k3s 以 `--docker` 啟動，使用 Rancher Desktop 的 moby daemon。 |
+| 本機 images | 已完成 | `flashsale-backend:local`(621MB)、`flashsale-frontend:local`(74.8MB)、`flashsale-nginx:local`(85.5MB) 皆已建置，並由 `deploy.ps1` 逐一驗證其 resolved `imageID`。 |
+| workloads、路由與 PVC 持久化 | 已完成 | `flashsale` namespace 全部 10 個 Pod（backend ×3 加其餘 7 個）Running 且 Ready；3 個 PVC（10Gi／5Gi／2Gi）Bound 於 `local-path`；`verify.ps1` 通過；經 `https://localhost:8443` 走完整購買流程，30 買家搶 10 件，checks 160/160 全過、無超賣。 |
+| 水平擴展 | 已完成 | backend `replicas` 1 與 3 的壓測對照、kube-proxy 的實際負載分配、Pod 就緒耗時與滾動更新中斷率，見 [scale-out 結果](./data/k8s-scale-out-results.json)。 |
+| 飽和式壓測、瓶頸指認與自動擴縮 | 已完成 | `ramping-arrival-rate` 開放模型重新量測 `replicas` 1/3/5 的 RPS 對 p95 曲線、Postgres 連線池瓶頸、HPA 反應延遲與預先擴容對照、PDB 驗證，見 [水平擴展與自動擴縮](./scaling-and-autoscaling.md) 與原始資料 [`k8s-saturation-results.json`](./data/k8s-saturation-results.json)。 |
+| 多副本排程任務 | **已驗證且發現缺陷** | 三副本下 4 個無互斥保護的 `@Scheduled` 排程會重複執行，`PaymentTimeoutScheduler` 的重複回補直接造成庫存超賣。證據見 [排程重複執行證據](./scheduler-duplication-evidence.md)。 |
+| 分散式鎖 | **已修復並驗證** | 四個排程改由 `SchedulerLock` 互斥後，30 筆訂單全部恰好處理一次，庫存回到正確值。四種故障模式的實測見 [分散式鎖的故障模式](./distributed-lock-failure-modes.md)，Redisson 與 Kubernetes Lease 的對照見 [兩種分散式鎖的對照](./lock-mechanism-comparison.md)。 |
+| 量測環境的時鐘 | **已診斷，部分緩解** | WSL2 VM 的時鐘比實際時間快約 3.5%（原為 4.5%），因此**所有在容器內量到的時間長度都高估約 3.5%**；從 Windows 端計時的數字不受影響。診斷、修法與影響範圍見 [量測環境的時鐘準確度](./wsl2-clock-accuracy.md)。 |
+| 回歸證據 | 已通過 | `k8s-manifests-test.ps1` 與 `k8s-scripts-test.ps1` 皆通過。Backend 與 frontend 的測試套件不是本次重新執行的結果。 |
 
 完成真正的部署測試後，在本節保留原始非機密輸出，並填寫執行時間、Rancher Desktop CPU／RAM 配置、Rancher Desktop 版本與 Kubernetes 版本：
 
@@ -34,7 +42,15 @@ nerdctl --namespace k8s.io images | Select-String 'flashsale-'
 
 - This is a single-node, single-machine colocated lab, not a highly available cluster.
 - Rancher Desktop Traefik is installed but the baseline request path retains the existing Nginx gateway.
-- The baseline uses one Backend Pod; it does not yet validate multi-instance scheduled jobs.
+- The baseline now runs three Backend Pods. Multi-instance scheduled jobs **have** been validated,
+  and the first result was a defect, not a pass: four unguarded `@Scheduled` jobs ran once per
+  replica, and `PaymentTimeoutScheduler` doing so destroyed the no-oversell invariant. See
+  [scheduler duplication evidence](./scheduler-duplication-evidence.md). Week 8 P2 fixed this with
+  a distributed lock; the post-fix verification and four measured failure modes are in
+  [distributed lock failure modes](./distributed-lock-failure-modes.md).
+- Timings measured **inside** containers on this host overstate durations by roughly 3.5%: the
+  WSL2 VM clock runs fast. See [measurement clock accuracy](./wsl2-clock-accuracy.md). Timings
+  taken from the Windows side are unaffected.
 - No number in this document is a production SLA or capacity promise.
 
 `k8s/base` 使用本地 `:local` images 與 `imagePullPolicy: Never`。Nginx 的 `LoadBalancer` Service 仍是入口，HTTPS 路徑為 `https://localhost:8443/`；不會把 image 推到公開 registry，也不以 Traefik 取代現有 Nginx gateway。
@@ -43,7 +59,12 @@ nerdctl --namespace k8s.io images | Select-String 'flashsale-'
 
 ## 前置條件與安全的 context 選擇
 
-1. 在 Rancher Desktop 啟用 Kubernetes，並於 **Settings → Container Engine** 選擇 **containerd**，再依 UI 提示套用／重啟。此基準需要 containerd 的 `k8s.io` image namespace；Docker/Moby 不是可替代引擎。
+1. 在 Rancher Desktop 啟用 Kubernetes。**容器引擎 containerd 與 moby 兩者皆可**，不需要特別切換。
+   `build-local.ps1` 會讀取叢集回報的 `containerRuntimeVersion` 並據此選擇建置工具：
+   `containerd://` 走 `nerdctl --namespace k8s.io`，`docker://` 走 `docker`（Windows 端的 named pipe
+   不通時自動改用 `wsl -d rancher-desktop -e docker`，兩者是同一個 daemon）。
+   2026-09-13 的實機執行是在 **moby** 引擎下完成的。
+   本文件先前寫「Docker/Moby 不是可替代引擎」，該敘述與實測不符，已更正。
 2. 安裝 Kubernetes 1.35～1.37 的 `kubectl`（優先使用 1.36），確認 `Get-Command kubectl` 指向該版本，並在 repository root 執行後續命令。v1.23 不可用於 v1.36 server。
 3. 準備 repository 外的 JWT PEM key pair。私鑰、密碼、產生的 TLS certificate/key 都不可 commit。
 4. 確認有 default StorageClass，且單節點至少能供應三個 RWO PVC（宣告容量合計 17 GiB）；也確認 host 的 TCP 8080、8443 沒有被其他程式佔用。

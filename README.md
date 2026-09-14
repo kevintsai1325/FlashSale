@@ -1,6 +1,6 @@
 # FlashSale
 
-限量商品搶購系統(作品集專案)。Spring Boot 3.3(Java 21)+ React 19,以 Docker Compose 交付 8 個服務,
+限量商品搶購系統(作品集專案)。Spring Boot 3.3(Java 21)+ React 19,以 Docker Compose 與本機 k3s 兩種形式交付 8 個服務,
 用「Redis Lua 原子預扣 + Transactional Outbox + RabbitMQ 非同步建單」承接搶購瞬間的併發,
 目標是**不超賣、不漏賣,而且每一步都留得下證據**。
 
@@ -12,15 +12,17 @@
 
 | 面向 | 目前量到什麼 | 出處 |
 |---|---|---|
-| 自動化測試 | 後端 169 個測試、前端 70 個測試,最後已知全部通過 | [CI](#ci) |
+| 自動化測試 | 後端 177 個測試、前端 70 個測試,最後已知全部通過 | [CI](#ci) |
 | 穩態負載 | 10 分鐘 soak:6,000 筆訂單全部成立、沒有超賣、沒有 5xx;同步回應中位數 9.5 ms,可觀察到的完成中位數 515 ms | [負載特性報告](docs/portfolio/performance-report.md) |
 | 競爭負載 | 30 個買家搶 10 件:同步回應 p95 中位數 58.4 ms;100 個買家搶 30 件:104.1 ms;300 個買家搶 100 件:188.1 ms,連線全數送達、無 TCP 拒絕(各跑五次取中位數) | [負載特性報告](docs/portfolio/performance-report.md) |
 | 正確性不變量 | 壓測共 16 次執行、0 次失敗:沒有超賣、沒有重複下單、沒有殘留 `PENDING`、outbox 全部發佈完成、兩條 DLQ 全空 | [結果文件](docs/portfolio/data/benchmark-results.json) |
+| 水平擴展 | 開放模型飽和壓測:600 rps 下 3 副本的 accept p95 為 6.9 ms、單副本 130.0 ms;瓶頸指認為 Postgres 連線池,並量到「副本數 × 連線池 > `max_connections`」的硬天花板 | [水平擴展與自動擴縮](docs/portfolio/scaling-and-autoscaling.md) |
+| 分散式鎖 | 四種故障模式實測:持鎖者崩潰、租約到期造成雙重執行、Redis 故障、fencing token 的取捨 | [分散式鎖的故障模式](docs/portfolio/distributed-lock-failure-modes.md) |
 | 可觀測性 | 一條 trace 串起「HTTP 搶購 → outbox 發佈 → consumer 建單」;後台以 8 項健康度呈現整套環境狀態 | [畫面](#畫面) |
 
-測試數字是**最後已知**的驗證結果:作品集收尾時在本機完整重跑過一次
-(後端 `./gradlew clean test` 169 個測試全綠、前端 `npm run test` 70 個測試全綠),
-不是產生這份 README 時重新執行的;隨時可以用上面的 CI badge 看最新一次的結果。
+測試數字是**最後已知**的驗證結果,不是產生這份 README 時重新執行的;隨時可以用上面的 CI badge 看最新一次的結果。
+後端的整合測試用 Testcontainers,需要可用的 Docker daemon —— 在只有 containerd 的環境
+(例如 Rancher Desktop 預設的 containerd 模式)會有約 82 個測試無法初始化,那是環境缺 Docker,不是測試失敗。
 
 壓測的兩個重要邊界:壓力直接打 backend、**不經過 Nginx 與 TLS**,所以真實用戶端看到的延遲會更高;
 `completedLatencyMs` 因為是以 250 ms 輪詢觀察,含有最多 +250 ms 的量測偏差。完整說明在
@@ -159,6 +161,10 @@ Demo的展示流程(3~5 分鐘)在 [Demo 腳本](docs/portfolio/demo-script.md)�
 | [截圖說明](docs/portfolio/assets/README.md) | 六張截圖的擷取條件、資安檢查與重現步驟 |
 | [壓測工具](load-tests/benchmark/README.md) | 產生上述數字的隔離 benchmark harness |
 | [k6 端到端腳本](load-tests/README.md) | 走完整 Nginx 路徑的壓力測試腳本 |
+| [分散式鎖的故障模式](docs/portfolio/distributed-lock-failure-modes.md) | 排程重複執行造成超賣的證據、修復後驗證,以及四種故障模式的實測 |
+| [兩種分散式鎖的對照](docs/portfolio/lock-mechanism-comparison.md) | Redisson 與 Kubernetes Lease 在正確性、故障行為與運維上的差異 |
+| [量測環境的時鐘準確度](docs/portfolio/wsl2-clock-accuracy.md) | WSL2 VM 時鐘走快約 3.5%:診斷過程、緩解方式,以及哪些數字受影響 |
+| [水平擴展與自動擴縮](docs/portfolio/scaling-and-autoscaling.md) | 飽和式壓測的方法、replicas 1/3/5 的吞吐曲線、瓶頸指認、HPA 與預先擴容的對照 |
 | [k3s 單節點基準](docs/portfolio/k3s-baseline.md) | Rancher Desktop 可重現操作、目前證據邊界與單機限制 |
 | [AWS EC2 k3s 部署](docs/portfolio/aws-ec2-k3s.md) | 單台 EC2 上的 k3s 實際執行結果、OIDC/SSM 的 CD 管線與已知限制 |
 
@@ -265,16 +271,18 @@ node load-tests/benchmark/verify-results.mjs docs/portfolio/data/benchmark-resul
 
 - **本機自簽 TLS**:Nginx 用自簽憑證在 `8443` 終止 TLS,瀏覽器與 `curl` 都會警告;沒有正式憑證鏈、
   自動續期、HSTS 或 OCSP stapling。
-- **只交付 Docker Compose**:沒有公開部署環境、沒有水平擴充、沒有滾動更新與自動修復,也沒有 Prometheus /
-  Grafana 這類集中式監控與告警。所有「多實例才會遇到」的問題(排程重複執行、節點層級限流)在這個交付形式下無法驗證。
-- **量測邊界**:數字來自一台開發機、一次收集,壓測直接打 backend 而不經過 Nginx 與 TLS,而且**沒有做飽和測試**,
-  所以沒有任何一個數字可以當成吞吐量上限,更不是 production 容量或 SLA。soak 有偶發的尾端延遲離群值
+- **部署限於單節點**:交付形式是 Docker Compose 與本機 k3s(Rancher Desktop),另有單台 EC2 的 k3s 實測;
+  沒有多節點叢集,也沒有 Prometheus / Grafana 這類集中式監控與告警。PodDisruptionBudget、節點排空這類
+  「多節點才有意義」的機制只驗證得了它會不會動,驗證不了它實際保護到什麼。
+- **量測邊界**:數字來自一台開發機、一次收集,壓測直接打 backend 而不經過 Nginx 與 TLS,而且**沒有加壓到飽和**,
+  所以這一節沒有任何一個數字可以當成吞吐量上限。飽和點是另一次量測,見
+  [水平擴展與自動擴縮](docs/portfolio/scaling-and-autoscaling.md),但那是單節點、放寬 `max_connections` 之後的結果,
+  一樣不是 production 容量或 SLA。soak 有偶發的尾端延遲離群值
   (accepted p95 仍在 12.3 ms,但 max 到 130 ms),原因未查,解讀方式見
   [負載特性報告](docs/portfolio/performance-report.md#離群值與資料品質)。
 - **沒有做任何比較**:報告只描述目前這套系統在這些條件下量到什麼,沒有跟早期實作、其他專案或其他系統對比。
 - **付款是模擬的**:由請求指定成功或失敗,沒有串接任何金流服務;通知只有 email 一種通道,本機由 Mailpit 攔截。
-- **排程假設單一 backend 實例**:outbox 發佈、付款逾時、庫存對帳、通知重試與稽核清理都沒有分散式鎖;
-  進到 DLQ 的訊息也沒有自動重放工具,需要人工處理。
+- **DLQ 沒有自動重放**:進到 DLQ 的訊息沒有重放工具,需要人工處理。
 
 ## CI
 

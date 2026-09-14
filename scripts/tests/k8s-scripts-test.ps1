@@ -16,6 +16,7 @@ $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('flashsale-k8s-script-test-' +
 $shimRoot = Join-Path $testRoot 'bin'
 $kubectlLog = Join-Path $testRoot 'kubectl.log'
 $nerdctlLog = Join-Path $testRoot 'nerdctl.log'
+$dockerLog = Join-Path $testRoot 'docker.log'
 $httpLog = Join-Path $testRoot 'http.log'
 $privateKeyPath = Join-Path $testRoot 'jwt-private.pem'
 $publicKeyPath = Join-Path $testRoot 'jwt-public.pem'
@@ -40,6 +41,7 @@ function Set-ShimMode {
     [Environment]::SetEnvironmentVariable('FL_K3S_TEST_KUBECTL_MODE', $Mode, 'Process')
     [IO.File]::WriteAllText($kubectlLog, '')
     [IO.File]::WriteAllText($nerdctlLog, '')
+    [IO.File]::WriteAllText($dockerLog, '')
     [IO.File]::WriteAllText($httpLog, '')
 }
 
@@ -137,7 +139,14 @@ if (($Arguments -join ' ') -eq '--context rancher-desktop get --raw=/readyz --re
     if ($mode -eq 'unreachable') { Write-Error 'simulated unreachable API'; exit 1 }
     'ok'; exit 0
 }
-if (($Arguments -join ' ') -like '--context rancher-desktop apply --server-side --dry-run=server -k *') {
+if (($Arguments -join ' ') -like '--context rancher-desktop get nodes -o jsonpath=*containerRuntimeVersion*') {
+    # build-local.ps1 picks its image builder from the runtime the cluster actually reports.
+    if ($mode -eq 'docker-runtime') { 'docker://29.5.3' }
+    elseif ($mode -eq 'unknown-runtime') { 'cri-o://1.30.0' }
+    else { 'containerd://2.1.4' }
+    exit 0
+}
+if (($Arguments -join ' ') -like '--context rancher-desktop apply --server-side --force-conflicts --dry-run=server -k *') {
     if ($mode -eq 'server-dry-run-failure') { [Console]::Error.WriteLine('server schema rejected the rendered baseline'); exit 1 }
     'server dry-run passed'; exit 0
 }
@@ -179,13 +188,26 @@ if (($Arguments.Count -ge 7) -and ($Arguments[0] -eq '--context') -and ($Argumen
 if (($Arguments -join ' ') -like '--context rancher-desktop -n flashsale get pods -l app=* -o json') {
     $selector = @($Arguments | Where-Object { $_ -like 'app=*' })[0]
     $app = $selector.Substring(4)
-    @{ items = @(
-        @{ metadata = @{ name = "${app}-1" }; spec = @{ containers = @(@{ image = "flashsale-$app`:local" }) }; status = @{ containerStatuses = @(@{ imageID = $(if (($mode -eq 'empty-image-id') -and ($app -eq 'backend')) { '' } else { "sha256:$app" }) }) } }
-    ) } | ConvertTo-Json -Depth 8 -Compress
+    $podCount = if (($mode -eq 'multi-replica') -and ($app -eq 'backend')) { 3 } else { 1 }
+    $items = @(1..$podCount | ForEach-Object {
+        @{ metadata = @{ name = "$app-$_" }; spec = @{ containers = @(@{ image = "flashsale-$app`:local" }) }; status = @{ containerStatuses = @(@{ imageID = $(if (($mode -eq 'empty-image-id') -and ($app -eq 'backend')) { '' } else { "sha256:$app" }) }) } }
+    })
+    @{ items = $items } | ConvertTo-Json -Depth 8 -Compress
     exit 0
 }
-if (($Arguments -join ' ') -like '--context rancher-desktop -n flashsale get deployment backend -o jsonpath=*') {
-    if ($mode -eq 'backend-not-ready') { '0' } else { '1' }
+if (($Arguments -join ' ') -like '--context rancher-desktop -n flashsale get statefulset * -o jsonpath=*') {
+    '1'
+    exit 0
+}
+if (($Arguments -join ' ') -like '--context rancher-desktop -n flashsale get deployment * -o jsonpath=*') {
+    # --context(0) rancher-desktop(1) -n(2) flashsale(3) get(4) deployment(5) <name>(6) -o(7) jsonpath=...(8)
+    $deploymentName = $Arguments[6]
+    $jsonPath = @($Arguments | Where-Object { $_ -like 'jsonpath=*' })[0]
+    $replicaCount = if (($mode -eq 'multi-replica') -and ($deploymentName -eq 'backend')) { '3' } else { '1' }
+    if ($jsonPath -like '*readyReplicas*') {
+        if ($mode -eq 'backend-not-ready') { '0' } else { $replicaCount }
+    }
+    else { $replicaCount }
     exit 0
 }
 if (($Arguments.Count -ge 9) -and (($Arguments[0..8] -join ' ') -eq '--context rancher-desktop -n flashsale get pods -l app -o')) {
@@ -194,6 +216,7 @@ if (($Arguments.Count -ge 9) -and (($Arguments[0..8] -join ' ') -eq '--context r
     }
     if ($mode -eq 'wrong-pod-count') { $items = @(1..7 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
     elseif ($mode -eq 'pod-not-ready') { $items = @(1..7 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) + @(New-PodItem 'pod-8' 'Pending' 'False') }
+    elseif ($mode -eq 'multi-replica') { $items = @(1..10 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
     else { $items = @(1..8 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
     @{ items = $items } | ConvertTo-Json -Depth 8 -Compress
     exit 0
@@ -214,11 +237,21 @@ if ($Arguments -contains 'build') { exit 0 }
 if ($Arguments -contains 'images') { 'flashsale-backend local'; 'flashsale-frontend local'; 'flashsale-nginx local'; exit 0 }
 Write-Error ('Unexpected nerdctl invocation: ' + ($Arguments -join ' ')); exit 1
 '@
+    $dockerShim = @'
+$Arguments = @($env:FL_K3S_TEST_SHIM_ARGS -split ' ' | Where-Object { $_ -ne '' })
+[IO.File]::AppendAllText($env:FL_K3S_TEST_DOCKER_LOG, (($Arguments -join "`t") + "`n"))
+if ($Arguments -contains 'info') { if ($env:FL_K3S_TEST_DOCKER_MODE -eq 'unreachable') { exit 1 }; 'Server Version: 29.5.3'; exit 0 }
+if ($Arguments -contains 'build') { exit 0 }
+if ($Arguments -contains 'images') { 'flashsale-backend local'; 'flashsale-frontend local'; 'flashsale-nginx local'; exit 0 }
+Write-Error ('Unexpected docker invocation: ' + ($Arguments -join ' ')); exit 1
+'@
     $commandShim = '@set "FL_K3S_TEST_SHIM_ARGS=%*"' + "`r`n" + '@powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0{0}.ps1"' + "`r`n" + '@exit /b %ERRORLEVEL%' + "`r`n"
     [IO.File]::WriteAllText((Join-Path $shimRoot 'kubectl-shim.ps1'), $kubectlShim)
     [IO.File]::WriteAllText((Join-Path $shimRoot 'nerdctl-shim.ps1'), $nerdctlShim)
+    [IO.File]::WriteAllText((Join-Path $shimRoot 'docker-shim.ps1'), $dockerShim)
     [IO.File]::WriteAllText((Join-Path $shimRoot 'kubectl.cmd'), ($commandShim -f 'kubectl-shim'))
     [IO.File]::WriteAllText((Join-Path $shimRoot 'nerdctl.cmd'), ($commandShim -f 'nerdctl-shim'))
+    [IO.File]::WriteAllText((Join-Path $shimRoot 'docker.cmd'), ($commandShim -f 'docker-shim'))
 }
 
 try {
@@ -246,6 +279,7 @@ try {
         FL_K3S_JWT_PUBLIC_KEY_PATH = $publicKeyPath
         FL_K3S_TEST_KUBECTL_LOG = $kubectlLog
         FL_K3S_TEST_NERDCTL_LOG = $nerdctlLog
+        FL_K3S_TEST_DOCKER_LOG = $dockerLog
     }
     $verificationEnvironment = @{ FL_K3S_TEST_KUBECTL_LOG = $kubectlLog; FL_K3S_TEST_HTTP_LOG = $httpLog; FL_K3S_TEST_HTTP_MODE = 'healthy' }
 
@@ -297,11 +331,25 @@ try {
         Assert-True ($alternateBuildResult.ExitCode -eq 0) "build-local.ps1 must execute successfully under $alternatePowerShellLabel when that host is installed."
     }
 
+    # The image builder must follow the runtime the cluster actually reports. A k3s node started
+    # with --docker has no containerd socket, so building through nerdctl would produce images
+    # kubelet can never see.
+    Set-ShimMode 'docker-runtime'
+    $dockerBuildResult = Invoke-LocalScript $buildScript $commonEnvironment
+    Assert-True ($dockerBuildResult.ExitCode -eq 0) "build-local.ps1 must succeed when the cluster runtime is docker. Output: $($dockerBuildResult.Output)"
+    Assert-True (@(Get-LogLines $dockerLog | Where-Object { $_ -match "(^|\t)build\t" }).Count -eq 3) 'The docker path must build exactly three local images.'
+    Assert-True (@(Get-LogLines $nerdctlLog).Count -eq 0) 'A docker runtime must not invoke nerdctl at all.'
+
+    Set-ShimMode 'unknown-runtime'
+    $unknownRuntimeResult = Invoke-LocalScript $buildScript $commonEnvironment
+    Assert-True ($unknownRuntimeResult.ExitCode -ne 0) 'build-local.ps1 must refuse an unrecognised container runtime.'
+    Assert-True (@(Get-LogLines $dockerLog | Where-Object { $_ -match "(^|\t)build\t" }).Count -eq 0) 'An unrecognised runtime must stop before any image build.'
+
     Set-ShimMode 'reachable'
     $deployResult = Invoke-LocalScript $deployScript $commonEnvironment
     Assert-True ($deployResult.ExitCode -eq 0) "First deploy must pass under the current host ($currentPowerShellLabel) with complete initial secret inputs. Output: $($deployResult.Output)"
     $deployLines = Get-LogLines $kubectlLog
-    $dryRunIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match 'apply\t--server-side\t--dry-run=server' })
+    $dryRunIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match 'apply\t--server-side\t--force-conflicts\t--dry-run=server' })
     $firstApplyIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match '--context\trancher-desktop\tapply\t-k' })
     $bootstrapIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match 'stage=bootstrap' })
     $foundationIndex = [Array]::FindIndex([string[]]$deployLines, [Predicate[string]]{ param($line) $line -match 'stage=foundation' })
@@ -344,6 +392,14 @@ try {
     $emptyImageResult = Invoke-LocalScript $deployScript $commonEnvironment
     Assert-True ($emptyImageResult.ExitCode -ne 0) 'Deploy must fail when a restarted local-image Pod has no resolved image ID.'
     Assert-True ($emptyImageResult.Output -match 'resolved image ID') 'Empty image ID failure must be actionable.'
+
+    # Horizontal scale-out is the point of running on Kubernetes at all. The image-identity check
+    # exists to prove the local build is what actually started, not to pin the workload to one Pod.
+    Set-ShimMode 'multi-replica'
+    $multiReplicaResult = Invoke-LocalScript $deployScript $commonEnvironment
+    Assert-True ($multiReplicaResult.ExitCode -eq 0) "Deploy must accept a Deployment with more than one replica. Output: $($multiReplicaResult.Output)"
+    Assert-True ($multiReplicaResult.Output -notmatch 'Expected exactly one') 'Deploy must not assert a single Pod per Deployment.'
+    Assert-True (@($multiReplicaResult.Output -split "`n" | Where-Object { $_ -match 'Activated backend Pod' }).Count -eq 3) 'Deploy must verify the image identity of every backend replica.'
 
     Set-ShimMode 'existing'
     $reuseEnvironment = $commonEnvironment.Clone()
@@ -389,12 +445,12 @@ try {
     Set-ShimMode 'backend-not-ready'
     $backendNotReadyResult = Invoke-VerificationScript $verificationEnvironment
     Assert-True ($backendNotReadyResult.ExitCode -ne 0) 'verify.ps1 must fail unless Backend has exactly one ready replica.'
-    Assert-True ($backendNotReadyResult.Output -match 'Expected one ready Backend Pod') 'Backend replica failure must be actionable.'
+    Assert-True ($backendNotReadyResult.Output -match 'ready Backend Pod') 'Backend replica failure must be actionable.'
 
     Set-ShimMode 'wrong-pod-count'
     $wrongPodCountResult = Invoke-VerificationScript $verificationEnvironment
-    Assert-True ($wrongPodCountResult.ExitCode -ne 0) 'verify.ps1 must fail when it does not find exactly eight application Pods.'
-    Assert-True ($wrongPodCountResult.Output -match 'Expected eight application Pods') 'Wrong Pod count failure must be actionable.'
+    Assert-True ($wrongPodCountResult.ExitCode -ne 0) 'verify.ps1 must fail when the running Pod count does not match the declared replica counts.'
+    Assert-True ($wrongPodCountResult.Output -match 'Expected 8 application Pods') 'Wrong Pod count failure must be actionable.'
 
     Set-ShimMode 'pod-not-ready'
     $podNotReadyResult = Invoke-VerificationScript $verificationEnvironment

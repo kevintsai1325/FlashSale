@@ -26,6 +26,13 @@ spec:
       containers:
         - name: postgres
           image: postgres:16-alpine
+          # 預設的 max_connections 是 100，而每個 backend 副本的 HikariCP 上限是 30。
+          # 三副本（90 條）已經逼近上限，五副本（150 條）會直接撞牆：新連線被拒為
+          # "sorry, too many clients already"，連 psql 都進不來。
+          # 這是一個在 CPU 或吞吐量到頂之前就先出現的硬天花板，2026-09-13 的 P3 壓測實際踩到。
+          # 調高到 300 讓副本數不再被資料庫的連線上限綁住；真正的解法是 P4/P5 拆分服務與資料庫，
+          # 讓每個服務只帶自己的連線池。
+          args: ["-c", "max_connections=300"]
           envFrom: [{configMapRef: {name: flashsale-config}}]
           env: [{name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: POSTGRES_PASSWORD}}}]
           ports: [{containerPort: 5432}]

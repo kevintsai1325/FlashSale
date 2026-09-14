@@ -1,4 +1,4 @@
-param(
+﻿param(
     [scriptblock]$HttpRequest,
     [string]$KubectlCommand = 'kubectl'
 )
@@ -53,8 +53,22 @@ foreach ($name in @('mailpit', 'zipkin', 'backend', 'frontend', 'nginx')) {
     Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'rollout', 'status', "deployment/$name", '--timeout=240s') -Operation "waiting for deployment/$name" | Out-Null
 }
 
+# 期望的 Pod 數量由各工作負載宣告的副本數推導，不寫死。backend 會水平擴展，
+# 寫死的數字會在擴展的那一刻讓這支驗證腳本變成假警報。
+function Get-DesiredReplicas {
+    param([string]$Kind, [string]$Name)
+    $value = (Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'get', $Kind, $Name, '-o', 'jsonpath={.spec.replicas}') -Operation "reading the desired replica count for $Kind/$Name" | Out-String).Trim()
+    if ([String]::IsNullOrWhiteSpace($value)) { throw "$Kind/$Name did not report a desired replica count." }
+    return [int]$value
+}
+
+$expectedAppPods = 0
+foreach ($name in @('postgres', 'redis', 'rabbitmq')) { $expectedAppPods += Get-DesiredReplicas -Kind 'statefulset' -Name $name }
+foreach ($name in @('mailpit', 'zipkin', 'backend', 'frontend', 'nginx')) { $expectedAppPods += Get-DesiredReplicas -Kind 'deployment' -Name $name }
+
+$backendDesired = Get-DesiredReplicas -Kind 'deployment' -Name 'backend'
 $backendReady = (Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'get', 'deployment', 'backend', '-o', 'jsonpath={.status.readyReplicas}') -Operation 'checking Backend readiness' | Out-String).Trim()
-if ($backendReady -ne '1') { throw "Expected one ready Backend Pod, got $backendReady" }
+if ($backendReady -ne [string]$backendDesired) { throw "Expected $backendDesired ready Backend Pod(s), got $backendReady" }
 
 # 用 -o json 而不是 jsonpath：jsonpath 需要內嵌雙引號（{","}、@.type=="Ready"），
 # PowerShell 把參數交給原生 exe 時會把引號吃掉，kubectl 收到 {,} 直接拒絕解析。
@@ -62,13 +76,13 @@ $appPodsJson = (Invoke-BaselineKubectl -Arguments @(
     '-n', $namespace, 'get', 'pods', '-l', 'app', '-o', 'json'
 ) -Operation 'checking application Pod states' | Out-String) | ConvertFrom-Json
 $appPods = @($appPodsJson.items)
-if ($appPods.Count -ne 8) { throw "Expected eight application Pods, got $($appPods.Count)" }
+if ($appPods.Count -ne $expectedAppPods) { throw "Expected $expectedAppPods application Pods, got $($appPods.Count)" }
 $unexpectedPodStates = @($appPods | Where-Object {
     $conditions = if ($_.status.PSObject.Properties['conditions']) { @($_.status.conditions) } else { @() }
     $ready = @($conditions | Where-Object { $_.type -eq 'Ready' })
     ($_.status.phase -ne 'Running') -or ($ready.Count -ne 1) -or ([string]$ready[0].status -ne 'True')
 } | ForEach-Object { "$($_.metadata.name),$($_.status.phase)" })
-if ($unexpectedPodStates.Count -ne 0) { throw "Expected all eight application Pods to be Running and Ready; unexpected states: $($unexpectedPodStates -join ', ')" }
+if ($unexpectedPodStates.Count -ne 0) { throw "Expected all $expectedAppPods application Pods to be Running and Ready; unexpected states: $($unexpectedPodStates -join ', ')" }
 
 $allPodsJson = (Invoke-BaselineKubectl -Arguments @(
     '-n', $namespace, 'get', 'pods', '-o', 'json'

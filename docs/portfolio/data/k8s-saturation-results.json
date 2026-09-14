@@ -1,0 +1,757 @@
+{
+  "environment": {
+    "cpu": "Intel Core i7-14650HX, 16C/24T",
+    "memoryGb": 31.6,
+    "os": "Microsoft Windows 11 10.0.26200",
+    "kubernetes": "v1.36.3+k3s1",
+    "loadSource": "windows-host",
+    "clockSource": "windows",
+    "measurementBoundary": "NodePort 30880 -> backend Service -> kube-proxy",
+    "postgresMaxConnections": 300,
+    "postgresMaxConnectionsNote": "預設 max_connections=100，五副本時每副本 HikariCP 上限 30 條，同時需要到 150 條，種資料階段就撞上 \"sorry, too many clients already\"（在任何 CPU 或吞吐量瓶頸之前先撞到）。調高到 300（k8s/base/data.yaml）後三個副本數才能在同一個設定下量到可比較的曲線；真正的解法是 P4/P5 把服務與資料庫拆開，而不是無限調高這個數字。"
+  },
+  "units": {
+    "achievedRps": "k6 http_reqs 的 rate：每個 iteration 打兩個請求（accept 的 POST、poll 的 GET），所以這個數字大約是設定的到達率（targetRate）的 1.7-2 倍，不是「系統吞吐量」本身。例如 targetRate=150 時 achievedRps≈266.6，不是 150。比較不同 replicas 在同一個 targetRate 下的 acceptP95Ms 才是這份資料在講的「擴展有沒有用」。",
+    "acceptP95Ms": "只計 accept 這隻 POST（/purchase-requests）的 p95 延遲，單位毫秒，量測邊界見 environment.measurementBoundary。"
+  },
+  "runs": [
+    {
+      "runId": "saturation-r1-150",
+      "kind": "saturation",
+      "replicas": 1,
+      "targetRate": 150,
+      "startRate": 50,
+      "rampSeconds": 30,
+      "holdSeconds": 60,
+      "connectionReuse": true,
+      "preAllocatedVUs": 300,
+      "maxVUs": 1200,
+      "startedAt": "2026-09-13T15:47:08.290Z",
+      "finishedAt": "2026-09-13T15:48:38.301Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "min": 0.5021,
+          "med": 3.2264,
+          "p95": 7.88297,
+          "p99": 13.821574000000025,
+          "max": 86.1491,
+          "avg": 3.936894499541623,
+          "count": 11999
+        },
+        "pollLatencyMs": {
+          "min": 0,
+          "med": 1.6935,
+          "p95": 5.447300000000007,
+          "p99": 9.890330000000002,
+          "max": 55.273,
+          "avg": 2.226287257271428,
+          "count": 11999
+        },
+        "achievedRps": 266.56985730980296,
+        "httpRequests": 23998,
+        "newConnections": 169,
+        "droppedIterations": 0,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      }
+    },
+    {
+      "runId": "saturation-r1-300",
+      "kind": "saturation",
+      "replicas": 1,
+      "targetRate": 300,
+      "startRate": 50,
+      "rampSeconds": 30,
+      "holdSeconds": 60,
+      "connectionReuse": true,
+      "preAllocatedVUs": 300,
+      "maxVUs": 1200,
+      "startedAt": "2026-09-13T15:48:51.734Z",
+      "finishedAt": "2026-09-13T15:50:21.750Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "min": 0.506,
+          "med": 2.9375,
+          "p95": 6.194554999999955,
+          "p99": 10.931935999999999,
+          "max": 57.6728,
+          "avg": 3.372739624913953,
+          "count": 23248
+        },
+        "pollLatencyMs": {
+          "min": 0,
+          "med": 1.5705,
+          "p95": 4.144959999999999,
+          "p99": 8.30813299999998,
+          "max": 31.0068,
+          "avg": 1.8403687327942253,
+          "count": 23248
+        },
+        "achievedRps": 516.4386598387899,
+        "httpRequests": 46496,
+        "newConnections": 49,
+        "droppedIterations": 0,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      }
+    },
+    {
+      "runId": "saturation-r1-600",
+      "kind": "saturation",
+      "replicas": 1,
+      "targetRate": 600,
+      "startRate": 50,
+      "rampSeconds": 30,
+      "holdSeconds": 60,
+      "connectionReuse": true,
+      "preAllocatedVUs": 300,
+      "maxVUs": 1200,
+      "startedAt": "2026-09-13T15:50:35.756Z",
+      "finishedAt": "2026-09-13T15:52:05.804Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "min": 0.5059,
+          "med": 29.291600000000003,
+          "p95": 130.0327850000002,
+          "p99": 230.4776619999998,
+          "max": 1008.3657,
+          "avg": 41.634302747661145,
+          "count": 45748
+        },
+        "pollLatencyMs": {
+          "min": 0,
+          "med": 3.1323,
+          "p95": 95.43112500000001,
+          "p99": 194.0953549999999,
+          "max": 981.6483,
+          "avg": 21.61514100507118,
+          "count": 45748
+        },
+        "achievedRps": 1016.1362133037209,
+        "httpRequests": 91496,
+        "newConnections": 206,
+        "droppedIterations": 0,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      }
+    },
+    {
+      "runId": "saturation-r3-150",
+      "kind": "saturation",
+      "replicas": 3,
+      "targetRate": 150,
+      "startRate": 50,
+      "rampSeconds": 30,
+      "holdSeconds": 60,
+      "connectionReuse": true,
+      "preAllocatedVUs": 300,
+      "maxVUs": 1200,
+      "startedAt": "2026-09-13T15:54:35.218Z",
+      "finishedAt": "2026-09-13T15:56:05.230Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "min": 0.5069,
+          "med": 4.1655,
+          "p95": 8.58112,
+          "p99": 13.35831200000001,
+          "max": 94.7815,
+          "avg": 4.6805660638386355,
+          "count": 11999
+        },
+        "pollLatencyMs": {
+          "min": 0,
+          "med": 2.0972,
+          "p95": 5.767360000000001,
+          "p99": 10.072530000000002,
+          "max": 27.0151,
+          "avg": 2.522940786732226,
+          "count": 11999
+        },
+        "achievedRps": 266.5507391244402,
+        "httpRequests": 23998,
+        "newConnections": 183,
+        "droppedIterations": 0,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      }
+    },
+    {
+      "runId": "saturation-r3-300",
+      "kind": "saturation",
+      "replicas": 3,
+      "targetRate": 300,
+      "startRate": 50,
+      "rampSeconds": 30,
+      "holdSeconds": 60,
+      "connectionReuse": true,
+      "preAllocatedVUs": 300,
+      "maxVUs": 1200,
+      "startedAt": "2026-09-13T15:56:18.126Z",
+      "finishedAt": "2026-09-13T15:57:48.145Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "min": 0.5081,
+          "med": 3.5096,
+          "p95": 6.011879999999997,
+          "p99": 10.201872999999972,
+          "max": 25.6704,
+          "avg": 3.7819511828974535,
+          "count": 23248
+        },
+        "pollLatencyMs": {
+          "min": 0,
+          "med": 1.6274,
+          "p95": 3.7068799999999973,
+          "p99": 7.9314399999999905,
+          "max": 31.0422,
+          "avg": 1.9355945973847324,
+          "count": 23248
+        },
+        "achievedRps": 516.4322744149969,
+        "httpRequests": 46496,
+        "newConnections": 66,
+        "droppedIterations": 0,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      }
+    },
+    {
+      "runId": "saturation-r3-600",
+      "kind": "saturation",
+      "replicas": 3,
+      "targetRate": 600,
+      "startRate": 50,
+      "rampSeconds": 30,
+      "holdSeconds": 60,
+      "connectionReuse": true,
+      "preAllocatedVUs": 300,
+      "maxVUs": 1200,
+      "startedAt": "2026-09-13T15:58:01.503Z",
+      "finishedAt": "2026-09-13T15:59:31.561Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "min": 0.5097,
+          "med": 4.2204,
+          "p95": 6.9250300000000005,
+          "p99": 20.61070399999996,
+          "max": 244.6721,
+          "avg": 5.049389582058192,
+          "count": 45748
+        },
+        "pollLatencyMs": {
+          "min": 0,
+          "med": 1.7048,
+          "p95": 2.8654700000000055,
+          "p99": 5.857555999999994,
+          "max": 97.1575,
+          "avg": 2.0781508371950617,
+          "count": 45748
+        },
+        "achievedRps": 1016.1027430818307,
+        "httpRequests": 91496,
+        "newConnections": 761,
+        "droppedIterations": 0,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      }
+    },
+    {
+      "runId": "saturation-r3-900",
+      "kind": "saturation",
+      "replicas": 3,
+      "targetRate": 900,
+      "startRate": 50,
+      "rampSeconds": 30,
+      "holdSeconds": 60,
+      "connectionReuse": true,
+      "preAllocatedVUs": 300,
+      "maxVUs": 1200,
+      "startedAt": "2026-09-13T15:59:44.240Z",
+      "finishedAt": "2026-09-13T16:01:14.331Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "min": 0.5083,
+          "med": 6.55545,
+          "p95": 70.93674999999999,
+          "p99": 95.89242000000009,
+          "max": 282.0209,
+          "avg": 19.486678558450464,
+          "count": 68246
+        },
+        "pollLatencyMs": {
+          "min": 0,
+          "med": 2.20395,
+          "p95": 22.3678,
+          "p99": 52.19848500000037,
+          "max": 277.7821,
+          "avg": 5.2120498798464645,
+          "count": 68246
+        },
+        "achievedRps": 1515.5106023608141,
+        "httpRequests": 136492,
+        "newConnections": 683,
+        "droppedIterations": 0,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      }
+    },
+    {
+      "runId": "saturation-r5-150",
+      "kind": "saturation",
+      "replicas": 5,
+      "targetRate": 150,
+      "startRate": 50,
+      "rampSeconds": 30,
+      "holdSeconds": 60,
+      "connectionReuse": true,
+      "preAllocatedVUs": 300,
+      "maxVUs": 1200,
+      "startedAt": "2026-09-13T16:01:59.160Z",
+      "finishedAt": "2026-09-13T16:03:29.175Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "min": 0.5076,
+          "med": 4.1045,
+          "p95": 8.662370000000001,
+          "p99": 13.275348000000008,
+          "max": 97.0296,
+          "avg": 4.655184865405462,
+          "count": 11999
+        },
+        "pollLatencyMs": {
+          "min": 0,
+          "med": 2.0714,
+          "p95": 5.8132600000000005,
+          "p99": 9.748740000000037,
+          "max": 32.3354,
+          "avg": 2.490812101008428,
+          "count": 11999
+        },
+        "achievedRps": 266.53412360149355,
+        "httpRequests": 23998,
+        "newConnections": 214,
+        "droppedIterations": 0,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      }
+    },
+    {
+      "runId": "saturation-r5-300",
+      "kind": "saturation",
+      "replicas": 5,
+      "targetRate": 300,
+      "startRate": 50,
+      "rampSeconds": 30,
+      "holdSeconds": 60,
+      "connectionReuse": true,
+      "preAllocatedVUs": 300,
+      "maxVUs": 1200,
+      "startedAt": "2026-09-13T16:03:43.672Z",
+      "finishedAt": "2026-09-13T16:05:13.692Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "min": 0.5072,
+          "med": 3.7437,
+          "p95": 6.229049999999994,
+          "p99": 9.935460999999997,
+          "max": 62.0164,
+          "avg": 4.063416453028203,
+          "count": 23248
+        },
+        "pollLatencyMs": {
+          "min": 0,
+          "med": 1.6833,
+          "p95": 3.2264549999999987,
+          "p99": 6.845199999999989,
+          "max": 56.597,
+          "avg": 1.9741149776324884,
+          "count": 23248
+        },
+        "achievedRps": 516.4378447305362,
+        "httpRequests": 46496,
+        "newConnections": 145,
+        "droppedIterations": 0,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      }
+    },
+    {
+      "runId": "saturation-r5-600",
+      "kind": "saturation",
+      "replicas": 5,
+      "targetRate": 600,
+      "startRate": 50,
+      "rampSeconds": 30,
+      "holdSeconds": 60,
+      "connectionReuse": true,
+      "preAllocatedVUs": 300,
+      "maxVUs": 1200,
+      "startedAt": "2026-09-13T16:05:28.098Z",
+      "finishedAt": "2026-09-13T16:06:58.138Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "min": 0.5097,
+          "med": 4.1727,
+          "p95": 6.796249999999999,
+          "p99": 12.514796000000002,
+          "max": 49.8556,
+          "avg": 4.480942881500413,
+          "count": 45747
+        },
+        "pollLatencyMs": {
+          "min": 0,
+          "med": 1.6141,
+          "p95": 2.66097,
+          "p99": 4.2063,
+          "max": 23.6389,
+          "avg": 1.8823215926727286,
+          "count": 45747
+        },
+        "achievedRps": 1016.2609821114407,
+        "httpRequests": 91494,
+        "newConnections": 536,
+        "droppedIterations": 0,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      }
+    },
+    {
+      "runId": "saturation-r5-900",
+      "kind": "saturation",
+      "replicas": 5,
+      "targetRate": 900,
+      "startRate": 50,
+      "rampSeconds": 30,
+      "holdSeconds": 60,
+      "connectionReuse": true,
+      "preAllocatedVUs": 800,
+      "maxVUs": 3000,
+      "startedAt": "2026-09-13T16:10:05.350Z",
+      "finishedAt": "2026-09-13T16:11:35.416Z",
+      "metrics": {
+        "acceptLatencyMs": {
+          "min": 2.0588,
+          "med": 6.1028,
+          "p95": 60.981609999999925,
+          "p99": 123.32764899999997,
+          "max": 381.8607,
+          "avg": 15.29568333577559,
+          "count": 68242
+        },
+        "pollLatencyMs": {
+          "min": 0.5148,
+          "med": 2.62425,
+          "p95": 20.85122999999997,
+          "p99": 60.44471399999991,
+          "max": 275.6868,
+          "avg": 5.341340403270712,
+          "count": 68242
+        },
+        "achievedRps": 1515.8660751003863,
+        "httpRequests": 136484,
+        "newConnections": 1291,
+        "droppedIterations": 0,
+        "failedRequests": 0,
+        "non202Responses": 0,
+        "unexpected5xx": 0
+      }
+    }
+  ],
+  "curve": [
+    {
+      "runId": "saturation-r1-150",
+      "replicas": 1,
+      "targetRate": 150,
+      "achievedRps": 266.56985730980296,
+      "acceptP95Ms": 7.88297,
+      "failedRatio": 0,
+      "degraded": false
+    },
+    {
+      "runId": "saturation-r1-300",
+      "replicas": 1,
+      "targetRate": 300,
+      "achievedRps": 516.4386598387899,
+      "acceptP95Ms": 6.194554999999955,
+      "failedRatio": 0,
+      "degraded": false
+    },
+    {
+      "runId": "saturation-r1-600",
+      "replicas": 1,
+      "targetRate": 600,
+      "achievedRps": 1016.1362133037209,
+      "acceptP95Ms": 130.0327850000002,
+      "failedRatio": 0,
+      "degraded": false
+    },
+    {
+      "runId": "saturation-r3-150",
+      "replicas": 3,
+      "targetRate": 150,
+      "achievedRps": 266.5507391244402,
+      "acceptP95Ms": 8.58112,
+      "failedRatio": 0,
+      "degraded": false
+    },
+    {
+      "runId": "saturation-r3-300",
+      "replicas": 3,
+      "targetRate": 300,
+      "achievedRps": 516.4322744149969,
+      "acceptP95Ms": 6.011879999999997,
+      "failedRatio": 0,
+      "degraded": false
+    },
+    {
+      "runId": "saturation-r3-600",
+      "replicas": 3,
+      "targetRate": 600,
+      "achievedRps": 1016.1027430818307,
+      "acceptP95Ms": 6.9250300000000005,
+      "failedRatio": 0,
+      "degraded": false
+    },
+    {
+      "runId": "saturation-r3-900",
+      "replicas": 3,
+      "targetRate": 900,
+      "achievedRps": 1515.5106023608141,
+      "acceptP95Ms": 70.93674999999999,
+      "failedRatio": 0,
+      "degraded": false
+    },
+    {
+      "runId": "saturation-r5-150",
+      "replicas": 5,
+      "targetRate": 150,
+      "achievedRps": 266.53412360149355,
+      "acceptP95Ms": 8.662370000000001,
+      "failedRatio": 0,
+      "degraded": false
+    },
+    {
+      "runId": "saturation-r5-300",
+      "replicas": 5,
+      "targetRate": 300,
+      "achievedRps": 516.4378447305362,
+      "acceptP95Ms": 6.229049999999994,
+      "failedRatio": 0,
+      "degraded": false
+    },
+    {
+      "runId": "saturation-r5-600",
+      "replicas": 5,
+      "targetRate": 600,
+      "achievedRps": 1016.2609821114407,
+      "acceptP95Ms": 6.796249999999999,
+      "failedRatio": 0,
+      "degraded": false
+    },
+    {
+      "runId": "saturation-r5-900",
+      "replicas": 5,
+      "targetRate": 900,
+      "achievedRps": 1515.8660751003863,
+      "acceptP95Ms": 60.981609999999925,
+      "failedRatio": 0,
+      "degraded": false
+    }
+  ],
+  "saturationPoints": [
+    {
+      "replicas": 1,
+      "saturationRps": 1016.1362133037209,
+      "acceptP95Ms": 130.0327850000002,
+      "note": "這個數字跟 replicas=3/5 的兩個不是同一種東西：3 與 5 的飽和點是「測過的速率裡最高且仍健康」的那一格，900 rps 那一格是真的測過、也是健康的。這裡的 1016.1 RPS（targetRate=600）則是「再往上量不到」——900 rps 在 replicas=1 下被分析器拒絕（droppedIterations 從未歸零，見 unachievedRates[0]），不是「測了 900 但劣化了」。細節見 downstreamPeaks[\"1\"].note。"
+    },
+    {
+      "replicas": 3,
+      "saturationRps": 1515.5106023608141,
+      "acceptP95Ms": 70.93674999999999
+    },
+    {
+      "replicas": 5,
+      "saturationRps": 1515.8660751003863,
+      "acceptP95Ms": 60.981609999999925
+    }
+  ],
+  "unachievedRates": [
+    {
+      "replicas": 1,
+      "targetRate": 900,
+      "runId": "saturation-r1-900",
+      "status": "rejected_by_design",
+      "reason": "droppedIterations 從未歸零：開放模型下所需的 VU 數大約是「到達率 x 延遲」，延遲一旦爆炸，所需 VU 數也跟著發散，沒有任何有限的 -MaxVUs 能讓它變成 0。這是系統本身撐不住 900 rps，不是施壓端的問題。",
+      "escalationHistory": [
+        {
+          "preAllocatedVUs": 300,
+          "maxVUs": 1200,
+          "droppedIterations": 13526,
+          "note": "run-saturation.ps1 預設參數（agent 的第一次嘗試）"
+        },
+        {
+          "preAllocatedVUs": 800,
+          "maxVUs": 3000,
+          "droppedIterations": 7135,
+          "note": "agent 第一次加碼；同時觀察到 accept p95 被頂到 ~10000ms 的上限、開始出現 failedRequests"
+        },
+        {
+          "preAllocatedVUs": 1500,
+          "maxVUs": 6000,
+          "droppedIterations": 1461,
+          "note": "agent 第二次加碼；droppedIterations 持續收斂但未歸零，failedRequests 降到個位數"
+        },
+        {
+          "preAllocatedVUs": 300,
+          "maxVUs": 1200,
+          "droppedIterations": 14468,
+          "note": "controller 最終、乾淨（未與其他掃描重疊）的版本，即本檔 runs 中被排除的 saturation-r1-900。參數跟第一列的 agent 首次嘗試完全相同（300/1200），但掉的 iteration 數不同（14468 對 13526）：這是同一套「持續超載」設定下正常的執行間變異（系統早已處於不穩定佇列狀態，每次跑落點自然會有幾個百分點的抖動），不是設定或量測方式不一致。"
+        }
+      ],
+      "lastHealthyRate": {
+        "targetRate": 600,
+        "acceptP95Ms": 130
+      },
+      "downstreamEvidenceAtAttempt": {
+        "samples": 31,
+        "hikariActive": {
+          "peak": 30,
+          "avg": 15.65
+        },
+        "hikariPending": {
+          "peak": 176,
+          "avg": 79.29,
+          "sustainedAboveThreshold": {
+            "threshold": 0,
+            "samples": 15,
+            "spanSeconds": 63.659,
+            "min": 131,
+            "max": 176,
+            "median": 167,
+            "startedAt": "2026-09-13T15:52:43.9366750Z",
+            "endedAt": "2026-09-13T15:53:47.5957935Z"
+          }
+        },
+        "pgBackends": {
+          "peak": 31,
+          "avg": 31
+        },
+        "reservationMaxMs": {
+          "peak": 0
+        },
+        "interpretation": "取 hikariPending > 0 為門檻，這次嘗試裡最長的連續取樣區間是 15 個樣本、跨越 63.7 秒（sustainedAboveThreshold 欄位，可直接從 downstream-saturation-r1-900.jsonl 重新算出來）：這段區間內 hikariPending 落在 131-176（中位數 167），hikariActive 同時貼著 30（連線池上限）。這是持續性的排隊，不是單一取樣點的尖峰。reservationMaxMs 全程為 0；但這是一個隨到達率漸進崩潰的模式，不是一刀切的斷點。同一個 replicas=1 sweep 逐樣本攤開看（downstream-saturation-r1-150/300/600/900.jsonl）：150 rps 的 49 個樣本全部讀到非零值（單一值 32.09ms——這其實是該速率下觀察到的唯一值，不是「穩定值」這個字面暗示的巧合）；300 rps 的 49 個樣本裡已經有 13 個（27%）讀到 0，其餘 36 個仍讀到 32.09ms；600 與 900 rps 則是全部樣本（47、31 個）都讀到 0.000000，沒有例外。purchase.reservation.latency 是 Micrometer 的 Timer，其 MAX 統計量會隨捲動視窗衰減；sample-downstream.ps1 的 Get-MetricValue 在指定統計量不存在時只回傳 null，取樣器再把 null 收斂成 0——負載越高，統計量沒回報、被收斂成 0 的樣本比例也越高，這個漸進式的崩潰比一刀切的斷點更難用「Redis 剛好變快」解釋，而更像是這個指標本身在失去回報能力。結論：Redis 在有負載的速率下實際上沒有被這個指標可靠測到，不能用 reservationMaxMs 排除它是瓶頸；一個副本在 900 rps 下崩潰的直接機制是 Postgres 連線池（HikariCP 上限 30）被打滿、執行緒排隊等連線——這個結論只靠上面 hikariPending 的正面證據成立，不依賴 reservationMaxMs。"
+      },
+      "conclusion": "一個 backend 副本無法撐住每秒 900 個請求；這是系統的極限，不是施壓端的極限。"
+    }
+  ],
+  "downstreamPeaks": {
+    "1": {
+      "targetRate": 600,
+      "note": "副本數=1 的飽和點就是 600（900 打不進去，見 unachievedRates），這裡取的是它自己曲線上最後一個健康的速率。",
+      "samples": 47,
+      "hikariActive": {
+        "peak": 30,
+        "avg": 15.43
+      },
+      "hikariPending": {
+        "peak": 173,
+        "avg": 7.7,
+        "sustainedAboveThreshold": {
+          "threshold": 0,
+          "samples": 5,
+          "spanSeconds": 8.69,
+          "min": 1,
+          "max": 19,
+          "median": 15,
+          "startedAt": "2026-09-13T15:51:38.6328935Z",
+          "endedAt": "2026-09-13T15:51:47.3227858Z"
+        }
+      },
+      "pgBackends": {
+        "peak": 32,
+        "avg": 31.04
+      },
+      "reservationMaxMs": {
+        "peak": 0
+      },
+      "interpretation": "取 hikariPending > 0 為門檻，這一格（健康、accept p95=130ms，低於 1000ms 門檻）裡最長的連續取樣區間只有 5 個樣本、跨越 8.7 秒，數值落在 1-19（中位數 15）——遠比 900 rps 那次的15 樣本、131-176 溫和。真正達到 173 的那個峰值（見上面 hikariPending.peak）是單一取樣點的孤立尖峰，並不在這段最長連續區間內，所以不能說這一格「持續」在排隊——比較準確的說法是「hikariActive 反覆頂到 30、hikariPending 偶爾出現短暫、不連續的尖峰，但沒有形成像 900 rps那樣的持續佇列」。這是同一個瓶頸（Postgres 連線池）在健康速率下的較輕、較不穩定的前兆。這一格的 reservationMaxMs 同樣讀到 0——原因與 unachievedRates[0] 相同（MAX 統計量很可能已經衰減出捲動視窗，取樣腳本把不存在的統計量收斂成 0），不代表 Redis 這時確實是 0ms，不能當成 Redis 表現的證據。"
+    },
+    "3": {
+      "targetRate": 900,
+      "samples": 47,
+      "hikariActive": {
+        "peak": 30,
+        "avg": 5.66
+      },
+      "hikariPending": {
+        "peak": 0,
+        "avg": 0,
+        "sustainedAboveThreshold": {
+          "threshold": 0,
+          "samples": 0,
+          "spanSeconds": 0,
+          "min": 0,
+          "max": 0,
+          "median": 0,
+          "startedAt": null,
+          "endedAt": null
+        }
+      },
+      "pgBackends": {
+        "peak": 92,
+        "avg": 91.02
+      },
+      "reservationMaxMs": {
+        "peak": 0
+      },
+      "interpretation": "hikariPending 全程為 0（47 個取樣點，sustainedAboveThreshold.samples=0），hikariActive 在取樣到的那個副本上偶爾頂到 30（avg 5.66，因為取樣器每次只打三個副本裡隨機一個），但沒有伴隨排隊，代表三個副本合計 90 條連線足以吸收 900 rps 的負載；pgBackends 峰值 92，接近 3x30，尚未逼近調高後的 300 上限。"
+    },
+    "5": {
+      "targetRate": 900,
+      "rerun": true,
+      "rerunReason": "原始 p3-r5 900 rps 那次只掉了 15 個 iteration（相對於 r1-900 的 14468，相差三個數量級），p95 也只有 85ms，明顯是施壓端 VU 配額不夠而非系統極限（Ruling R11）；用 -PreAllocatedVUs 800 -MaxVUs 3000 重跑後 droppedIterations=0，予以採用。",
+      "samples": 47,
+      "hikariActive": {
+        "peak": 30,
+        "avg": 3.26
+      },
+      "hikariPending": {
+        "peak": 0,
+        "avg": 0,
+        "sustainedAboveThreshold": {
+          "threshold": 0,
+          "samples": 0,
+          "spanSeconds": 0,
+          "min": 0,
+          "max": 0,
+          "median": 0,
+          "startedAt": null,
+          "endedAt": null
+        }
+      },
+      "pgBackends": {
+        "peak": 152,
+        "avg": 151.02
+      },
+      "reservationMaxMs": {
+        "peak": 48.916413
+      },
+      "interpretation": "hikariPending 全程為 0（47 個取樣點，sustainedAboveThreshold.samples=0），hikariActive 峰值 30 但平均只有 3.26（5 個副本分攤，取樣器每次只打一個隨機副本，所以平均值本來就會被稀釋，不能直接讀成「大部分時間都很閒」）；pgBackends 峰值 152，非常接近 5x30=150，證實 max_connections 調到 300 是必要的、也證實 150 條這個數字本身已經是副本數再往上加就會直接撞到的天花板。reservationMaxMs 峰值 48.9ms——這是本檔所有 900 rps 附近取樣裡唯一一次讀到非零值的 reservationMaxMs（replicas=1/3 在 600、900 rps 的每一個樣本都讀到 0，理由見 unachievedRates[0].downstreamEvidenceAtAttempt.interpretation：這個指標的回報率隨到達率升高漸進崩潰，150 rps 全部回報、300 rps 已有 27-39% 樣本讀到 0、600 rps 以上全滅，不是 Redis 真的是 0ms）。48.9ms 本身不慢，但因為其他組別在這個速率下已經測不到，這裡只能說「五副本、每副本負載最輕時 Redis 預扣是快的」，不能推廣成「Redis 在任何負載下都不是瓶頸」。取樣是每 ~2 秒隨機挑一個副本，看不到「5 個副本同時全滿」的情況，也看不到兩次取樣之間可能出現又消失的短暫排隊；能下的結論是「沒有觀察到持續性排隊」，不是「連線池完全沒有壓力」。"
+    }
+  },
+  "conclusion": {
+    "doesHorizontalScalingHelp": "有幫助，而且幅度很大：在同一個到達率（900）下，accept p95 從一個副本完全撐不住（droppedIterations 無法歸零、系統性排隊）變成三個副本 70.9ms、五個副本 61.0ms。P1 用封閉模型量到的「三副本比一副本更慢」是負載總量被 VU 數鎖死造成的假象，這次的開放模型測試直接推翻了那個結論。",
+    "whereTheBottleneckIs": "一個副本時，瓶頸在 Postgres 連線池（HikariCP 上限 30）：900 rps 下 hikariPending最長連續 15 個取樣點（63.7 秒）維持在 131-176（中位數 167，見 unachievedRates[0]），執行緒在等連線，不是在等 Redis 或 CPU。三、五個副本時，在測試涵蓋的速率內沒有觀察到同樣的持續排隊（hikariPending 的 sustainedAboveThreshold 皆為 0 樣本）。Redis 預扣（reservationMaxMs）在三個 sweep 的 600/900 rps 讀到的是每一個樣本都為 0，但同一批 sweep 在 150 rps 是每一個樣本都非零（最高到 32-48ms），300 rps 則已經有 27-39% 的樣本讀到 0、其餘仍非零——這個隨負載漸進崩潰的模式看起來是 Micrometer Timer 的 MAX 統計量衰減出捲動視窗、加上取樣腳本把「這個統計量不存在」的 null 收斂成 0，而不是 Redis 真的變快——這個數字因此不能拿來排除 Redis 是瓶頸；三、五副本『沒有觀察到新瓶頸』的結論只靠 hikariPending 的正面證據成立，不依賴 reservationMaxMs。但 pgBackends 峰值（五副本時 152，逼近改前的 100 上限）證明真正的長期限制在 Postgres 的 max_connections：每加一個副本就多綁 30 條連線，這條路線不能無限延伸下去，是後續把購買流程拆成獨立服務、獨立資料庫（P4/P5）的直接依據。"
+  }
+}

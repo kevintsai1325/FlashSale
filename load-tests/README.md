@@ -232,3 +232,174 @@ There is no quantitative target here per the design spec — the numbers above
 (70ms avg request latency, 19.2s wall-clock for the whole run, 5.2 req/s
 aggregate `http_reqs` rate) are recorded as observed, for later reference
 (e.g. Week 6's portfolio writeup), not as a pass/fail bar.
+
+---
+
+## Running against k3s: generate load from Windows, not from inside the cluster
+
+`load-tests/k8s/k6-job.yaml` runs k6 **inside** the cluster. That was the only option for a
+while, but it has a measurement problem: this machine's WSL2 VM clock runs roughly **3.5%
+fast**, so every duration k6 reports from inside a container is overstated by about that much
+(see [measurement clock accuracy](../docs/portfolio/wsl2-clock-accuracy.md)). The Windows host
+clock was verified accurate against `time.windows.com`.
+
+`load-tests/k8s/run-from-windows.ps1` runs k6 **on Windows** instead, keeping the same
+measurement boundary — straight to the backend Service, no Nginx and no TLS, so kube-proxy's
+distribution across Pods is still what is being measured:
+
+```powershell
+./load-tests/k8s/run-from-windows.ps1 -Vus 100 -Stock 30
+```
+
+Seed the fixture first — same shape as Step 1 above, but through `kubectl` instead of
+`docker compose`, and sized for the VU count you are about to run:
+
+```bash
+kubectl --context rancher-desktop -n flashsale exec -i postgres-0 -- psql -U flashsale -d flashsale <<'EOF'
+TRUNCATE TABLE purchase_requests, order_items, orders, inventory, flash_sales, products, users RESTART IDENTITY CASCADE;
+INSERT INTO products (id, name, description) VALUES (1, 'Limited Sneakers', 'Only 100 pairs');
+INSERT INTO flash_sales (id, product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status)
+VALUES (1, 1, 9.99, now() - interval '1 minute', now() + interval '1 hour', 1, 'ACTIVE');
+INSERT INTO inventory (id, flash_sale_id, total_quantity, available_quantity, reserved_quantity, sold_quantity, version)
+VALUES (1, 1, 30, 30, 0, 0, 0);
+EOF
+```
+
+kubectl --context rancher-desktop -n flashsale exec -i postgres-0 -- psql -U flashsale -d flashsale <<'EOF'
+
+It applies `k8s/loadtest/backend-nodeport.yaml`, waits for the port to answer, runs k6, writes
+`k6.log`, `k6-summary.json` and `run.json` under `load-tests/k8s/results/<timestamp>/`, and then
+**deletes the NodePort Service again** (pass `-KeepService` to keep it). The Service is
+deliberately not part of `k8s/base/kustomization.yaml`: it exposes the backend on the node
+without going through Nginx, which is fine for a load test and not fine as a standing default.
+
+### Recorded run (2026-09-13, from Windows against k3s)
+
+100 VUs against 30 units of stock, three backend replicas, Tomcat at Spring Boot defaults
+(`threads.max=200`, `accept-count=100`):
+
+```
+checks_total.......: 530     checks_succeeded: 100.00% (530/530)
+http_reqs..........: 330     http_req_failed:    0.00% (0/330)
+http_req_duration..: avg=188.65ms min=3.03ms med=63.84ms p(95)=562.64ms p(99)=573.02ms max=580.8ms
+iterations.........: 100     wall-clock: 54.7s (dominated by the deliberate register/login stagger)
+```
+
+Outcome split: 30 `SUCCEEDED`, 70 `SOLD_OUT`, no raw 5xx, no stuck `PENDING`.
+
+Invariants immediately afterwards:
+
+```
+ total_quantity | available_quantity | reserved_quantity | sold_quantity
+             30 |                  0 |                 0 |            30
+ orders: 30     unpublished outbox events: 0
+```
+
+These durations are measured by the Windows clock, so unlike the in-cluster numbers they carry
+no ~3.5% inflation. They are not comparable with the older in-cluster figures for that reason —
+and the path differs too (this one adds the relay hop, the in-cluster one does not).
+
+### When you must still generate load inside the cluster
+
+Traffic from Windows goes through Rancher Desktop's user-space port relay, which has a hard
+limit that Tomcat has nothing to do with:
+
+| How the connections arrive | Limit |
+|---|---|
+| All at once ("N simultaneous new connections") | about **210** accepted; the rest get a TCP RST |
+| Spread over time (new connections per second) | **1,200/s** measured with zero failures |
+
+The limit is on connections being established *at the same instant*, not on connection rate —
+the same total spread over a few seconds goes through cleanly. So:
+
+- **Arrival-rate scenarios, or scripts that reuse connections** (`purchase-flow.js` establishes
+  each VU's connection during its staggered register/login, so its simultaneous purchase burst
+  reuses connections that already exist) → run from Windows.
+- **A deliberate connection storm above ~200 simultaneous new connections** → use
+  `k6-job.yaml` inside the cluster and note the ~3.5% clock bias on the resulting durations.
+
+This is the same relay that made the Compose benchmark refuse connections; the full measurement
+is in the [performance report](../docs/portfolio/performance-report.md#windows-到-wsl2-的埠轉發層實際容量).
+
+## Saturation testing: finding the throughput ceiling, not just one latency number
+
+`purchase-flow.js` above is a **closed-model** script (`per-vu-iterations`): total load is
+fixed by VU count, independent of how many backend replicas exist. That is fine for a
+correctness check, but it cannot answer "does horizontal scaling help" — more replicas just
+means more JVMs competing for the same fixed amount of traffic, which is why an earlier
+measurement with this model showed 3 replicas as *slower* than 1 (a measurement artifact, not
+evidence against scaling; see [scaling and autoscaling](../docs/portfolio/scaling-and-autoscaling.md#1-為什麼要先修壓測而不是直接信任-p1-的結論)).
+
+`load-tests/k8s/saturation.js` uses k6's **open-model** `ramping-arrival-rate` executor
+instead: the arrival rate is set externally and ramped up in stages; if the system can't keep
+up, latency rises and iterations get dropped instead of the offered load silently shrinking.
+This is what actually measures "where does the throughput ceiling sit, and at what RPS does
+p95 start to degrade."
+
+### Running a sweep: `run-saturation.ps1`
+
+```powershell
+./load-tests/k8s/run-saturation.ps1 -Replicas 3 -Rates '150,300,600,900' -AdminPassword 'MetricsAdmin123!'
+```
+
+It does, in order: scale `backend` to `-Replicas` (skip with `-SkipScaling`, required when an
+HPA is also managing `spec.replicas`, so the two don't fight over the field) → seed
+`fixtures-saturation.sql` (raises `purchase_limit_per_user` to 1,000,000 so the same token can
+buy repeatedly without hitting `REJECTED`) → clear the Redis stock key → apply the load-test
+NodePort → rebuild the metrics-admin account (the seed step truncates `users`) → pre-generate
+`-Users` buyer tokens with `load-tests/benchmark/prepare.js` (auth traffic is moved out of the
+measurement window this way) → run `saturation.js` once per rate in `-Rates`, sampling
+downstream metrics (`sample-downstream.ps1`) in the background for each run → write
+`saturation-<runId>.json` and `downstream-<runId>.jsonl` per rate into `-OutputDirectory` →
+delete the NodePort again.
+
+**`-StartRate` must stay below 200** (the script throws if you pass 200 or higher). This is
+not an arbitrary safety margin: Rancher Desktop's Windows-side port relay accepts only about
+**210 simultaneous new connections** before RST-ing the rest (see the connection-limit table
+above). `ramping-arrival-rate` opens its first burst of connections at `-StartRate`, so
+starting at or above that ceiling produces connection failures from the relay layer in the
+first few seconds of the ramp — a measurement of the relay, not of the backend. Spreading the
+same number of connections over time has no such ceiling (1,200 new connections/sec measured
+with zero failures), which is why the ramp itself is safe once past the start.
+
+### Reading the results: `analyze-saturation.mjs`
+
+```bash
+node load-tests/k8s/analyze-saturation.mjs load-tests/k8s/results/<sweep-directory>
+```
+
+It loads every `saturation-*.json` in the directory and applies a data-quality gate before
+computing anything — a run that fails the gate is printed as `REJECTED <runId>` with the
+specific reason(s) and excluded from the curve entirely, rather than being silently averaged
+in:
+
+- **Negative or non-increasing latency percentiles** — this machine's WSL2 VM clock has been
+  measured running fast; a run showing this is a clock artifact, not a system behavior (see
+  [clock accuracy](../docs/portfolio/wsl2-clock-accuracy.md)).
+- **`droppedIterations > 0`** — the load generator itself couldn't keep up (VU quota
+  exhausted), so `achievedRps` no longer represents what the system could actually take. This
+  is not the same as the system degrading; escalate `-PreAllocatedVUs`/`-MaxVUs` and re-run
+  that one rate.
+- **`newConnections === 0` or missing `connectionReuse`** — with zero new connections there is
+  nothing to read kube-proxy's per-Pod distribution from, since kube-proxy assigns a Pod once
+  per TCP connection, not once per request.
+- **Any `unexpected5xx`** — a real server error during the run.
+
+It then reads the `downstream-*.jsonl` samples taken during the same runs and reports metrics
+that went **silent** under `SUSPECT` (the curve stays usable; those specific fields must not be
+quoted as measured values). A metric being zero for a whole run is not by itself suspicious —
+`hikariPending` is genuinely zero at low rates. What has no physical explanation is the
+*direction*: a lower arrival rate measured non-zero values and a higher one is flat zero for the
+entire run. That is the metric losing its ability to report, not the load disappearing —
+exactly the mistake made once during P3, where `reservationMaxMs` reading 0 at high load was
+written up as "Redis didn't get slower" while the low-load run of the same metric showed 48.9 ms.
+Samples that are entirely null are reported separately, since that is the sampler failing rather
+than the metric reporting a zero. A `SUSPECT` finding makes the command exit non-zero, the same
+as a `REJECTED` run.
+
+Accepted runs are printed as a `replicas / targetRate / achievedRps / acceptP95Ms / failed% /
+degraded` table, followed by each replica count's saturation point (the highest tested rate
+that stayed healthy). The curated, human-annotated version of this data — including the
+`unachievedRates` case where no finite VU budget clears the drop-rate gate — is committed at
+[`docs/portfolio/data/k8s-saturation-results.json`](../docs/portfolio/data/k8s-saturation-results.json),
+and the full writeup is in [horizontal scaling and autoscaling](../docs/portfolio/scaling-and-autoscaling.md).
