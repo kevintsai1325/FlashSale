@@ -211,4 +211,25 @@ Assert-True ((@($leaseRule.verbs | Sort-Object) -join ',') -eq 'create,get,updat
 Assert-True (@($resources | Where-Object { $_.kind -eq 'ClusterRole' -or $_.kind -eq 'ClusterRoleBinding' }).Count -eq 0) 'The baseline must not grant any cluster-scoped RBAC.'
 Assert-True ($backend.spec.template.spec.serviceAccountName -eq 'flashsale-backend') 'Backend must run under the flashsale-backend ServiceAccount.'
 
-Write-Host 'PASS: Kubernetes rendered-resource contract (25 resources, exact stages, minimal RBAC, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, backend rollout strategy, and backend PodDisruptionBudget).'
+# backend 的 liveness 探測必須明寫 timeoutSeconds。Kubernetes 的預設是 1 秒，而 P3 的 HPA 實驗
+# 證實：CPU 被冷啟動的 JVM 榨乾時，忙碌但健康的 Pod 就是回不了那個 1 秒的探測，會被殺掉重啟，
+# 讓擴容動作自己造成服務中斷（docs/portfolio/scaling-and-autoscaling.md 第 4 節）。
+$backendLiveness = Get-PropertyValue $backend.spec.template.spec.containers[0] 'livenessProbe'
+Assert-True ([int](Get-PropertyValue $backendLiveness 'timeoutSeconds') -ge 5) 'Backend liveness probe must declare timeoutSeconds >= 5 so CPU pressure cannot be mistaken for death.'
+
+# maxReplicas 不是獨立可調的數字：每個副本帶自己的 HikariCP 連線池，全部指向同一個 Postgres。
+# 副本數 x 每副本連線上限一旦超過 max_connections，HPA 會在 CPU 到閾值之前先把資料庫的連線撞爆
+# （FATAL: sorry, too many clients already）——P3 在 5 副本時實際踩到。這三個數字寫在三個不同的
+# 檔案裡，靠註解提醒並不夠，所以在這裡把那道算式變成會失敗的斷言。
+$hpaText = Get-Content -LiteralPath (Join-Path $repo 'k8s\autoscaling\hpa.yaml') -Raw
+Assert-True ($hpaText -match '(?m)^\s*maxReplicas:\s*(\d+)\s*$') 'hpa.yaml must declare maxReplicas.'
+$maxReplicas = [int]$Matches[1]
+$backendAppYml = Get-Content -LiteralPath (Join-Path $repo 'backend\src\main\resources\application.yml') -Raw
+Assert-True ($backendAppYml -match '(?m)^\s*maximum-pool-size:\s*(\d+)\s*$') 'application.yml must declare the HikariCP maximum-pool-size.'
+$poolSize = [int]$Matches[1]
+$postgresArgs = (@(Get-PropertyValue $postgres.spec.template.spec.containers[0] 'args') -join ' ')
+Assert-True ($postgresArgs -match 'max_connections=(\d+)') 'postgres must pin max_connections explicitly.'
+$maxConnections = [int]$Matches[1]
+Assert-True (($maxReplicas * $poolSize) -le $maxConnections) "HPA maxReplicas ($maxReplicas) x HikariCP pool ($poolSize) = $($maxReplicas * $poolSize) exceeds postgres max_connections ($maxConnections). Raise max_connections in k8s/base/data.yaml first."
+
+Write-Host 'PASS: Kubernetes rendered-resource contract (25 resources, exact stages, minimal RBAC, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, backend rollout strategy, backend PodDisruptionBudget, liveness timeout, and the HPA/connection-pool ceiling).'

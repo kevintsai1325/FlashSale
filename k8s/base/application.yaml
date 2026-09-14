@@ -32,7 +32,13 @@ spec:
           ports: [{containerPort: 8080}]
           startupProbe: {httpGet: {path: /actuator/health/liveness, port: 8080}, failureThreshold: 30, periodSeconds: 5, timeoutSeconds: 3}
           readinessProbe: {httpGet: {path: /actuator/health/readiness, port: 8080}, periodSeconds: 5}
-          livenessProbe: {httpGet: {path: /actuator/health/liveness, port: 8080}, periodSeconds: 10}
+          # timeoutSeconds 一定要明寫：Kubernetes 的預設是 1 秒，而 backend 的 limits.cpu 是 2。
+          # P3 的 HPA 實驗裡，五個 JVM 同時冷啟動把 CPU 榨乾，正在忙的 Pod 連 1 秒內回一個
+          # 輕量探測都做不到，於是至少 7 個 Pod（含 3 個原本健康的舊 Pod）被 liveness 殺掉重啟——
+          # 擴容動作自己造成了服務中斷（docs/portfolio/scaling-and-autoscaling.md 第 4 節）。
+          # 5 秒仍遠小於 periodSeconds × failureThreshold（10 × 3 = 30 秒），真的死掉的 Pod
+          # 一樣會在半分鐘內被換掉，只是不再把「暫時忙不過來」誤判成「死了」。
+          livenessProbe: {httpGet: {path: /actuator/health/liveness, port: 8080}, periodSeconds: 10, timeoutSeconds: 5}
           resources: {requests: {cpu: 500m, memory: 1Gi}, limits: {cpu: "2", memory: 2Gi}}
 ---
 apiVersion: v1

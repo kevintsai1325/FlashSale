@@ -70,3 +70,5 @@ jobs:
         run: node scripts/tests/ps1-encoding.mjs
       - name: 檢查程式本身的單元測試
         run: node --test scripts/tests/ps1-encoding.test.mjs
+      - name: 壓測資料品質守門的單元測試
+        run: node --test load-tests/k8s/analyze-saturation.test.mjs

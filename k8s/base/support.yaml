@@ -37,6 +37,13 @@ spec:
       containers:
         - name: zipkin
           image: openzipkin/zipkin:3
+          # 記憶體內儲存的 span 上限。預設是 500000，在 512Mi 的容器裡放不下——P3 的飽和壓測
+          # 期間（100% 取樣率、約 1500 req/s）Zipkin 因此 OOM，累計重啟 24 次
+          # （docs/portfolio/scaling-and-autoscaling.md 第 7 節）。
+          # 壓的是保存量而不是取樣率：取樣率調低會讓平常的追蹤示範失去代表性，而這個上限只影響
+          # 「能往回看多久」。50000 條 span 在這個專案的請求量下仍涵蓋數分鐘的追蹤歷史，足夠示範。
+          # 真正的解法是換成有儲存後端的部署（Elasticsearch／Cassandra），那時這個上限就不需要了。
+          env: [{name: MEM_MAX_SPANS, value: "50000"}]
           ports: [{name: http, containerPort: 9411}]
           startupProbe: {httpGet: {path: /health, port: 9411}, failureThreshold: 30, periodSeconds: 5, timeoutSeconds: 3}
           readinessProbe: {httpGet: {path: /health, port: 9411}, periodSeconds: 5}

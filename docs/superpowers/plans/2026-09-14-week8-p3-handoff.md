@@ -123,6 +123,12 @@ HPA 的**決策**很快：負載開始後約 12 秒就做出擴容決定，約 4
 
 ### 建議優先處理
 
+> **2026-09-14 更新：這四項都已處理**，改動在 `week8-k8s-scale-out` 上。
+> 1 有新的守門規則與測試；2 用 `MEM_MAX_SPANS` 限制保存量；4 已設 `timeoutSeconds: 5`；
+> 3 從註解升級成契約測試裡會失敗的斷言。
+> **2 和 4 都沒有在叢集上重測**（動工時 Rancher Desktop 沒開），它們是依機制推出來的修正，
+> 不是量到的結果——下一次壓測要一併確認。
+
 1. **把資料品質守門擴充成能偵測「指標恆為 0」**（R17）。
    現在的守門會檢查延遲分位數單調、掉迭代、新連線數，但不會問「這個下游指標在 150 rps 有值、
    在 900 rps 卻整段為 0，是不是根本沒在回報」。這正是 P3 內部犯的那次錯誤，加上這條規則就能
@@ -132,7 +138,8 @@ HPA 的**決策**很快：負載開始後約 12 秒就做出擴容決定，約 4
    選項：調降取樣率、加記憶體、或換成有儲存後端的部署。
 
 3. **HPA 的 `maxReplicas` 與資料庫連線上限是綁在一起的**。
-   現在 `maxReplicas: 8` × 每副本 30 條 = 240，而 `max_connections` 是 300，真正的天花板是 10 副本。
+   當時是 `maxReplicas: 8` × 每副本 30 條 = 240，而 `max_connections` 是 300，真正的天花板是 10 副本。
+   （2026-09-14：`maxReplicas` 已依專案範圍收到 3、`minReplicas` 收到 2，3 × 30 = 90，離天花板很遠。）
    `hpa.yaml` 已加註解記錄這個算式，但**調高 `maxReplicas` 前一定要先調 `data.yaml`**。
 
 4. **liveness probe 沒有設 `timeoutSeconds`**（吃預設的 1 秒），而 backend 的 `limits.cpu` 是 2。
@@ -144,7 +151,7 @@ HPA 的**決策**很快：負載開始後約 12 秒就做出擴容決定，約 4
 - `buildCurve` 若被直接餵未驗證資料，`p95` 為 undefined 時會靜默判定為未劣化
 - `saturation.js` 覆蓋 k6 全域的 trend 統計，未來若加 p90 檢查會靜默讀到 0（與當初 p99 同一個陷阱）
 - 契約測試沒有斷言 PDB 的 `selector`（selector 改壞會讓 PDB 靜默失效）
-- 下游取樣的 JSONL 檔首有 BOM，逐行 parse 的讀取器會在第一行拋錯
+- ~~下游取樣的 JSONL 檔首有 BOM，逐行 parse 的讀取器會在第一行拋錯~~（守門要讀這些檔，已在 `loadDownstreamSamples` 剝掉 BOM）
 - `.superpowers/` 被 gitignore，所以文件裡指向 task report 的引用在全新 clone 上是死連結
   （§4、§5 的數字已另外存成 `docs/portfolio/data/k8s-hpa-results.json`，不受影響）
 

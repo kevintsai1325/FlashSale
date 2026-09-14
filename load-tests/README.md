@@ -385,6 +385,18 @@ in:
   per TCP connection, not once per request.
 - **Any `unexpected5xx`** — a real server error during the run.
 
+It then reads the `downstream-*.jsonl` samples taken during the same runs and reports metrics
+that went **silent** under `SUSPECT` (the curve stays usable; those specific fields must not be
+quoted as measured values). A metric being zero for a whole run is not by itself suspicious —
+`hikariPending` is genuinely zero at low rates. What has no physical explanation is the
+*direction*: a lower arrival rate measured non-zero values and a higher one is flat zero for the
+entire run. That is the metric losing its ability to report, not the load disappearing —
+exactly the mistake made once during P3, where `reservationMaxMs` reading 0 at high load was
+written up as "Redis didn't get slower" while the low-load run of the same metric showed 48.9 ms.
+Samples that are entirely null are reported separately, since that is the sampler failing rather
+than the metric reporting a zero. A `SUSPECT` finding makes the command exit non-zero, the same
+as a `REJECTED` run.
+
 Accepted runs are printed as a `replicas / targetRate / achievedRps / acceptP95Ms / failed% /
 degraded` table, followed by each replica count's saturation point (the highest tested rate
 that stayed healthy). The curated, human-annotated version of this data — including the

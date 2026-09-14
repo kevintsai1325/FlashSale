@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { validateSaturationRun, buildCurve, findSaturationPoints } from './analyze-saturation.mjs';
+import { validateSaturationRun, buildCurve, findSaturationPoints, findSilentDownstreamMetrics } from './analyze-saturation.mjs';
 
 function validRun(overrides = {}) {
   return {
@@ -112,4 +112,55 @@ test('某個副本數完全沒有未劣化的執行時，回報 null 而不是�
     { runId: 'r1-300', replicas: 1, targetRate: 300, achievedRps: 250, acceptP95Ms: 2400, failedRatio: 0, degraded: true },
   ];
   assert.deepEqual(findSaturationPoints(rows), [{ replicas: 1, saturationRps: null, acceptP95Ms: null }]);
+});
+
+// 下游取樣的「指標恆為 0」偵測。fixture 直接給樣本陣列，因為要測的是判讀規則本身，
+// 不是 JSONL 的讀檔路徑。
+function downstreamRun(targetRate, values, field = 'reservationMaxMs', replicas = 3) {
+  return {
+    runId: `saturation-r${replicas}-${targetRate}`,
+    replicas,
+    targetRate,
+    samples: values.map((value) => ({ hikariActive: 4, hikariIdle: 26, hikariPending: 1, pgBackends: 92, reservationMaxMs: 12.3, [field]: value })),
+  };
+}
+
+test('低速率有值、高速率整段為 0 被指認為指標停止回報', () => {
+  const problems = findSilentDownstreamMetrics([
+    downstreamRun(150, [48.9, 12.1, 30.0]),
+    downstreamRun(900, [0, 0, 0]),
+  ]);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /saturation-r3-900\.reservationMaxMs/);
+  assert.match(problems[0], /停止回報/);
+});
+
+test('整段為 0 但同組沒有任何非零基準時不誤報（hikariPending 在低負載本來就是 0）', () => {
+  const problems = findSilentDownstreamMetrics([
+    downstreamRun(150, [0, 0, 0], 'hikariPending'),
+    downstreamRun(300, [0, 0, 0], 'hikariPending'),
+  ]);
+  assert.deepEqual(problems, []);
+});
+
+test('高速率才出現非零值是正常的負載反應，不算問題', () => {
+  const problems = findSilentDownstreamMetrics([
+    downstreamRun(150, [0, 0, 0], 'hikariPending'),
+    downstreamRun(900, [131, 176, 150], 'hikariPending'),
+  ]);
+  assert.deepEqual(problems, []);
+});
+
+test('整段沒有值（取樣機制失敗）跟量到 0 分開回報', () => {
+  const problems = findSilentDownstreamMetrics([downstreamRun(600, [null, null])]);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /全部沒有值/);
+});
+
+test('不同副本數各自獨立判讀，不會互相當成基準', () => {
+  const problems = findSilentDownstreamMetrics([
+    downstreamRun(150, [48.9], 'reservationMaxMs', 1),
+    downstreamRun(900, [0], 'reservationMaxMs', 3),
+  ]);
+  assert.deepEqual(problems, []);
 });
