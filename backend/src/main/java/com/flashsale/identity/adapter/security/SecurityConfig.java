@@ -51,6 +51,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll()
                 .requestMatchers("/internal/demo-data/audit-barrier/**").permitAll()
+                // purchase-service 用的內部 API。Nginx 對 /internal/ 一律回 404，
+                // 所以它只在叢集內部可達；內容與公開的 GET /api/flash-sales 同級，沒有額外敏感資訊。
+                .requestMatchers("/internal/flash-sales/**").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/api/admin/**", "/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/flash-sales/**").permitAll()

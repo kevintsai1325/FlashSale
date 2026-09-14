@@ -93,5 +93,9 @@ public abstract class AbstractIntegrationTest {
         rabbitAdmin.purgeQueue(RabbitConfig.CREATE_ORDER_DLQ, false);
         rabbitAdmin.purgeQueue(RabbitConfig.STOCK_RELEASE_QUEUE, false);
         rabbitAdmin.purgeQueue(RabbitConfig.STOCK_RELEASE_DLQ, false);
+        // P4：終態回寫給 purchase-service 的佇列。backend 也宣告它（見 RabbitConfig 的註解），
+        // 所以測試之間必須一起清乾淨，否則上一個測試留下的終態事件會漏到下一個測試。
+        rabbitAdmin.purgeQueue(RabbitConfig.PURCHASE_RESOLVED_QUEUE, false);
+        rabbitAdmin.purgeQueue(RabbitConfig.PURCHASE_RESOLVED_DLQ, false);
     }
 }

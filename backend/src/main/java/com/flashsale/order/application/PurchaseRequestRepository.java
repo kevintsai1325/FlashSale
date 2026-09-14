@@ -2,17 +2,15 @@ package com.flashsale.order.application;
 
 import com.flashsale.order.domain.PurchaseRequest;
 import com.flashsale.order.domain.PurchaseRequestStatus;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
+/**
+ * 唯讀。寫入權責在 purchase-service（見 PurchaseRequest 的註解）。
+ */
 public interface PurchaseRequestRepository {
-    PurchaseRequest save(PurchaseRequest request);
-    Optional<PurchaseRequest> findById(Long id);
-    Optional<PurchaseRequest> findByRequestId(UUID requestId);
-    Optional<PurchaseRequest> findByUserIdAndFlashSaleIdAndIdempotencyKey(Long userId, Long flashSaleId, String idempotencyKey);
-    boolean existsSucceededForUserAndFlashSale(Long userId, Long flashSaleId);
     Optional<PurchaseRequest> findByOrderId(Long orderId);
 
     // Admin dashboard aggregates (com.flashsale.admin).

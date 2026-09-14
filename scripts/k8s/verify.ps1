@@ -64,7 +64,7 @@ function Get-DesiredReplicas {
 
 $expectedAppPods = 0
 foreach ($name in @('postgres', 'redis', 'rabbitmq')) { $expectedAppPods += Get-DesiredReplicas -Kind 'statefulset' -Name $name }
-foreach ($name in @('mailpit', 'zipkin', 'backend', 'frontend', 'nginx')) { $expectedAppPods += Get-DesiredReplicas -Kind 'deployment' -Name $name }
+foreach ($name in @('mailpit', 'zipkin', 'backend', 'purchase-service', 'frontend', 'nginx')) { $expectedAppPods += Get-DesiredReplicas -Kind 'deployment' -Name $name }
 
 $backendDesired = Get-DesiredReplicas -Kind 'deployment' -Name 'backend'
 $backendReady = (Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'get', 'deployment', 'backend', '-o', 'jsonpath={.status.readyReplicas}') -Operation 'checking Backend readiness' | Out-String).Trim()

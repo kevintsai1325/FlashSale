@@ -18,6 +18,14 @@ public class RabbitConfig {
     public static final String CREATE_ORDER_DLX = "order.create.dlx";
     public static final String CREATE_ORDER_DLQ = "order.create.queue.dlq";
 
+    // purchase.resolved 是拆分後新增的回路：backend 建單成功或補償失敗之後，
+    // 把搶購請求的終態送回 purchase-service。佇列由兩邊都宣告（宣告是冪等的）——
+    // 只讓消費端宣告的話，若 backend 先啟動並發佈，訊息會因為沒有繫結的佇列而被直接丟棄。
+    public static final String PURCHASE_RESOLVED_QUEUE = "purchase.resolved.queue";
+    public static final String PURCHASE_RESOLVED_ROUTING_KEY = "purchase.resolved";
+    public static final String PURCHASE_RESOLVED_DLX = "purchase.resolved.dlx";
+    public static final String PURCHASE_RESOLVED_DLQ = "purchase.resolved.queue.dlq";
+
     public static final String STOCK_RELEASE_QUEUE = "stock.release.queue";
     public static final String STOCK_RELEASE_ROUTING_KEY = "stock.release";
     public static final String STOCK_RELEASE_DLX = "stock.release.dlx";

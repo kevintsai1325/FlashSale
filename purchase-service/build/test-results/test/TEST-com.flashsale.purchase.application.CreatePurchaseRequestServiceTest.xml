@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.flashsale.purchase.application.CreatePurchaseRequestServiceTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-09-14T06:38:44" hostname="AERO15XD-KEVIN" time="1.261">
+  <properties/>
+  <testcase name="marksSoldOutWhenRedisReportsInsufficientStock()" classname="com.flashsale.purchase.application.CreatePurchaseRequestServiceTest" time="1.178"/>
+  <testcase name="rejectsWhenUserAlreadyHasSuccessfulOrder()" classname="com.flashsale.purchase.application.CreatePurchaseRequestServiceTest" time="0.006"/>
+  <testcase name="reservesStockAndWritesOutboxEventWhenStockAvailable()" classname="com.flashsale.purchase.application.CreatePurchaseRequestServiceTest" time="0.041"/>
+  <testcase name="repeatingSameIdempotencyKeyReturnsSameResultWithoutTouchingRedisOrOutbox()" classname="com.flashsale.purchase.application.CreatePurchaseRequestServiceTest" time="0.002"/>
+  <testcase name="reservesTheRequestedQuantityRatherThanAlwaysTheFullLimit()" classname="com.flashsale.purchase.application.CreatePurchaseRequestServiceTest" time="0.012"/>
+  <testcase name="throwsConflictWhenFlashSaleNotActive()" classname="com.flashsale.purchase.application.CreatePurchaseRequestServiceTest" time="0.003"/>
+  <testcase name="throwsConflictWhenQuantityExceedsThePurchaseLimit()" classname="com.flashsale.purchase.application.CreatePurchaseRequestServiceTest" time="0.009"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[WARNING: A Java agent has been loaded dynamically (C:\Users\kevin\.gradle\caches\modules-2\files-2.1\net.bytebuddy\byte-buddy-agent\1.14.19\154da3a65b4f4a909d3e5bdec55d1b2b4cbb6ce1\byte-buddy-agent-1.14.19.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+]]></system-err>
+</testsuite>

@@ -89,6 +89,34 @@ services:
       timeout: 5s
       retries: 10
 
+  # P4：搶購入口。與 backend 共用同一個 Postgres（步驟 1），
+  # 活動資料靠內部 HTTP 呼叫 backend 取得。
+  purchase-service:
+    build: ./purchase-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/flashsale
+      SPRING_DATASOURCE_USERNAME: flashsale
+      SPRING_DATASOURCE_PASSWORD: flashsale
+      # 只要公鑰：purchase-service 驗證 token，不簽發 token。
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      APP_FLASH_SALE_BASE_URL: http://backend:8080
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
   frontend:
     build: ./frontend
     depends_on:

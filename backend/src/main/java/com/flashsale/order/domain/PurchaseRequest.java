@@ -1,9 +1,25 @@
 package com.flashsale.order.domain;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * **唯讀投影。** purchase_requests 這張表的寫入權責在 purchase-service，backend 只讀它
+ * （admin 儀表板、訂單查詢、補償時取得 flashSaleId）。
+ *
+ * 所以這個類別刻意沒有任何 mutator 與工廠方法 —— 不是忘了搬，是不能有：
+ * 留著它們就等於留著「backend 也能寫這張表」這個可能性，而那正是步驟 2 拆庫時
+ * 最難拆的東西。共用資料庫階段能做的最低限度，是讓寫入者只有一個。
+ */
 @Entity
 @Table(name = "purchase_requests")
 public class PurchaseRequest {
@@ -35,39 +51,6 @@ public class PurchaseRequest {
     private Instant createdAt = Instant.now();
 
     protected PurchaseRequest() {}
-
-    private static PurchaseRequest create(Long userId, Long flashSaleId, String idempotencyKey,
-                                           PurchaseRequestStatus status, Long orderId) {
-        PurchaseRequest request = new PurchaseRequest();
-        request.requestId = UUID.randomUUID();
-        request.userId = userId;
-        request.flashSaleId = flashSaleId;
-        request.idempotencyKey = idempotencyKey;
-        request.status = status;
-        request.orderId = orderId;
-        return request;
-    }
-
-    public static PurchaseRequest pending(Long userId, Long flashSaleId, String idempotencyKey) {
-        return create(userId, flashSaleId, idempotencyKey, PurchaseRequestStatus.PENDING, null);
-    }
-
-    public static PurchaseRequest soldOut(Long userId, Long flashSaleId, String idempotencyKey) {
-        return create(userId, flashSaleId, idempotencyKey, PurchaseRequestStatus.SOLD_OUT, null);
-    }
-
-    public static PurchaseRequest reject(Long userId, Long flashSaleId, String idempotencyKey) {
-        return create(userId, flashSaleId, idempotencyKey, PurchaseRequestStatus.REJECTED, null);
-    }
-
-    public void markSucceeded(Long orderId) {
-        this.status = PurchaseRequestStatus.SUCCEEDED;
-        this.orderId = orderId;
-    }
-
-    public void markFailed() {
-        this.status = PurchaseRequestStatus.FAILED;
-    }
 
     public Long getId() { return id; }
     public UUID getRequestId() { return requestId; }

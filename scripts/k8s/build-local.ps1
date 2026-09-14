@@ -94,6 +94,7 @@ Write-Host "Image builder: $($builder.Kind)"
 
 $builds = @(
     @{ Tag = 'flashsale-backend:local'; Path = 'backend' },
+    @{ Tag = 'flashsale-purchase-service:local'; Path = 'purchase-service' },
     @{ Tag = 'flashsale-frontend:local'; Path = 'frontend' },
     @{ Tag = 'flashsale-nginx:local'; Path = 'nginx' }
 )
@@ -105,4 +106,4 @@ foreach ($build in $builds) {
 
 $images = Get-BuiltImages -Builder $builder
 if ($LASTEXITCODE -ne 0) { throw 'Unable to list images from the selected image builder.' }
-$images | Select-String 'flashsale-(backend|frontend|nginx)'
+$images | Select-String 'flashsale-(backend|purchase-service|frontend|nginx)'

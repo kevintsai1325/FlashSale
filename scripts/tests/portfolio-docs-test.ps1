@@ -42,8 +42,15 @@ function ConvertTo-RouteTemplate {
 
 function Get-ControllerRouteTemplates {
     $templates = New-Object 'System.Collections.Generic.HashSet[string]'
-    $javaRoot = Join-Path $repoRoot 'backend\src\main\java'
-    $controllers = Get-ChildItem -LiteralPath $javaRoot -Recurse -Filter '*Controller.java'
+    # P4 之後路由散在兩個服務裡：搶購的兩個端點在 purchase-service，其餘在 backend。
+    # 只掃 backend 的話，文件裡正確的搶購路徑會被誤判成「沒有對應的路由」。
+    $javaRoots = @(
+        (Join-Path $repoRoot 'backend\src\main\java'),
+        (Join-Path $repoRoot 'purchase-service\src\main\java')
+    )
+    $controllers = @($javaRoots |
+        Where-Object { Test-Path -LiteralPath $_ } |
+        ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -Filter '*Controller.java' })
     foreach ($controller in $controllers) {
         $source = Read-TextFile -Path $controller.FullName
         $base = ''

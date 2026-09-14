@@ -73,7 +73,7 @@ $loadTestResources = @($resources | Where-Object {
 })
 Assert-True ($loadTestResources.Count -eq 0) 'Base kustomization must not render load-test resources.'
 
-Assert-True ($resources.Count -eq 25) "Expected exactly 25 rendered resources, got $($resources.Count)."
+Assert-True ($resources.Count -eq 27) "Expected exactly 27 rendered resources, got $($resources.Count)."
 
 # PDB 是常態設定而不是實驗器材：自願性中斷（節點維護、叢集升級）時要保住最低可用副本數。
 $budgets = @($resources | Where-Object { $_.kind -eq 'PodDisruptionBudget' })
@@ -102,7 +102,9 @@ $expectedStages = @{
         'Service/rabbitmq-headless', 'Service/rabbitmq', 'StatefulSet/rabbitmq',
         'Deployment/mailpit', 'Service/mailpit', 'Deployment/zipkin', 'Service/zipkin'
     )
-    application = @('Deployment/backend', 'Service/backend', 'PodDisruptionBudget/backend', 'Deployment/frontend', 'Service/frontend', 'Deployment/nginx', 'Service/nginx')
+    application = @('Deployment/backend', 'Service/backend', 'PodDisruptionBudget/backend',
+        'Deployment/purchase-service', 'Service/purchase-service',
+        'Deployment/frontend', 'Service/frontend', 'Deployment/nginx', 'Service/nginx')
 }
 $allowedStages = @($expectedStages.Keys)
 foreach ($resource in $resources) {
@@ -117,11 +119,11 @@ foreach ($stage in $expectedStages.Keys) {
     Assert-True (($actual -join ',') -eq ($expected -join ',')) "$stage stage resources do not match the staged deployment contract."
 }
 
-$expectedWorkloads = @('postgres', 'redis', 'rabbitmq', 'mailpit', 'zipkin', 'backend', 'frontend', 'nginx')
+$expectedWorkloads = @('postgres', 'redis', 'rabbitmq', 'mailpit', 'zipkin', 'backend', 'purchase-service', 'frontend', 'nginx')
 $workloads = @($resources | Where-Object { $_.kind -in @('Deployment', 'StatefulSet') })
-Assert-True ($workloads.Count -eq 8) "Expected exactly eight workloads, got $($workloads.Count)."
+Assert-True ($workloads.Count -eq 9) "Expected exactly nine workloads, got $($workloads.Count)."
 Assert-True ((@($workloads | ForEach-Object { $_.metadata.name } | Sort-Object) -join ',') -eq (($expectedWorkloads | Sort-Object) -join ',')) 'The rendered workload names do not match the baseline contract.'
-# backend 是唯一水平擴展的工作負載（Week 8 P1）。其餘皆為單副本：三個 StatefulSet 是有狀態
+# backend 與 purchase-service 是水平擴展的工作負載（Week 8 P1 / P4）。其餘皆為單副本：三個 StatefulSet 是有狀態
 # 相依元件，mailpit/zipkin/frontend/nginx 不在搶購的關鍵路徑上，擴展它們不會改善任何指標。
 $singleReplicaWorkloads = @('postgres', 'redis', 'rabbitmq', 'mailpit', 'zipkin', 'frontend', 'nginx')
 foreach ($workload in $workloads) {
@@ -135,7 +137,7 @@ foreach ($workload in $workloads) {
     Assert-True ($null -ne (Get-PropertyValue $containers[0] 'livenessProbe')) "$name must define a liveness probe."
 }
 
-foreach ($name in @('postgres', 'redis', 'rabbitmq', 'zipkin', 'backend')) {
+foreach ($name in @('postgres', 'redis', 'rabbitmq', 'zipkin', 'backend', 'purchase-service')) {
     $workload = @($workloads | Where-Object { $_.metadata.name -eq $name })[0]
     $startupProbe = Get-PropertyValue $workload.spec.template.spec.containers[0] 'startupProbe'
     Assert-True ($null -ne $startupProbe) "$name must define a startup probe."
@@ -160,7 +162,8 @@ foreach ($name in @('postgres', 'redis', 'rabbitmq')) {
     Assert-True (($headlessService.Count -eq 1) -and ($headlessService[0].spec.clusterIP -eq 'None')) "$name must have one clusterIP None headless Service."
 }
 
-$localImages = @{ backend = 'flashsale-backend:local'; frontend = 'flashsale-frontend:local'; nginx = 'flashsale-nginx:local' }
+$localImages = @{ backend = 'flashsale-backend:local'; 'purchase-service' = 'flashsale-purchase-service:local';
+    frontend = 'flashsale-frontend:local'; nginx = 'flashsale-nginx:local' }
 foreach ($name in $localImages.Keys) {
     $workload = @($workloads | Where-Object { $_.metadata.name -eq $name })[0]
     $container = $workload.spec.template.spec.containers[0]
@@ -199,6 +202,28 @@ $backendLifecycle = Get-PropertyValue $backend.spec.template.spec.containers[0] 
 $backendPreStop = Get-PropertyValue $backendLifecycle 'preStop'
 Assert-True ($null -ne (Get-PropertyValue $backendPreStop 'exec')) 'Backend must declare a preStop hook so Endpoint removal can propagate before SIGTERM.'
 
+# P4：purchase-service 的契約。它承接搶購的 HTTP 入口，所以與 backend 一樣需要
+# 明確的滾動更新策略、preStop、以及明寫的 liveness timeout。
+$purchaseService = @($workloads | Where-Object { $_.metadata.name -eq 'purchase-service' })[0]
+Assert-True ($null -ne $purchaseService) 'purchase-service must be part of the rendered baseline.'
+$purchaseContainer = $purchaseService.spec.template.spec.containers[0]
+$purchaseLiveness = Get-PropertyValue $purchaseContainer 'livenessProbe'
+Assert-True ([int](Get-PropertyValue $purchaseLiveness 'timeoutSeconds') -ge 5) 'purchase-service liveness probe must declare timeoutSeconds >= 5.'
+$purchaseStrategy = Get-PropertyValue $purchaseService.spec 'strategy'
+Assert-True ([string](Get-PropertyValue (Get-PropertyValue $purchaseStrategy 'rollingUpdate') 'maxUnavailable') -eq '0') 'purchase-service rolling update must keep every existing replica available.'
+$purchaseLifecycle = Get-PropertyValue $purchaseContainer 'lifecycle'
+Assert-True ($null -ne (Get-PropertyValue (Get-PropertyValue $purchaseLifecycle 'preStop') 'exec')) 'purchase-service must declare a preStop hook.'
+
+# purchase-service 只驗證 token，不簽發 token —— 它不該拿得到私鑰。
+# 這條斷言擋的是「複製 backend 的 env 區塊時順手把 JWT_PRIVATE_KEY 一起貼過來」。
+$purchaseSecretKeys = @($purchaseContainer.env | ForEach-Object { $_.valueFrom.secretKeyRef.key })
+Assert-True ($purchaseSecretKeys -notcontains 'JWT_PRIVATE_KEY') 'purchase-service must never receive the JWT signing key.'
+Assert-True ($purchaseSecretKeys -contains 'JWT_PUBLIC_KEY') 'purchase-service needs the JWT public key to verify tokens.'
+
+# 活動資料的內部呼叫位址必須是宣告出來的，不能靠程式裡的預設值（那個預設值指向 localhost）。
+$configMap = @($resources | Where-Object { $_.kind -eq 'ConfigMap' -and $_.metadata.name -eq 'flashsale-config' })[0]
+Assert-True ((Get-PropertyValue $configMap.data 'APP_FLASH_SALE_BASE_URL') -eq 'http://backend:8080') 'purchase-service must be pointed at the backend Service for flash-sale lookups.'
+
 # RBAC 的權限必須維持最小。Lease 的釋放是靠租約過期而非刪除，給 delete 只會讓一個出錯的
 # 副本有能力把別人的鎖抹掉；ClusterRole 則會讓權限外溢到其他 namespace。
 $leaseRole = @($resources | Where-Object { $_.kind -eq 'Role' -and $_.metadata.name -eq 'flashsale-scheduler-lease' })[0]
@@ -232,4 +257,4 @@ Assert-True ($postgresArgs -match 'max_connections=(\d+)') 'postgres must pin ma
 $maxConnections = [int]$Matches[1]
 Assert-True (($maxReplicas * $poolSize) -le $maxConnections) "HPA maxReplicas ($maxReplicas) x HikariCP pool ($poolSize) = $($maxReplicas * $poolSize) exceeds postgres max_connections ($maxConnections). Raise max_connections in k8s/base/data.yaml first."
 
-Write-Host 'PASS: Kubernetes rendered-resource contract (25 resources, exact stages, minimal RBAC, 8 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, backend rollout strategy, backend PodDisruptionBudget, liveness timeout, and the HPA/connection-pool ceiling).'
+Write-Host 'PASS: Kubernetes rendered-resource contract (27 resources, exact stages, minimal RBAC, 9 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, backend rollout strategy, backend PodDisruptionBudget, liveness timeout, the HPA/connection-pool ceiling, and the purchase-service split).'

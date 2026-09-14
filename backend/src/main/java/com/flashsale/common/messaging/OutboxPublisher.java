@@ -101,6 +101,7 @@ public class OutboxPublisher {
         return switch (eventType) {
             case EventTypes.CREATE_ORDER_REQUESTED -> RabbitConfig.CREATE_ORDER_ROUTING_KEY;
             case EventTypes.STOCK_RELEASE_REQUESTED -> RabbitConfig.STOCK_RELEASE_ROUTING_KEY;
+            case EventTypes.PURCHASE_RESOLVED -> RabbitConfig.PURCHASE_RESOLVED_ROUTING_KEY;
             default -> throw new IllegalStateException("Unknown outbox event type: " + eventType);
         };
     }

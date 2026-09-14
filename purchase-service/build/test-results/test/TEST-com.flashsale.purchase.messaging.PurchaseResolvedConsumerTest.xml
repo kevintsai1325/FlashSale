@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.flashsale.purchase.messaging.PurchaseResolvedConsumerTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-14T06:38:45" hostname="AERO15XD-KEVIN" time="0.09">
+  <properties/>
+  <testcase name="ignoresARedeliveryOnceTheRequestIsAlreadyTerminal()" classname="com.flashsale.purchase.messaging.PurchaseResolvedConsumerTest" time="0.085"/>
+  <testcase name="marksSucceededWithTheOrderId()" classname="com.flashsale.purchase.messaging.PurchaseResolvedConsumerTest" time="0.002"/>
+  <testcase name="marksFailedWhenCompensationReportsFailure()" classname="com.flashsale.purchase.messaging.PurchaseResolvedConsumerTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

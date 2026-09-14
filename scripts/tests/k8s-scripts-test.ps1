@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -214,10 +214,10 @@ if (($Arguments.Count -ge 9) -and (($Arguments[0..8] -join ' ') -eq '--context r
     function New-PodItem($name, $phase, $ready) {
         @{ metadata = @{ name = $name }; status = @{ phase = $phase; conditions = @(@{ type = 'Ready'; status = $ready }) } }
     }
-    if ($mode -eq 'wrong-pod-count') { $items = @(1..7 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
-    elseif ($mode -eq 'pod-not-ready') { $items = @(1..7 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) + @(New-PodItem 'pod-8' 'Pending' 'False') }
-    elseif ($mode -eq 'multi-replica') { $items = @(1..10 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
-    else { $items = @(1..8 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
+    if ($mode -eq 'wrong-pod-count') { $items = @(1..8 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
+    elseif ($mode -eq 'pod-not-ready') { $items = @(1..8 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) + @(New-PodItem 'pod-9' 'Pending' 'False') }
+    elseif ($mode -eq 'multi-replica') { $items = @(1..11 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
+    else { $items = @(1..9 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
     @{ items = $items } | ConvertTo-Json -Depth 8 -Compress
     exit 0
 }
@@ -234,7 +234,7 @@ Write-Error ('Unexpected kubectl invocation: ' + ($Arguments -join ' ')); exit 1
 $Arguments = @($env:FL_K3S_TEST_SHIM_ARGS -split ' ' | Where-Object { $_ -ne '' })
 [IO.File]::AppendAllText($env:FL_K3S_TEST_NERDCTL_LOG, (($Arguments -join "`t") + "`n"))
 if ($Arguments -contains 'build') { exit 0 }
-if ($Arguments -contains 'images') { 'flashsale-backend local'; 'flashsale-frontend local'; 'flashsale-nginx local'; exit 0 }
+if ($Arguments -contains 'images') { 'flashsale-backend local'; 'flashsale-purchase-service local'; 'flashsale-frontend local'; 'flashsale-nginx local'; exit 0 }
 Write-Error ('Unexpected nerdctl invocation: ' + ($Arguments -join ' ')); exit 1
 '@
     $dockerShim = @'
@@ -242,7 +242,7 @@ $Arguments = @($env:FL_K3S_TEST_SHIM_ARGS -split ' ' | Where-Object { $_ -ne '' 
 [IO.File]::AppendAllText($env:FL_K3S_TEST_DOCKER_LOG, (($Arguments -join "`t") + "`n"))
 if ($Arguments -contains 'info') { if ($env:FL_K3S_TEST_DOCKER_MODE -eq 'unreachable') { exit 1 }; 'Server Version: 29.5.3'; exit 0 }
 if ($Arguments -contains 'build') { exit 0 }
-if ($Arguments -contains 'images') { 'flashsale-backend local'; 'flashsale-frontend local'; 'flashsale-nginx local'; exit 0 }
+if ($Arguments -contains 'images') { 'flashsale-backend local'; 'flashsale-purchase-service local'; 'flashsale-frontend local'; 'flashsale-nginx local'; exit 0 }
 Write-Error ('Unexpected docker invocation: ' + ($Arguments -join ' ')); exit 1
 '@
     $commandShim = '@set "FL_K3S_TEST_SHIM_ARGS=%*"' + "`r`n" + '@powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0{0}.ps1"' + "`r`n" + '@exit /b %ERRORLEVEL%' + "`r`n"
@@ -323,7 +323,7 @@ try {
     Set-ShimMode 'reachable'
     $buildResult = Invoke-LocalScript $buildScript $commonEnvironment
     Assert-True ($buildResult.ExitCode -eq 0) "build-local.ps1 must pass with a supported reachable shim under the current host ($currentPowerShellLabel)."
-    Assert-True (@(Get-LogLines $nerdctlLog | Where-Object { $_ -match "\tbuild\t" }).Count -eq 3) 'build-local.ps1 must build exactly three local images.'
+    Assert-True (@(Get-LogLines $nerdctlLog | Where-Object { $_ -match "\tbuild\t" }).Count -eq 4) 'build-local.ps1 must build exactly four local images.'
 
     if ($null -ne $alternatePowerShellCommand) {
         Set-ShimMode 'reachable'
@@ -337,7 +337,7 @@ try {
     Set-ShimMode 'docker-runtime'
     $dockerBuildResult = Invoke-LocalScript $buildScript $commonEnvironment
     Assert-True ($dockerBuildResult.ExitCode -eq 0) "build-local.ps1 must succeed when the cluster runtime is docker. Output: $($dockerBuildResult.Output)"
-    Assert-True (@(Get-LogLines $dockerLog | Where-Object { $_ -match "(^|\t)build\t" }).Count -eq 3) 'The docker path must build exactly three local images.'
+    Assert-True (@(Get-LogLines $dockerLog | Where-Object { $_ -match "(^|\t)build\t" }).Count -eq 4) 'The docker path must build exactly four local images.'
     Assert-True (@(Get-LogLines $nerdctlLog).Count -eq 0) 'A docker runtime must not invoke nerdctl at all.'
 
     Set-ShimMode 'unknown-runtime'
@@ -450,7 +450,7 @@ try {
     Set-ShimMode 'wrong-pod-count'
     $wrongPodCountResult = Invoke-VerificationScript $verificationEnvironment
     Assert-True ($wrongPodCountResult.ExitCode -ne 0) 'verify.ps1 must fail when the running Pod count does not match the declared replica counts.'
-    Assert-True ($wrongPodCountResult.Output -match 'Expected 8 application Pods') 'Wrong Pod count failure must be actionable.'
+    Assert-True ($wrongPodCountResult.Output -match 'Expected 9 application Pods') 'Wrong Pod count failure must be actionable.'
 
     Set-ShimMode 'pod-not-ready'
     $podNotReadyResult = Invoke-VerificationScript $verificationEnvironment
