@@ -34,9 +34,19 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
     @Autowired RabbitTemplate rabbitTemplate;
     @Autowired OrderPurchaseConsumer consumer;
 
+    private static final long BUYER_ID = 202L;
+
+    // orders.user_id 有外鍵指向 users。拆分前這一步是靠 HTTP 註冊帶出來的，
+    // 現在測試直接從事件開始，就必須自己把買家種進去。
+    private void seedBuyer() {
+        jdbcTemplate.update(
+            "insert into users (id, email, password_hash, role, status) values (?, ?, 'x', 'USER', 'ACTIVE') on conflict (id) do nothing",
+            BUYER_ID, "consumer-it-" + BUYER_ID + "@example.com");
+    }
+
     private void requestOrder(long purchaseRequestId, long flashSaleId, long productId, int quantity) throws Exception {
         outboxWriter.write("PurchaseRequest", String.valueOf(purchaseRequestId), EventTypes.CREATE_ORDER_REQUESTED,
-            new CreateOrderRequestedEvent(purchaseRequestId, 202L, flashSaleId, productId, quantity, new BigDecimal("9.99")));
+            new CreateOrderRequestedEvent(purchaseRequestId, BUYER_ID, flashSaleId, productId, quantity, new BigDecimal("9.99")));
         outboxPublisher.publishPending();
         Message message = rabbitTemplate.receive(RabbitConfig.CREATE_ORDER_QUEUE, 5_000);
         assertThat(message).isNotNull();
@@ -46,6 +56,7 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
     @Test
     @Sql("/db/testdata/inventory-fixtures.sql")
     void createsTheOrderDecrementsStockAndReportsTheTerminalStateBack() throws Exception {
+        seedBuyer();
         requestOrder(101L, 1L, 1L, 1);
 
         Integer orderCount = jdbcTemplate.queryForObject("select count(*) from orders", Integer.class);
@@ -75,6 +86,7 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
         double before = meterRegistry.find("purchase.order.created").counter() == null
             ? 0.0 : meterRegistry.find("purchase.order.created").counter().count();
 
+        seedBuyer();
         jdbcTemplate.update("INSERT INTO products (id, name, description) VALUES (2, 'Metrics Test Product', 'Only 1 pair')");
         jdbcTemplate.update("INSERT INTO flash_sales (id, product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status) " +
             "VALUES (2, 2, 9.99, now() - interval '1 minute', now() + interval '1 hour', 1, 'ACTIVE')");

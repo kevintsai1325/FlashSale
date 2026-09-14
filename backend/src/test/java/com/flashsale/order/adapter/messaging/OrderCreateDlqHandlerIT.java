@@ -45,11 +45,19 @@ class OrderCreateDlqHandlerIT extends AbstractIntegrationTest {
         }});
         MessageProperties props = new MessageProperties();
         props.setContentType(MessageProperties.CONTENT_TYPE_JSON);
+        // P4：冪等的來源從「讀 purchase_requests 的狀態」換成去重表，所以這個 header 是必要的，
+        // 不再只是追蹤用的裝飾。
+        props.setHeader("outboxEventId", 4998L);
         Message message = new Message(payload.getBytes(StandardCharsets.UTF_8), props);
         handler.handle(message);
 
-        String status = jdbcTemplate.queryForObject("select status from purchase_requests where id = 998", String.class);
-        assertThat(status).isEqualTo("FAILED");
+        // P4：backend 不再直接把 purchase_requests 改成 FAILED —— 那張表的寫入權責在
+        // purchase-service。補償的結果改成一個終態事件送回去。
+        Integer resolvedFailedCount = jdbcTemplate.queryForObject(
+            "select count(*) from outbox_events where event_type = 'PurchaseResolved' " +
+            "and payload::text like '%\"purchaseRequestId\": 998%' and payload::text like '%\"status\": \"FAILED\"%'",
+            Integer.class);
+        assertThat(resolvedFailedCount).isEqualTo(1);
 
         Integer releaseEventCount = jdbcTemplate.queryForObject(
             "select count(*) from outbox_events where event_type = 'StockReleaseRequested' and payload::text like '%\"flashSaleId\": 1%'",

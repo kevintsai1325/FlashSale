@@ -51,8 +51,13 @@ class OrderPurchaseConsumerRedeliveryIT extends AbstractIntegrationTest {
             consumer.handle(message);
         }
 
-        String status = jdbcTemplate.queryForObject("select status from purchase_requests where id = 999", String.class);
-        assertThat(status).isEqualTo("SUCCEEDED");
+        // P4：終態由 backend 寫進 outbox 再送回 purchase-service，不再直接改 purchase_requests。
+        // 重投遞必須只產生一個終態事件——多一個就代表 purchase-service 會被通知兩次。
+        Integer resolvedCount = jdbcTemplate.queryForObject(
+            "select count(*) from outbox_events where event_type = 'PurchaseResolved' " +
+            "and payload::text like '%\"purchaseRequestId\": 999%' and payload::text like '%\"status\": \"SUCCEEDED\"%'",
+            Integer.class);
+        assertThat(resolvedCount).as("a redelivered message must not report the terminal state twice").isEqualTo(1);
 
         Integer orderCount = jdbcTemplate.queryForObject(
             "select count(*) from orders where user_id = 999", Integer.class);
