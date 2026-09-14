@@ -3,6 +3,8 @@ nginx/certs/*.pem
 nginx/certs/*.crt
 nginx/certs/*.key
 backend/build/
+purchase-service/build/
+purchase-service/.gradle/
 backend/.gradle/
 frontend/node_modules/
 frontend/dist/
