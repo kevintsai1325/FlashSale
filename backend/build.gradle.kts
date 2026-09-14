@@ -59,5 +59,8 @@ tasks.withType<Test> {
     systemProperty("spring.test.context.cache.maxSize", "10")
     testLogging {
         events("passed", "skipped", "failed")
+        // CI 上看不到測試報告檔，只有這段 console 輸出。預設格式只印例外鏈、不印訊息本文，
+        // 而「RabbitMQ 為什麼關掉 channel」這種問題的答案就在被截掉的那一行裡。
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
 }
