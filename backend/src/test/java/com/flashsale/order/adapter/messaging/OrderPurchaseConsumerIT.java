@@ -76,9 +76,9 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
         String resolvedPayload = jdbcTemplate.queryForObject(
             "select payload::text from outbox_events where event_type = 'PurchaseResolved'", String.class);
         assertThat(resolvedPayload)
-            .contains("\"purchaseRequestId\":101")
-            .contains("\"status\":\"SUCCEEDED\"")
-            .contains("\"orderId\":" + createdOrderId);
+            .contains("\"purchaseRequestId\": 101")
+            .contains("\"status\": \"SUCCEEDED\"")
+            .contains("\"orderId\": " + createdOrderId);
     }
 
     @Test
