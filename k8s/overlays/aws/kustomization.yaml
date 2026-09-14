@@ -9,6 +9,9 @@ images:
   - name: flashsale-backend
     newName: ghcr.io/kevintsai1325/flashsale-backend
     newTag: PLACEHOLDER
+  - name: flashsale-purchase-service
+    newName: ghcr.io/kevintsai1325/flashsale-purchase-service
+    newTag: PLACEHOLDER
   - name: flashsale-frontend
     newName: ghcr.io/kevintsai1325/flashsale-frontend
     newTag: PLACEHOLDER
@@ -20,6 +23,11 @@ images:
 # 只有這層才從 registry 拉。
 patches:
   - target: {kind: Deployment, name: backend}
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target: {kind: Deployment, name: purchase-service}
     patch: |
       - op: replace
         path: /spec/template/spec/containers/0/imagePullPolicy

@@ -8,15 +8,26 @@
 
 ## 系統全貌
 
-整個系統以 Docker Compose 交付,共 8 個服務。對外只開兩個埠:Nginx 的 `8443`(HTTPS,
-唯一的正式入口)與 Zipkin 的 `9411`(本機除錯用)。backend、frontend、PostgreSQL、Redis、
-RabbitMQ、Mailpit 都沒有 host port,只能從 Compose 內部網路存取。
+整個系統共 9 個服務,以 Docker Compose 與本機 k3s 兩種形式交付。對外只開兩個埠:
+Nginx 的 `8443`(HTTPS,唯一的正式入口)與 Zipkin 的 `9411`(本機除錯用)。其餘服務都沒有
+host port,只能從內部網路存取。
+
+搶購的 HTTP 入口自 P4 起由獨立的 `purchase-service` 承接,其餘業務仍在 `backend`
+這個模組化單體裡。**這次拆分沒有解決任何效能問題,也不是為了解決效能問題** ——
+拆分後多了一次跨行程呼叫,只會更慢。它換到的是服務邊界與獨立部署,付出的代價寫在
+[服務拆分的代價](#服務拆分的代價p4)。
 
 ```mermaid
 flowchart LR
     Client["瀏覽器 / curl"] -->|HTTPS 8443| Nginx["Nginx<br/>TLS 終止、限流、安全標頭"]
     Nginx -->|其餘路徑| Frontend["Frontend<br/>React 19 + Vite"]
+    Nginx -->|"搶購與輪詢兩個端點"| Purchase["purchase-service<br/>搶購入口"]
     Nginx -->|"/api/、/swagger-ui/、/v3/api-docs、白名單 actuator"| Backend["Backend<br/>Spring Boot 3.3 / Java 21"]
+    Purchase -->|"活動資料(內部 API)"| Backend
+    Purchase --> Redis
+    Purchase --> Postgres
+    Purchase -->|"outbox 發佈 order.create"| Rabbit
+    Rabbit -->|"PurchaseResolved 事件"| Purchase
     Backend --> Postgres[("PostgreSQL 16<br/>庫存與訂單的真實來源")]
     Backend --> Redis[("Redis 7<br/>庫存預扣計數器")]
     Backend -->|outbox 發佈| Rabbit["RabbitMQ 3.13<br/>order.exchange"]
@@ -32,7 +43,8 @@ flowchart LR
 |---|---|---|---|
 | `nginx` | `8443` | TLS 終止(自簽憑證)、反向代理、`limit_req` 限流、CSP 等安全標頭、`/actuator/` 白名單以外一律 404 | 認證與授權決策 |
 | `frontend` | 無 | React 19 + Vite + TypeScript SPA,前台搶購與 `/admin/*` 後台頁面 | 任何商業規則 |
-| `backend` | 無 | 全部業務邏輯:認證、活動、庫存預扣、訂單、付款、通知、後台查詢、稽核 | 靜態資源伺服 |
+| `backend` | 無 | 認證、活動、訂單、付款、通知、後台查詢、稽核;以及建單與庫存扣減的消費端 | 搶購的 HTTP 入口、靜態資源伺服 |
+| `purchase-service` | 無 | 搶購的兩個端點:接受搶購請求(冪等鍵、限購、Redis 預扣、寫 outbox)與輪詢終態 | 建單、庫存的真實來源、活動資料的所有權 |
 | `postgres` | 無 | 庫存、訂單、purchase request、outbox、稽核紀錄的唯一真實來源 | 高併發熱點計數 |
 | `redis` | 無 | 搶購瞬間的庫存預扣計數器(Lua 原子腳本) | 最終一致性的權威值 |
 | `rabbitmq` | 無 | `order.exchange` 直連交換器、建單與釋放庫存兩條佇列及其 DLQ | 訊息去重(由 DB 負責) |
@@ -48,10 +60,47 @@ backend 內部是模組化單體(modular monolith),依領域切成 `identity`、
 Nginx 的路由規則([`nginx/nginx.conf`](../../nginx/nginx.conf))可以摘要成四類:
 
 - `/api/auth/login`、`/api/auth/register`:套用 `auth_limit`(5r/s、burst 10、nodelay)。
-- `/api/flash-sales/{id}/purchase-requests`:套用 `purchase_limit`(50r/s、burst 100、nodelay)。
+- `/api/flash-sales/{id}/purchase-requests` 與 `/api/purchase-requests/{requestId}`:
+  反向代理到 `purchase-service`;前者套用 `purchase_limit`(50r/s、burst 100、nodelay)。
+- `/internal/`:一律 404。服務之間的內部 API 走叢集內部的 Service 名稱,不經過 Nginx。
 - `/api/`、`/swagger-ui/`、`/v3/api-docs`、`/actuator/health`、`/actuator/health/liveness`、
   `/actuator/health/readiness`、`/actuator/metrics` 與 `/actuator/metrics/{name}`:直接反向代理到 backend。
 - 其餘 `/actuator/` 路徑一律回 404,剩下的路徑交給 frontend。
+
+## 服務拆分的代價(P4)
+
+把搶購入口拆成獨立服務之後,系統多了三個拆分前不存在的失效模式。它們都是刻意接受的,
+不是疏漏,所以逐一寫出來:
+
+**1. 搶購依賴一次同步的跨服務呼叫。** purchase-service 需要活動資料(起訖時間、每人限購、
+商品與售價)才能決定要不要放行,那份資料的所有權在 backend。這是唯一新增的同步依賴,
+而且它在熱路徑上,還被包在資料庫交易裡 —— 一次慢的呼叫會把交易一起拖長。
+因此逾時預算(連線 500 ms、讀取 1000 ms)同時也是那個交易長度的上限。
+
+**2. 「backend 掛掉時搶購還能不能開」變成一個要回答的問題。** 答案是:活動資料快取 2 秒,
+下游失敗時用 60 秒寬限期內的過期快取繼續放行,超過寬限期回 `503`。
+所以已經在搶的活動有 60 秒緩衝,而**沒有被搶過的活動一開始就開不起來**。
+實作與六條對應的測試在 `purchase-service` 的 `CachingFlashSaleClient`。
+快取的代價也要講清楚:後台把活動提前結束之後,最多 2 秒內仍可能有請求被放行。
+
+**3. 搶購結果變成最終一致。** 拆分前 consumer 建完單就直接把 `purchase_requests` 改成
+`SUCCEEDED`;拆分後 backend 發一個 `PurchaseResolved` 事件,由 purchase-service 更新自己的
+資料。使用者輪詢到終態的時間因此多了一段訊息延遲,`completedLatencyMs` 不能與拆分前直接比較。
+
+刻意**不**走的捷徑:步驟 1 兩個服務共用同一個 PostgreSQL,讓 backend 直接寫
+`purchase_requests` 是能動的,而且更簡單。不這樣做的理由是那會讓同一張表有兩個寫入者,
+步驟 2(purchase-service 自帶資料庫)時一定要整個重做。現在寫入權責只有一個,
+步驟 2 只需要換掉儲存位置。
+
+還沒拆乾淨、屬於共用資料庫階段的妥協,一併列出:
+
+- backend 仍然**讀** `purchase_requests`(後台儀表板、訂單查詢、補償時取得 `flashSaleId`)。
+  對應的 entity 已經拿掉所有 mutator,讓「只讀」是程式層面成立的事,不只是約定。
+- 兩個服務共用同一張 `outbox_events` 表。這是安全的 —— 發佈器用的是
+  `SELECT ... FOR UPDATE SKIP LOCKED`,本來就為多個發佈者設計(backend 多副本時早就如此)
+  —— 但步驟 2 每個服務要有自己的 outbox。
+- 兩個服務各自複製了一份 outbox 機制、佇列名稱常數、錯誤回應格式與 JWT 驗證設定。
+  刻意不抽共用 library:服務之間該共用的是契約(事件的 JSON 形狀、HTTP API),不是型別。
 
 ## 核心搶購資料流
 

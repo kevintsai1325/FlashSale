@@ -201,6 +201,33 @@ import 數量下降（現況是 9 個），剩下的每一個都要能說明為�
 
 ---
 
+## 完成紀錄（2026-09-14）
+
+七個 Task 全部實作完成。與計畫不同的決定，以及刻意留下的缺口：
+
+### 與計畫不同的地方
+
+- **Task 3 拆成兩個類別**：`MonolithFlashSaleClient` 只負責 HTTP 與錯誤翻譯，
+  快取與降級放在 `CachingFlashSaleClient`。理由是後者那段有狀態的邏輯必須能在沒有 HTTP 的
+  情況下被測試 —— 它是「backend 掛掉時搶購怎麼壞」的定義，不能只靠人工推理。
+  六條測試涵蓋 TTL 內、TTL 到期、寬限期內降級、寬限期外拒絕、無快取可降級、活動已刪除。
+- **Redis 種入初始值改向 backend 要**（新增 `/internal/flash-sales/{id}/available-quantity`），
+  而不是讓 purchase-service 直接讀 `inventories` 表。這樣它只碰自己的兩張表，步驟 2 少一件事要拆。
+  這個端點刻意不快取：種入過期的數量會直接造成超賣或漏賣。
+- **DLQ 補償的冪等來源換了**：拆分前靠讀 `purchase_requests` 的狀態，拆分後改用既有的去重表。
+  這不是可選的 —— 少了它，重複投遞的 DLQ 訊息會把同一筆庫存釋放兩次。
+
+### 刻意留下的缺口
+
+- **`PurchaseControllerIT` 與 `PurchaseConcurrencyIT` 被刪除，沒有等值替代。**
+  它們打的是 backend 已經不再提供的端點；而拆分後那條路徑橫跨兩個服務，
+  單一服務的整合測試涵蓋不了它。目前守著這個不變量的是 k6 端到端壓測的「不超賣」檢查。
+  backend 這半留下 `OrderPurchaseConsumerConcurrencyIT`（證明庫存列鎖真的序列化了併發消費）。
+  要在 purchase-service 補一套等值的 IT，需要它自己擁有 schema —— 那是步驟 2 的事。
+- **整合測試沒有在本機執行過**：這台機器的 Rancher Desktop 是 containerd 模式，
+  Testcontainers 找不到 Docker daemon。單元測試（purchase-service 16 個、backend 91 個）全綠，
+  81 個整合測試無法初始化。它們會在 CI 的 ubuntu runner 上真正執行。
+
 ## 步驟 2 預告（不在本計畫範圍）
 
 purchase-service 自帶 PostgreSQL 之後才會遇到的問題，屆時另立計畫：

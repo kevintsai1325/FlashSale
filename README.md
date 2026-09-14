@@ -1,6 +1,6 @@
 # FlashSale
 
-限量商品搶購系統(作品集專案)。Spring Boot 3.3(Java 21)+ React 19,以 Docker Compose 與本機 k3s 兩種形式交付 8 個服務,
+限量商品搶購系統(作品集專案)。Spring Boot 3.3(Java 21)+ React 19,以 Docker Compose 與本機 k3s 兩種形式交付 9 個服務,
 用「Redis Lua 原子預扣 + Transactional Outbox + RabbitMQ 非同步建單」承接搶購瞬間的併發,
 目標是**不超賣、不漏賣,而且每一步都留得下證據**。
 
@@ -57,7 +57,9 @@ backend、frontend、PostgreSQL、Redis、RabbitMQ、Mailpit 都沒有 host port
 flowchart LR
     Client["瀏覽器 / curl"] -->|HTTPS 8443| Nginx["Nginx<br/>TLS 終止、限流、安全標頭"]
     Nginx -->|其餘路徑| Frontend["Frontend<br/>React 19 + Vite"]
+    Nginx -->|"搶購與輪詢兩個端點"| Purchase["purchase-service<br/>搶購入口"]
     Nginx -->|"/api/、/swagger-ui/、/v3/api-docs、白名單 actuator"| Backend["Backend<br/>Spring Boot 3.3 / Java 21"]
+    Purchase -->|"活動資料(內部 API)"| Backend
     Backend --> Postgres[("PostgreSQL 16<br/>庫存與訂單的真實來源")]
     Backend --> Redis[("Redis 7<br/>庫存預扣計數器")]
     Backend -->|outbox 發佈| Rabbit["RabbitMQ 3.13<br/>order.exchange"]
@@ -67,7 +69,11 @@ flowchart LR
     Developer["本機開發者"] -->|HTTP 9411| Zipkin
 ```
 
-backend 是模組化單體(modular monolith),依領域切成 `identity`、`catalog`、`flashsale`、`inventory`、
+搶購的 HTTP 入口自 P4 起由獨立的 `purchase-service` 承接(它與 backend 共用同一個 PostgreSQL,
+資料庫的拆分是下一步)。**這次拆分沒有解決任何效能問題** —— 多一次跨行程呼叫只會更慢;
+它換到的是服務邊界與獨立部署,代價寫在[架構深入說明](docs/portfolio/architecture.md#服務拆分的代價p4)。
+
+其餘業務仍在 backend 這個模組化單體(modular monolith)裡,依領域切成 `identity`、`catalog`、`flashsale`、`inventory`、
 `order`、`payment`、`notification`、`admin` 與共用的 `common`,每個模組再分 `domain` / `application` /
 `adapter` 三層,邊界由 ArchUnit 測試強制而不是靠自律。細節見[架構深入說明](docs/portfolio/architecture.md)。
 

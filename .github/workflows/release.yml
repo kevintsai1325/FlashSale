@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        component: [backend, frontend, nginx]
+        component: [backend, purchase-service, frontend, nginx]
     steps:
       - uses: actions/checkout@v4
         with:
