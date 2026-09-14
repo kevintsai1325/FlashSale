@@ -205,6 +205,47 @@ import 數量下降（現況是 9 個），剩下的每一個都要能說明為�
 
 七個 Task 全部實作完成。與計畫不同的決定，以及刻意留下的缺口：
 
+### 驗收結果（在 Rancher Desktop 的 k3s 上實測）
+
+「完成的定義」七條逐條驗過：
+
+| # | 條件 | 結果 |
+|---|---|---|
+| 1 | 兩個服務各自獨立建置、部署、滾動更新 | 13 個 Pod 全部 Running、0 重啟 |
+| 2 | 從 `https://localhost:8443` 完成一次完整搶購 | 下單 202 PENDING → 2 秒內輪詢到 `SUCCEEDED` + `orderId`；訂單出現在 `GET /api/orders/me`，商品名稱快照正確 |
+| 3 | 正確性不變量 | `orders=1`、庫存 5→4、`purchase_requests=SUCCEEDED`、未發佈的 outbox 事件 0；同一把冪等鍵重送回傳同一筆 |
+| 4 | 跨服務的一條 trace | 一條 trace 18 個 span、兩個 service name、父子關係正確（見下） |
+| 5 | backend 停掉時的行為符合寫下的決定 | 已快取的活動仍回 202、未被搶過的活動回 503 `FLASH_SALE_LOOKUP_UNAVAILABLE` |
+| 6 | `verify.ps1` 與無漂移 | 兩者皆通過 |
+| 7 | 文件寫明沒有解決效能問題 | README 與 architecture.md 的「服務拆分的代價」 |
+
+第 4 條的 trace（`purchase-service` → `flash-sale-backend` → 回到 `purchase-service`）：
+
+```
+purchase-service     http post /api/flash-sales/{id}/purchase-requests
+purchase-service       http get                                  （跨服務呼叫）
+flash-sale-backend       http get /internal/flash-sales/{id}
+purchase-service       outbox publish
+purchase-service         order.exchange/order.create send
+flash-sale-backend         order.create.queue receive
+flash-sale-backend           outbox publish
+flash-sale-backend             order.exchange/purchase.resolved send
+purchase-service                 purchase.resolved.queue receive
+```
+
+第 5 條的細節要講清楚，免得被誤讀：已快取的活動回的是 `202 REJECTED`，那個 `REJECTED`
+來自「同一個使用者已經買成功過」的每人限購規則，不是錯誤 —— 它正好證明請求走完了整個決策
+流程（活動資料從過期快取拿到、限購規則被套用），而不是卡在活動查詢那一步。
+
+**部署時抓到兩個只有真跑才會出現的錯誤**，兩個都已修正：
+
+1. `CachingFlashSaleClient` 有兩個建構子（一個給 Spring、一個給測試注入可控時鐘），
+   沒有 `@Autowired` 時 Spring 不會挑，而是去找預設建構子然後在啟動時炸掉。單元測試
+   全綠也抓不到 —— 測試是自己 new 出來的。
+2. JWT 公鑰以 PEM 形式存在 Secret 裡，只做 `replaceAll("\s", "")` 會留下
+   `-----BEGIN PUBLIC KEY-----`，症狀是 `Illegal base64 character 2d`。backend 原本就有
+   處理，複製時漏掉了那一行。
+
 ### 與計畫不同的地方
 
 - **Task 3 拆成兩個類別**：`MonolithFlashSaleClient` 只負責 HTTP 與錯誤翻譯，

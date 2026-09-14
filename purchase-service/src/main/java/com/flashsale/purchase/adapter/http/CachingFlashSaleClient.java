@@ -7,6 +7,7 @@ import com.flashsale.purchase.exception.ServiceUnavailableException;
 import com.flashsale.purchase.metrics.PurchaseMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
@@ -51,6 +52,9 @@ public class CachingFlashSaleClient implements FlashSaleClient {
     private final Clock clock;
     private final ConcurrentHashMap<Long, CachedSnapshot> cache = new ConcurrentHashMap<>();
 
+    // @Autowired 不是裝飾用的：這個類別有兩個建構子（另一個給測試注入可控時鐘），
+    // 沒有標註時 Spring 不會挑，而是去找預設建構子、然後在啟動時炸掉。
+    @Autowired
     public CachingFlashSaleClient(MonolithFlashSaleClient delegate,
                                    PurchaseMetrics purchaseMetrics,
                                    @Value("${app.flash-sale.cache-ttl-ms}") long ttlMs,

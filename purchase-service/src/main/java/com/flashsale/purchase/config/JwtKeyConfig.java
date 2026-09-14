@@ -19,11 +19,15 @@ import java.util.Base64;
 public class JwtKeyConfig {
 
     @Value("${JWT_PUBLIC_KEY}")
-    private String publicKeyBase64;
+    private String publicKeyPem;
 
     @Bean
     public RSAPublicKey rsaPublicKey() throws Exception {
-        byte[] decoded = Base64.getDecoder().decode(publicKeyBase64.replaceAll("\\s", ""));
+        // 金鑰是以 PEM 形式存進 Secret 的，必須先把 BEGIN/END 那兩行拿掉再 base64 解碼 ——
+        // 只做 replaceAll("\\s", "") 會留下 "-----BEGIN PUBLIC KEY-----"，
+        // 症狀是啟動時的 "Illegal base64 character 2d"（2d 就是那個減號）。
+        String cleaned = publicKeyPem.replaceAll("-----(BEGIN|END) PUBLIC KEY-----", "").replaceAll("\\s", "");
+        byte[] decoded = Base64.getDecoder().decode(cleaned);
         return (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(decoded));
     }
 
