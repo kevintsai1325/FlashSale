@@ -65,6 +65,34 @@ public class RabbitConfig {
     }
 
     @Bean
+    public DirectExchange purchaseResolvedDlx() {
+        return new DirectExchange(PURCHASE_RESOLVED_DLX);
+    }
+
+    @Bean
+    public Queue purchaseResolvedQueue() {
+        return QueueBuilder.durable(PURCHASE_RESOLVED_QUEUE)
+            .withArgument("x-dead-letter-exchange", PURCHASE_RESOLVED_DLX)
+            .withArgument("x-dead-letter-routing-key", PURCHASE_RESOLVED_ROUTING_KEY)
+            .build();
+    }
+
+    @Bean
+    public Queue purchaseResolvedDlq() {
+        return QueueBuilder.durable(PURCHASE_RESOLVED_DLQ).build();
+    }
+
+    @Bean
+    public Binding purchaseResolvedBinding(Queue purchaseResolvedQueue, DirectExchange orderExchange) {
+        return BindingBuilder.bind(purchaseResolvedQueue).to(orderExchange).with(PURCHASE_RESOLVED_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding purchaseResolvedDlqBinding(Queue purchaseResolvedDlq, DirectExchange purchaseResolvedDlx) {
+        return BindingBuilder.bind(purchaseResolvedDlq).to(purchaseResolvedDlx).with(PURCHASE_RESOLVED_ROUTING_KEY);
+    }
+
+    @Bean
     public DirectExchange stockReleaseDlx() {
         return new DirectExchange(STOCK_RELEASE_DLX);
     }
