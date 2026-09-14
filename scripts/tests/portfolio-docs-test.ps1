@@ -470,9 +470,9 @@ if (-not (Test-Path -LiteralPath $readmePath)) {
         }
     }
 
-    # 10.3 真實測試數字（後端 169 / 前端 70），並且標示為「最後已知」而非本次重跑
-    if (-not $readmeText.Contains('169 個測試')) {
-        Add-Failure 'README.md: missing the real backend test count (169 個測試)'
+    # 10.3 真實測試數字（後端 177 / 前端 70），並且標示為「最後已知」而非本次重跑
+    if (-not $readmeText.Contains('177 個測試')) {
+        Add-Failure 'README.md: missing the real backend test count (177 個測試)'
     }
     if (-not $readmeText.Contains('70 個測試')) {
         Add-Failure 'README.md: missing the real frontend test count (70 個測試)'
@@ -639,8 +639,13 @@ if (-not (Test-Path -LiteralPath $readmePath)) {
     if (-not $readmeText.Contains('SLA')) {
         Add-Failure 'README.md: limitations must state that the numbers are not a production capacity/SLA claim'
     }
-    if (-not $readmeText.Contains('沒有做飽和測試')) {
-        Add-Failure 'README.md: limitations must state that no saturation test was performed'
+    # Week 8 P3 之後飽和測試已經做了，這裡改成守住真正還成立的那個邊界：
+    # 「現況與證據」那一節的 soak/競爭負載數字本身沒有加壓到飽和，不能當吞吐上限。
+    if (-not $readmeText.Contains('沒有加壓到飽和')) {
+        Add-Failure 'README.md: limitations must state that the headline load numbers were not driven to saturation'
+    }
+    if (-not $readmeText.Contains('scaling-and-autoscaling.md')) {
+        Add-Failure 'README.md: limitations must point at where the saturation measurement actually lives'
     }
 
     # 10.12 深入設定要收在 <details> 裡，維持第一屏精簡
