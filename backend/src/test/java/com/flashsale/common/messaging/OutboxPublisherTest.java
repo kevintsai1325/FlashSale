@@ -7,10 +7,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.context.ApplicationContext;
 
-import java.util.Optional;
+import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,15 +39,17 @@ class OutboxPublisherTest {
         when(tracer.withSpan(span)).thenReturn(mock(Tracer.SpanInScope.class));
         OutboxEvent event = OutboxEvent.create("Order", "1", EventTypes.CREATE_ORDER_REQUESTED,
             "{}", new StoredTraceContext(1, "trace-id", "span-id", true), null);
-        when(repository.findById(isNull())).thenReturn(Optional.of(event));
+        when(repository.findUnpublishedBatchForUpdate(anyInt())).thenReturn(List.of(event));
         OutboxPublisher publisher = new OutboxPublisher(
             repository, rabbitTemplate, mock(org.springframework.kafka.core.KafkaTemplate.class),
             mock(ApplicationContext.class), tracer);
 
-        publisher.publishEvent(event);
+        publisher.publishBatch();
 
         verify(spanBuilder).setParent(parent);
         verify(rabbitTemplate).send(any(String.class), any(String.class), any());
         verify(span).end();
+        // 發出去之後才標記：兩者在同一個交易裡，所以「標記了但沒送出去」不該是一個可能的狀態。
+        assertThat(event.getPublishedAt()).isNotNull();
     }
 }

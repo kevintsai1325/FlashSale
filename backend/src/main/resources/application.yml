@@ -32,6 +32,11 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+        # 逾時要短：發送被包在 outbox 的資料庫交易裡（見 OutboxPublisher.publishBatch），
+        # broker 掛掉時預設的 delivery.timeout.ms=120000 會讓那個交易連同列鎖卡住兩分鐘。
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
     template:
       observation-enabled: true
     listener:
