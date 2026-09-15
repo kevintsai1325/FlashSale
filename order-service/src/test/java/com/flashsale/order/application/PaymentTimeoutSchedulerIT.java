@@ -16,8 +16,6 @@ class PaymentTimeoutSchedulerIT extends AbstractIntegrationTest {
     @Test
     void overduePendingPaymentOrderIsExpiredAndInventoryReleased() {
         jdbcTemplate.update(
-            "insert into users (id, email, password_hash, role, status) values (997, 'timeout@example.com', 'x', 'USER', 'ACTIVE')");
-        jdbcTemplate.update(
             "insert into orders (id, order_no, user_id, total_amount, status, payment_due_at, flash_sale_id) " +
             "values (883, 'ORD-883', 997, 9.99, 'PENDING_PAYMENT', now() - interval '1 minute', 1)");
         jdbcTemplate.update("insert into order_items (order_id, product_id, product_name, quantity, unit_price) values (883, 1, 'Payment Timeout Test Product', 1, 9.99)");

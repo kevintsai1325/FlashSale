@@ -39,13 +39,6 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
     private static final UUID REQUEST_ONE = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID REQUEST_TWO = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
-    // orders.user_id 有外鍵指向 users。拆分前這一步是靠 HTTP 註冊帶出來的，
-    // 現在測試直接從事件開始，就必須自己把買家種進去。
-    private void seedBuyer() {
-        jdbcTemplate.update(
-            "insert into users (id, email, password_hash, role, status) values (?, ?, 'x', 'USER', 'ACTIVE') on conflict (id) do nothing",
-            BUYER_ID, "consumer-it-" + BUYER_ID + "@example.com");
-    }
 
     private void requestOrder(UUID purchaseRequestId, long flashSaleId, long productId, int quantity) throws Exception {
         outboxWriter.write("PurchaseRequest", purchaseRequestId.toString(), EventTypes.CREATE_ORDER_REQUESTED,
@@ -59,7 +52,6 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
     @Test
     @Sql("/db/testdata/inventory-fixtures.sql")
     void createsTheOrderDecrementsStockAndReportsTheTerminalStateBack() throws Exception {
-        seedBuyer();
         requestOrder(REQUEST_ONE, 1L, 1L, 1);
 
         Integer orderCount = jdbcTemplate.queryForObject("select count(*) from orders", Integer.class);
@@ -89,10 +81,6 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
         double before = meterRegistry.find("purchase.order.created").counter() == null
             ? 0.0 : meterRegistry.find("purchase.order.created").counter().count();
 
-        seedBuyer();
-        jdbcTemplate.update("INSERT INTO products (id, name, description) VALUES (2, 'Metrics Test Product', 'Only 1 pair')");
-        jdbcTemplate.update("INSERT INTO flash_sales (id, product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status) " +
-            "VALUES (2, 2, 9.99, now() - interval '1 minute', now() + interval '1 hour', 1, 'ACTIVE')");
         jdbcTemplate.update("INSERT INTO inventory (id, flash_sale_id, total_quantity, available_quantity, reserved_quantity, sold_quantity, version) " +
             "VALUES (2, 2, 1, 1, 0, 0, 0)");
 

@@ -47,13 +47,6 @@ class OrderPurchaseConsumerConcurrencyIT extends AbstractIntegrationTest {
 
     private static final long BUYER_ID = 990L;
 
-    // orders.user_id 有外鍵指向 users。少了這一步，五條執行緒會全部倒在外鍵約束上，
-    // 看起來像「一件都沒賣出去」，而不是這個測試要證明的「只賣出一件」。
-    private void seedBuyer() {
-        jdbcTemplate.update(
-            "insert into users (id, email, password_hash, role, status) values (?, 'concurrency-it@example.com', 'x', 'USER', 'ACTIVE') on conflict (id) do nothing",
-            BUYER_ID);
-    }
 
     private Message messageFor(UUID purchaseRequestId, String eventId) throws Exception {
         CreateOrderRequestedEvent event = new CreateOrderRequestedEvent(
@@ -65,7 +58,6 @@ class OrderPurchaseConsumerConcurrencyIT extends AbstractIntegrationTest {
 
     @Test
     void neverSellsMoreThanTheStockUnderRealConcurrentContention() throws Exception {
-        seedBuyer();
         ExecutorService executor = Executors.newFixedThreadPool(CONCURRENT_CONSUMERS);
         CyclicBarrier barrier = new CyclicBarrier(CONCURRENT_CONSUMERS);
         List<Callable<Boolean>> tasks = new ArrayList<>();

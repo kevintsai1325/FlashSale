@@ -7,10 +7,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -21,29 +22,26 @@ class OrderCancelIT extends AbstractIntegrationTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired JdbcTemplate jdbcTemplate;
 
-    private String registerAndLogin(String email) throws Exception {
-        String body = objectMapper.writeValueAsString(new java.util.HashMap<>() {{
-            put("email", email);
-            put("password", "secret123");
-        }});
-        mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(body))
-            .andExpect(status().isCreated());
-        MvcResult login = mockMvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON).content(body))
-            .andExpect(status().isOk()).andReturn();
-        return objectMapper.readTree(login.getResponse().getContentAsString()).get("accessToken").asText();
+    /**
+     * P5：這個服務不簽發 token（私鑰在 platform），也沒有 /api/auth 端點。
+     * 測試改用 Spring Security Test 的 jwt() post-processor 直接塞一個已驗證的 principal ——
+     * 那條路徑不經過 JwtDecoder，測的是「這個服務怎麼看待一個已通過驗證的使用者」，
+     * 而那正是它現在唯一該負責的事。
+     */
+    private static RequestPostProcessor asUser(long userId) {
+        return jwt().jwt(jwt -> jwt.claim("userId", userId).claim("role", "USER"));
     }
 
     @Test
     @Sql("/db/testdata/inventory-fixtures.sql")
     void cancellingAPendingOrderReleasesInventoryAndWritesCompensationEvent() throws Exception {
-        String token = registerAndLogin("cancel-test@example.com");
         jdbcTemplate.update(
             "insert into orders (id, order_no, user_id, total_amount, status, payment_due_at, flash_sale_id) " +
-            "values (777, 'ORD-777', (select id from users where email = 'cancel-test@example.com'), 9.99, 'PENDING_PAYMENT', now() + interval '15 minutes', 1)");
+            "values (777, 'ORD-777', 500, 9.99, 'PENDING_PAYMENT', now() + interval '15 minutes', 1)");
         jdbcTemplate.update("insert into order_items (order_id, product_id, product_name, quantity, unit_price) values (777, 1, 'Order Cancel Test Product', 1, 9.99)");
         jdbcTemplate.update("update inventory set available_quantity = 0, sold_quantity = 1 where flash_sale_id = 1");
 
-        mockMvc.perform(post("/api/orders/777/cancel").header("Authorization", "Bearer " + token))
+        mockMvc.perform(post("/api/orders/777/cancel").with(asUser(500L)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("CANCELLED"));
 
@@ -63,13 +61,11 @@ class OrderCancelIT extends AbstractIntegrationTest {
 
     @Test
     void cancellingSomeoneElsesOrderIsNotFoundNotForbidden() throws Exception {
-        String owner = registerAndLogin("owner@example.com");
-        String stranger = registerAndLogin("stranger@example.com");
         jdbcTemplate.update(
             "insert into orders (id, order_no, user_id, total_amount, status, payment_due_at) " +
-            "values (778, 'ORD-778', (select id from users where email = 'owner@example.com'), 9.99, 'PENDING_PAYMENT', now() + interval '15 minutes')");
+            "values (778, 'ORD-778', 500, 9.99, 'PENDING_PAYMENT', now() + interval '15 minutes')");
 
-        mockMvc.perform(post("/api/orders/778/cancel").header("Authorization", "Bearer " + stranger))
+        mockMvc.perform(post("/api/orders/778/cancel").with(asUser(501L)))
             .andExpect(status().isNotFound());
     }
 }
