@@ -87,20 +87,47 @@ Nginx 的路由規則([`nginx/nginx.conf`](../../nginx/nginx.conf))可以摘要�
 `SUCCEEDED`;拆分後 backend 發一個 `PurchaseResolved` 事件,由 purchase-service 更新自己的
 資料。使用者輪詢到終態的時間因此多了一段訊息延遲,`completedLatencyMs` 不能與拆分前直接比較。
 
-刻意**不**走的捷徑:步驟 1 兩個服務共用同一個 PostgreSQL,讓 backend 直接寫
+步驟 1 刻意**不**走的捷徑:當時兩個服務共用同一個 PostgreSQL,讓 backend 直接寫
 `purchase_requests` 是能動的,而且更簡單。不這樣做的理由是那會讓同一張表有兩個寫入者,
-步驟 2(purchase-service 自帶資料庫)時一定要整個重做。現在寫入權責只有一個,
-步驟 2 只需要換掉儲存位置。
+拆庫時一定要整個重做。因為寫入權責從一開始就只有一個,步驟 2 只需要換掉儲存位置。
 
-還沒拆乾淨、屬於共用資料庫階段的妥協,一併列出:
+兩個服務各自複製了一份 outbox 機制、佇列名稱常數、錯誤回應格式與 JWT 驗證設定。
+刻意不抽共用 library:服務之間該共用的是契約(事件的 JSON 形狀、HTTP API),不是型別。
 
-- backend 仍然**讀** `purchase_requests`(後台儀表板、訂單查詢、補償時取得 `flashSaleId`)。
-  對應的 entity 已經拿掉所有 mutator,讓「只讀」是程式層面成立的事,不只是約定。
-- 兩個服務共用同一張 `outbox_events` 表。這是安全的 —— 發佈器用的是
-  `SELECT ... FOR UPDATE SKIP LOCKED`,本來就為多個發佈者設計(backend 多副本時早就如此)
-  —— 但步驟 2 每個服務要有自己的 outbox。
-- 兩個服務各自複製了一份 outbox 機制、佇列名稱常數、錯誤回應格式與 JWT 驗證設定。
-  刻意不抽共用 library:服務之間該共用的是契約(事件的 JSON 形狀、HTTP API),不是型別。
+## 每個服務一個資料庫(P4 步驟 2)
+
+purchase-service 自 2026-09-15 起連的是自己的 PostgreSQL instance(`postgres-purchase`),
+不是同一個 instance 的第二個 database。**這個區別是重點**:database per service 的價值
+不在資料放在不同檔案裡,而在移除跨服務直接讀寫的可能性。共用 instance 只是把耦合藏進
+連線字串,第一個趕工的人就會把跨庫查詢加回來。雲端上這個選擇對應的是每個服務一個 RDS。
+
+拆庫逼著三處跨庫讀取各自找到答案,而三處的答案不一樣 —— 這是這一步最值得學的部分:
+
+| 原本的讀取 | 性質 | 解法 |
+|---|---|---|
+| 補償流程從 `orderId` 反查 `flashSaleId` | 需要的是「當下這筆的事實」 | **去正規化**:事件裡帶著 `flashSaleId`,建單時存進 `orders` |
+| 後台訂單詳情的搶購請求區塊 | 可以從既有資料推導 | **推導**:訂單存在本身就是搶購成功的證明 |
+| 儀表板的搶購請求統計 | 需要的是「別人那邊的當前統計」 | **跨服務查詢**:呼叫 purchase-service 的內部端點,失敗時該區塊降級成 0 |
+
+新 schema 沒有任何外鍵指向別的服務的資料:`user_id`、`flash_sale_id`、`order_id` 都只是數字。
+跨服務的參照完整性從此由流程(事件、補償)保證,不再由資料庫保證。
+
+拆庫也還回了 outbox 模式原本的意義。共用資料庫時「事件與業務資料在同一個本地交易裡」
+其實是勉強成立的 —— 交易確實是同一個,但那個資料庫不屬於 purchase-service。
+
+### 一個只有真的部署才會出現的錯誤
+
+拆庫後第一次跑完整流程,搶購請求卡在 `PENDING`:佇列與 DLQ 全空、outbox 顯示已發佈,
+訊息確實送出去了,卻沒有訂單。原因是**去重鍵**:消費端的 `consumed_messages` 存的是
+「發佈端 outbox 表的 BIGSERIAL id」。共用一張表時那個數字唯一;拆庫之後 purchase-service
+的 outbox 從 1 重新開始,而 backend 那張表裡早就有 `message_id='1'`,第一筆建單事件
+因此被認成重複投遞、安靜地丟掉。
+
+修法是讓事件帶自己的 UUID(發佈端產生、跟著訊息走、消費端拿它去重),識別碼不再依賴
+任何一個資料庫的序號 —— 這也是 CloudEvents 的 `id` 欄位在做的事。
+
+**三種測試都抓不到它**:單元測試各自挑自己的 id,整合測試每次清空資料庫,契約測試不碰資料。
+只有「在一個有歷史資料的環境上真的部署」才會撞到。這是拆分類工作最典型的一種錯誤。
 
 ## 核心搶購資料流
 
@@ -207,18 +234,19 @@ sequenceDiagram
 
 ## 資料模型重點
 
-Flyway 管理 schema(`ddl-auto: validate`,啟動時只驗證不改結構),目前共 3 個 migration。
-主要資料表與它們在流程中的角色:
+Flyway 管理 schema(`ddl-auto: validate`,啟動時只驗證不改結構)。**兩個服務各有一套**:
+platform 的資料庫 6 個 migration、purchase-service 的資料庫 2 個。
+主要資料表與它們在流程中的角色(標註 `[purchase]` 的住在 purchase-service 自己的資料庫):
 
 | 資料表 | 角色 |
 |---|---|
 | `users` / `refresh_tokens` | 帳號與 refresh token(僅存雜湊值,30 天有效) |
 | `products` / `flash_sales` / `inventory` | 商品、搶購活動與權威庫存(含 `version` 樂觀鎖欄位) |
-| `purchase_requests` | 搶購請求與冪等鍵,狀態為 `PENDING`/`SUCCEEDED`/`SOLD_OUT`/`REJECTED`/`FAILED` |
-| `orders` / `order_items` / `order_status_history` | 訂單、商品明細快照與狀態轉移紀錄 |
+| `purchase_requests` `[purchase]` | 搶購請求與冪等鍵,狀態為 `PENDING`/`SUCCEEDED`/`SOLD_OUT`/`REJECTED`/`FAILED`。沒有外鍵指向 `users` 或 `flash_sales` —— 那是別的服務的資料 |
+| `orders` / `order_items` / `order_status_history` | 訂單、商品明細快照與狀態轉移紀錄。`orders` 自己帶 `flash_sale_id` 與 `purchase_request_id`(UUID),補償與後台查詢不必跨服務 |
 | `payment_records` | 每次付款嘗試的結果(`SUCCESS`/`FAILURE`) |
-| `outbox_events` | 交易性 outbox,含 `trace_context` JSONB 與未發佈事件的部分索引 |
-| `consumed_messages` | 消費端去重表 |
+| `outbox_events` (兩份,各自一個資料庫) | 交易性 outbox,含 `event_id` UUID、`trace_context` JSONB 與未發佈事件的部分索引 |
+| `consumed_messages` | 消費端去重表,鍵是事件的 `event_id`(不是 outbox 表的序號 —— 拆庫之後序號不再全域唯一) |
 | `notification_deliveries` | 通知投遞狀態與重試次數 |
 | `api_audit_logs` | 每個 API 請求一列的稽核紀錄 |
 

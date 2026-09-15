@@ -186,3 +186,58 @@ backend 目前有三處讀 `purchase_requests`，拆庫後全部會斷：
 步驟 5 之後，**兩個服務各自有一張 `outbox_events` 表與各自的發佈器**。
 步驟 1 那條「兩邊都必須認得全部 event type」的限制隨之消失，`RabbitConfig` 與 `EventTypes`
 裡為此保留的常數要跟著清掉 —— 留著會讓下一個人以為表還是共用的。
+
+---
+
+## P4-2 完成紀錄（2026-09-15）
+
+### 驗收結果（Rancher Desktop 的 k3s 上實測）
+
+| # | 條件 | 結果 |
+|---|---|---|
+| 1 | 兩個資料庫各自 migrate | platform 6 個 migration、purchase 2 個，全部 success |
+| 2 | 完整搶購流程 | 下單 202 PENDING → **1 秒內** `SUCCEEDED` + `orderId=5`；訂單出現在 `GET /api/orders/me`，商品名稱快照正確；同一把冪等鍵重送回同一筆 |
+| 3 | 正確性不變量 | `orders=1`、庫存 5→4、`purchase_requests=SUCCEEDED`、兩個資料庫的未發佈 outbox 皆為 0、三條 DLQ 全空 |
+| 4 | 跨服務的一條 trace | 30 個 span、兩個 service name、父子關係正確 |
+| 5 | backend 掛掉時的行為 | 已快取的活動 → `202 REJECTED`（每人限購規則有被套用，代表決策流程真的走完了）；沒被搶過的活動 → `503 FLASH_SALE_LOOKUP_UNAVAILABLE`；**輪詢端點照常回應**（那份資料現在完全屬於 purchase-service） |
+| 6 | `verify.ps1` 與無漂移 | 兩者皆通過，14 個 Pod 全部 Running、0 重啟 |
+| 7 | backend 的程式碼裡沒有 `purchase_requests` | 只剩註解裡的歷史說明 |
+
+### 部署時抓到一個只有真跑才會出現的錯誤
+
+第一次跑完整流程，搶購請求卡在 `PENDING`，而佇列與 DLQ 全空、outbox 顯示已發佈。
+原因是**去重鍵**：`consumed_messages` 存的是發佈端 outbox 表的 BIGSERIAL id。
+共用一張表時那個數字唯一；拆庫之後 purchase-service 的 outbox 從 1 重新開始，而 backend
+那張表裡早就有 `message_id='1'`（共用時代留下的），第一筆建單事件被認成重複投遞、丟掉。
+
+改成事件自己帶 UUID（CloudEvents 的 `id` 在做的事）。**三種測試都抓不到它**：單元測試各自
+挑自己的 id、整合測試每次清空資料庫、契約測試不碰資料。只有在一個有歷史資料的環境上
+真的部署才會撞到 —— 與 P4 步驟 1 那兩個錯誤同一類。
+
+### 順手觀察到的既有行為（不是這次引入的）
+
+那條 30 span 的 trace 裡，同一筆事件出現**兩次** `outbox publish → order.create send → receive`。
+這不是 bug，是 `OutboxPublisher` 刻意的形狀：`fetchBatch()` 的列鎖必須在
+`publishEvent()` 標記已發佈之前釋放（否則自己鎖自己），於是另一個副本可能在這個空隙撈到
+同一列。系統因此是**至少一次**投遞，而消費端的去重正是為此存在 —— 這次的 bug 也證明了
+少了它會發生什麼。三副本時這個重複會比單副本明顯得多。
+
+### 與計畫不同的地方
+
+- **跨服務參照改用 UUID 而非 BIGSERIAL**（計畫沒寫）。事件契約與 `orders.purchase_request_id`
+  都改成 purchase-service 公開的 `request_id`。理由：本地代理鍵是那個資料庫的實作細節，
+  而後台要顯示、使用者要查詢的識別碼本來就是那個 UUID。
+- **儀表板的分桶錨點由呼叫端傳給 purchase-service**。兩個行程各自取 `now()` 再截到分鐘，
+  跨越分鐘邊界時桶起點會差一格，對得起來的資料看起來像消失了。
+- **順手補上 P4 步驟 1 的四個缺口**：purchase-service 的整合測試（現在它有自己的 schema 了）、
+  CI 從未跑過它的測試、`deploy.ps1` 沒重啟它（`imagePullPolicy: Never` 吃不到新映像）、
+  `verify.ps1` 沒等它的 rollout。
+
+### 刻意留下的缺口
+
+- **Compose 的舊 benchmark 工具（`load-tests/benchmark/`）不修**，只標記為不可執行。
+  它的 stack 沒有 purchase-service，而且用的是 P3 已證明不能回答擴展問題的封閉模型。
+- **示範資料與壓測的清理要打兩個資料庫，中間沒有交易。** 順序必須先 purchase 後 platform，
+  否則 platform 的 id 清單先消失，purchase 那邊會留下永遠清不掉的孤兒。
+- **儀表板的兩半是最終一致的**：搶購請求數與訂單數取自兩個時點，高併發時會差幾筆。
+  這是跨服務儀表板的本質；要嚴格對齊得等 P5-2 的讀取模型（同一條事件流算出來）。

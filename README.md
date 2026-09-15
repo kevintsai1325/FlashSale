@@ -69,9 +69,12 @@ flowchart LR
     Developer["本機開發者"] -->|HTTP 9411| Zipkin
 ```
 
-搶購的 HTTP 入口自 P4 起由獨立的 `purchase-service` 承接(它與 backend 共用同一個 PostgreSQL,
-資料庫的拆分是下一步)。**這次拆分沒有解決任何效能問題** —— 多一次跨行程呼叫只會更慢;
-它換到的是服務邊界與獨立部署,代價寫在[架構深入說明](docs/portfolio/architecture.md#服務拆分的代價p4)。
+搶購的 HTTP 入口自 P4 起由獨立的 `purchase-service` 承接,並且自 P4 步驟 2 起連的是
+**自己的 PostgreSQL instance**(不是同一個 instance 的第二個 database)。
+**這次拆分沒有解決任何效能問題** —— 多一次跨行程呼叫、再加上跨庫之後對不起來的統計,
+只會更慢也更難查;它換到的是服務邊界、獨立部署,以及一組必須明確回答的失效問題
+(下游掛掉時搶購怎麼壞、跨庫的參照完整性由誰保證)。代價與答案寫在
+[架構深入說明](docs/portfolio/architecture.md#服務拆分的代價p4)。
 
 其餘業務仍在 backend 這個模組化單體(modular monolith)裡,依領域切成 `identity`、`catalog`、`flashsale`、`inventory`、
 `order`、`payment`、`notification`、`admin` 與共用的 `common`,每個模組再分 `domain` / `application` /
