@@ -3,6 +3,7 @@ package com.flashsale.admin.adapter.web;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flashsale.admin.adapter.http.AnalyticsClient;
 import com.flashsale.admin.adapter.http.AnalyticsClient.TrendPoint;
+import com.flashsale.common.client.OrderServiceClient;
 import com.flashsale.testsupport.AbstractIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>P5 起，聚合數字（搶購請求、訂單、已付款金額、趨勢）來自 analytics-service，
  * 那個服務在這個測試環境裡不存在，所以 {@link AnalyticsClient} 是 mock 的。
- * **這個測試守的是「把聚合與本地的庫存併起來、並補齊缺席的訂單狀態」這件事，
+ * **這個測試守的是「把兩個下游的回答與本地的活動清單併起來、並補齊缺席的訂單狀態」這件事，
  * 不是那一次跨服務呼叫本身。** 呼叫的降級行為由 {@code AnalyticsClientTest} 守。
  */
 class AdminDashboardControllerIT extends AbstractIntegrationTest {
@@ -113,19 +114,16 @@ class AdminDashboardControllerIT extends AbstractIntegrationTest {
         jdbcTemplate.update(
             "insert into flash_sales (id, product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status) " +
             "values (501, 501, 9.99, now() - interval '1 hour', now() + interval '1 hour', 1, 'ACTIVE')");
-        jdbcTemplate.update(
-            "insert into inventory (flash_sale_id, total_quantity, available_quantity, reserved_quantity, sold_quantity, version) " +
-            "values (501, 10, 4, 1, 5, 0)");
 
         jdbcTemplate.update(
             "insert into flash_sales (id, product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status) " +
             "values (502, 501, 19.99, now() - interval '1 hour', now() + interval '1 hour', 1, 'ACTIVE')");
-        jdbcTemplate.update(
-            "insert into inventory (flash_sale_id, total_quantity, available_quantity, reserved_quantity, sold_quantity, version) " +
-            "values (502, 20, 20, 0, 0, 0)");
-
-        // 搶購請求與訂單的數字全部由 stubAnalytics() 供應：那些聚合已經不在這個資料庫裡。
-        // 本地只剩庫存 —— 它不是事件的聚合，而是「當下的狀態」，由擁有者直接回答。
+        // 庫存數量已經不在這個資料庫裡（P5 之後它屬於 order-service），
+        // 這裡只剩「有哪些活動」。**這條測試守的正是那個接合：
+        // 拿本地的活動清單當鍵，向擁有者問數量，再合併成一個畫面。**
+        when(orderServiceClient.inventories(any())).thenReturn(Map.of(
+            501L, new OrderServiceClient.InventoryView(10, 4, 1, 5),
+            502L, new OrderServiceClient.InventoryView(20, 20, 0, 0)));
 
         mockMvc.perform(get("/api/admin/dashboard/summary").header("Authorization", "Bearer " + adminToken))
             .andExpect(status().isOk())
