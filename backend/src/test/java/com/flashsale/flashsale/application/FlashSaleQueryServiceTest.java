@@ -6,8 +6,7 @@ import com.flashsale.common.exception.NotFoundException;
 import com.flashsale.flashsale.application.dto.FlashSaleSummary;
 import com.flashsale.flashsale.domain.FlashSale;
 import com.flashsale.flashsale.domain.FlashSaleStatus;
-import com.flashsale.inventory.application.InventoryRepository;
-import com.flashsale.inventory.domain.Inventory;
+import com.flashsale.common.client.OrderServiceClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -26,13 +25,13 @@ class FlashSaleQueryServiceTest {
 
     @Mock FlashSaleRepository flashSaleRepository;
     @Mock ProductRepository productRepository;
-    @Mock InventoryRepository inventoryRepository;
+    @Mock OrderServiceClient orderServiceClient;
 
     FlashSaleQueryService service;
 
     @Test
     void listActiveSalesJoinsProductDetails() {
-        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, orderServiceClient);
         FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
             Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), 1);
         Product product = Product.create("Limited Sneakers", "Only 100 pairs");
@@ -48,7 +47,7 @@ class FlashSaleQueryServiceTest {
 
     @Test
     void detailThrowsNotFoundForUnknownSale() {
-        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, orderServiceClient);
         when(flashSaleRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getDetail(99L)).isInstanceOf(NotFoundException.class);
@@ -56,15 +55,14 @@ class FlashSaleQueryServiceTest {
 
     @Test
     void detailIncludesInventoryQuantities() {
-        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, orderServiceClient);
         FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
             Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), 1);
         Product product = Product.create("Limited Sneakers", "Only 100 pairs");
-        Inventory inventory = Inventory.initialize(1L, 100);
-        inventory.sell(58);
         when(flashSaleRepository.findById(1L)).thenReturn(Optional.of(sale));
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(inventoryRepository.findByFlashSaleId(1L)).thenReturn(Optional.of(inventory));
+        when(orderServiceClient.inventories(List.of(1L)))
+            .thenReturn(java.util.Map.of(1L, new OrderServiceClient.InventoryView(100, 42, 0, 58)));
 
         var result = service.getDetail(1L);
 
@@ -74,13 +72,14 @@ class FlashSaleQueryServiceTest {
 
     @Test
     void detailDefaultsQuantitiesToZeroWhenNoInventoryRow() {
-        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, orderServiceClient);
         FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
             Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), 1);
         Product product = Product.create("Limited Sneakers", "Only 100 pairs");
         when(flashSaleRepository.findById(1L)).thenReturn(Optional.of(sale));
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(inventoryRepository.findByFlashSaleId(1L)).thenReturn(Optional.empty());
+        // 庫存查不到（order-service 沒有那一列，或那次呼叫降級了）—— 顯示 0，不讓整頁失敗。
+        when(orderServiceClient.inventories(List.of(1L))).thenReturn(java.util.Map.of());
 
         var result = service.getDetail(1L);
 
@@ -97,7 +96,7 @@ class FlashSaleQueryServiceTest {
 
     @Test
     void listReportsEndedForASaleWhoseWindowHasAlreadyElapsed() {
-        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, orderServiceClient);
         FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
             Instant.now().minusSeconds(7200), Instant.now().minusSeconds(3600), 1);
         Product product = Product.create("Limited Sneakers", "Only 100 pairs");
@@ -111,7 +110,7 @@ class FlashSaleQueryServiceTest {
 
     @Test
     void listReportsScheduledForASaleThatHasNotStartedYet() {
-        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, orderServiceClient);
         FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
             Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), 1);
         Product product = Product.create("Limited Sneakers", "Only 100 pairs");
@@ -125,13 +124,13 @@ class FlashSaleQueryServiceTest {
 
     @Test
     void detailReportsEndedForASaleWhoseWindowHasAlreadyElapsed() {
-        service = new FlashSaleQueryService(flashSaleRepository, productRepository, inventoryRepository);
+        service = new FlashSaleQueryService(flashSaleRepository, productRepository, orderServiceClient);
         FlashSale sale = FlashSale.schedule(1L, new BigDecimal("9.99"),
             Instant.now().minusSeconds(7200), Instant.now().minusSeconds(3600), 1);
         Product product = Product.create("Limited Sneakers", "Only 100 pairs");
         when(flashSaleRepository.findById(1L)).thenReturn(Optional.of(sale));
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(inventoryRepository.findByFlashSaleId(1L)).thenReturn(Optional.empty());
+        when(orderServiceClient.inventories(List.of(1L))).thenReturn(java.util.Map.of());
 
         var result = service.getDetail(1L);
 

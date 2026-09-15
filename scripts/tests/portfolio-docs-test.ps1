@@ -46,7 +46,9 @@ function Get-ControllerRouteTemplates {
     # 只掃 backend 的話，文件裡正確的搶購路徑會被誤判成「沒有對應的路由」。
     $javaRoots = @(
         (Join-Path $repoRoot 'backend\src\main\java'),
-        (Join-Path $repoRoot 'purchase-service\src\main\java')
+        (Join-Path $repoRoot 'purchase-service\src\main\java'),
+        # P5：訂單與付款的路由在 order-service。
+        (Join-Path $repoRoot 'order-service\src\main\java')
     )
     $controllers = @($javaRoots |
         Where-Object { Test-Path -LiteralPath $_ } |
@@ -254,7 +256,11 @@ if ($allTemplates.Count -lt 10) {
     Add-Failure ('route extraction produced too few templates ({0}); controller/nginx parsing is broken' -f $allTemplates.Count)
 }
 
-$metricsSource = Read-TextFile -Path (Join-Path $repoRoot 'backend\src\main\java\com\flashsale\common\metrics\PurchaseMetrics.java')
+# P5：指標跟著服務拆開了 —— 預扣相關的在 purchase-service，建單的在 order-service。
+# 兩份都要讀，否則文件裡正確的指標名稱會被誤判成不存在。
+$purchaseMetricsSource = Read-TextFile -Path (Join-Path $repoRoot 'purchase-service\src\main\java\com\flashsale\purchase\metrics\PurchaseMetrics.java')
+$orderMetricsSource = Read-TextFile -Path (Join-Path $repoRoot 'order-service\src\main\java\com\flashsale\common\metrics\OrderMetrics.java')
+$metricsSource = $purchaseMetricsSource + $orderMetricsSource
 
 foreach ($documentName in $documents.Keys) {
     $documentPath = Get-DocumentPath -Name $documentName
@@ -422,7 +428,7 @@ foreach ($documentName in $documents.Keys) {
     $metricMatches = [regex]::Matches($text, 'purchase\.[a-z]+(?:\.[a-z]+)*')
     foreach ($metricMatch in $metricMatches) {
         if (-not $metricsSource.Contains($metricMatch.Value)) {
-            Add-Failure ('{0}: metric name not found in PurchaseMetrics.java: {1}' -f $documentName, $metricMatch.Value)
+            Add-Failure ('{0}: metric name not found in any metrics class: {1}' -f $documentName, $metricMatch.Value)
         }
     }
 }

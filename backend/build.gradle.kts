@@ -32,9 +32,8 @@ dependencies {
     // docs/portfolio/scheduler-duplication-evidence.md。
     // starter 讀既有的 spring.data.redis.* 設定，不需要額外的 Redisson 設定檔。
     implementation("org.redisson:redisson-spring-boot-starter:3.35.0")
-    implementation("org.springframework.boot:spring-boot-starter-amqp")
-    // P4 步驟 3：領域事件的匯流排。RabbitMQ 留給命令，兩者共存（見 EventTypes 的說明）。
-    implementation("org.springframework.kafka:spring-kafka")
+    // P5 之後這裡沒有 amqp 也沒有 kafka：訊息的收發全部跟著訂單、庫存與搶購搬走了。
+    // platform 剩下的職責（身分、商品、活動、通知、後台）都是同步的請求／回應。
     implementation("org.springframework.boot:spring-boot-starter-aop")
     implementation("io.micrometer:micrometer-tracing-bridge-brave")
     implementation("io.zipkin.reporter2:zipkin-reporter-brave")
@@ -49,8 +48,6 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers:1.20.1")
     testImplementation("org.testcontainers:junit-jupiter:1.20.1")
     testImplementation("org.testcontainers:postgresql:1.20.1")
-    testImplementation("org.testcontainers:rabbitmq:1.20.1")
-    testImplementation("org.testcontainers:kafka:1.20.1")
     testImplementation("org.awaitility:awaitility:4.2.2")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
     testImplementation("io.micrometer:micrometer-observation-test")

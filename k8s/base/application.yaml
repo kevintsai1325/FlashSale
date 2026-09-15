@@ -88,6 +88,49 @@ kind: Service
 metadata: {name: purchase-service, namespace: flashsale, labels: {flashsale.dev/stage: application}}
 spec: {selector: {app: purchase-service}, ports: [{name: http, port: 8080, targetPort: 8080}]}
 ---
+# P5：訂單與庫存。搶購的非同步後半段（建單、扣庫存、補償）在這裡。
+#
+# 兩副本而不是三：建單是 RabbitMQ 消費端，它的平行度由佇列的 concurrency 決定而不是副本數；
+# 而單節點上多一個 JVM 就多一份固定的記憶體開銷。要證明水平擴展的是 HTTP 入口
+# （backend 與 purchase-service），不是這裡。
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: order-service, namespace: flashsale, labels: {flashsale.dev/stage: application}}
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  selector: {matchLabels: {app: order-service}}
+  template:
+    metadata: {labels: {app: order-service}}
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: order-service
+          image: flashsale-order-service:local
+          imagePullPolicy: Never
+          lifecycle:
+            preStop: {exec: {command: ["sleep", "5"]}}
+          envFrom: [{configMapRef: {name: flashsale-config}}]
+          env:
+            - {name: SPRING_DATASOURCE_URL, value: jdbc:postgresql://postgres-order:5432/orders}
+            - {name: SPRING_DATASOURCE_PASSWORD, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: POSTGRES_PASSWORD}}}
+            - {name: SPRING_RABBITMQ_PASSWORD, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: SPRING_RABBITMQ_PASSWORD}}}
+            # 只要公鑰：它驗證 token，不簽發 token。
+            - {name: JWT_PUBLIC_KEY, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: JWT_PUBLIC_KEY}}}
+          ports: [{containerPort: 8080}]
+          startupProbe: {httpGet: {path: /actuator/health/liveness, port: 8080}, failureThreshold: 30, periodSeconds: 5, timeoutSeconds: 3}
+          readinessProbe: {httpGet: {path: /actuator/health/readiness, port: 8080}, periodSeconds: 5}
+          # timeoutSeconds 明寫，理由同 backend：預設的 1 秒會把「暫時忙不過來」誤判成「死了」。
+          livenessProbe: {httpGet: {path: /actuator/health/liveness, port: 8080}, periodSeconds: 10, timeoutSeconds: 5}
+          resources: {requests: {cpu: 500m, memory: 512Mi}, limits: {cpu: "2", memory: 1Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: order-service, namespace: flashsale, labels: {flashsale.dev/stage: application}}
+spec: {selector: {app: order-service}, ports: [{name: http, port: 8080, targetPort: 8080}]}
+---
 # P5：後台儀表板的聚合來源。只讀 Kafka、只寫自己的讀取模型，不在任何使用者的請求路徑上。
 #
 # 單副本是刻意的：Kafka 的 topic 有 3 個分區，多副本會讓同一個消費者群組的分區重新分配，

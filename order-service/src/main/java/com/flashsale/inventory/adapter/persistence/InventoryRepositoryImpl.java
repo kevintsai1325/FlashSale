@@ -29,5 +29,10 @@ public class InventoryRepositoryImpl implements InventoryRepository {
     public Inventory save(Inventory inventory) { return jpaRepository.save(inventory); }
 
     @Override
+    public List<Inventory> findAllByFlashSaleIdIn(List<Long> flashSaleIds) {
+        return flashSaleIds.isEmpty() ? List.of() : jpaRepository.findByFlashSaleIdIn(flashSaleIds);
+    }
+
+    @Override
     public List<Inventory> findAll() { return jpaRepository.findAll(); }
 }

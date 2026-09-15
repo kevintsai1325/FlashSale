@@ -5,7 +5,7 @@ import com.flashsale.common.config.RabbitConfig;
 import com.flashsale.common.messaging.ConsumedMessageGuard;
 import com.flashsale.common.messaging.EventTypes;
 import com.flashsale.common.messaging.OutboxWriter;
-import com.flashsale.common.metrics.PurchaseMetrics;
+import com.flashsale.common.metrics.OrderMetrics;
 import com.flashsale.inventory.application.InventoryRepository;
 import com.flashsale.inventory.domain.Inventory;
 import com.flashsale.order.application.OrderEventPublisher;
@@ -34,11 +34,11 @@ public class OrderPurchaseConsumer {
     private final OutboxWriter outboxWriter;
     private final OrderEventPublisher orderEventPublisher;
     private final ObjectMapper objectMapper;
-    private final PurchaseMetrics purchaseMetrics;
+    private final OrderMetrics orderMetrics;
 
     public OrderPurchaseConsumer(ConsumedMessageGuard consumedMessageGuard, InventoryRepository inventoryRepository,
                                   OrderRepository orderRepository, OrderStatusHistoryRepository orderStatusHistoryRepository,
-                                  ObjectMapper objectMapper, PurchaseMetrics purchaseMetrics,
+                                  ObjectMapper objectMapper, OrderMetrics orderMetrics,
                                   OutboxWriter outboxWriter,
                                   OrderEventPublisher orderEventPublisher) {
         this.consumedMessageGuard = consumedMessageGuard;
@@ -46,7 +46,7 @@ public class OrderPurchaseConsumer {
         this.orderRepository = orderRepository;
         this.orderStatusHistoryRepository = orderStatusHistoryRepository;
         this.objectMapper = objectMapper;
-        this.purchaseMetrics = purchaseMetrics;
+        this.orderMetrics = orderMetrics;
         this.outboxWriter = outboxWriter;
         this.orderEventPublisher = orderEventPublisher;
     }
@@ -88,6 +88,6 @@ public class OrderPurchaseConsumer {
         // 那個是說給 purchase-service 聽的命令式回覆，這個是說給所有人聽的「發生了什麼」。
         orderEventPublisher.orderCreated(savedOrder, event.productName(), event.quantity(), event.unitPrice());
 
-        purchaseMetrics.orderCreated();
+        orderMetrics.orderCreated();
     }
 }

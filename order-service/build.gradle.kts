@@ -48,6 +48,7 @@ dependencies {
     testImplementation("org.testcontainers:rabbitmq:1.20.1")
     testImplementation("org.testcontainers:kafka:1.20.1")
     testImplementation("org.awaitility:awaitility:4.2.2")
+    testImplementation("io.micrometer:micrometer-observation-test")
 }
 
 tasks.withType<Test> {

@@ -221,7 +221,7 @@ sequenceDiagram
 
 - **冪等鍵**:`Idempotency-Key` 標頭與 `(userId, flashSaleId)` 一起查詢 `purchase_requests`;
   重送同一把鍵會直接回傳既有的 request,不會重複預扣。
-- **Redis 預扣**:[`reserve-stock.lua`](../../backend/src/main/resources/redis/reserve-stock.lua)
+- **Redis 預扣**:[`reserve-stock.lua`](../../purchase-service/src/main/resources/redis/reserve-stock.lua)
   在單一原子腳本內完成 `GET` 與 `DECRBY`。回傳剩餘量代表成功,`-1` 代表庫存不足,
   `-2` 代表 key 不存在——此時 backend 會從 Postgres 重新灌入庫存(`SETNX`)並重試一次,
   仍失敗才回 `503 STOCK_GATEWAY_UNAVAILABLE`。

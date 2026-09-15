@@ -32,15 +32,26 @@ import java.time.Duration;
 public class MonolithFlashSaleClient implements FlashSaleClient {
 
     private final RestClient restClient;
+    private final RestClient inventoryRestClient;
 
     public MonolithFlashSaleClient(RestClient.Builder restClientBuilder,
                                     @Value("${app.flash-sale.base-url}") String baseUrl,
+                                    @Value("${app.order-service.base-url}") String orderServiceBaseUrl,
                                     @Value("${app.flash-sale.connect-timeout-ms}") long connectTimeoutMs,
                                     @Value("${app.flash-sale.read-timeout-ms}") long readTimeoutMs) {
         // 用自動設定的 builder 而不是自己 new：追蹤的 header 傳播是掛在 builder 上的，
         // 自己 new 一個會讓 trace 在跨服務的那一跳斷掉。
         this.restClient = restClientBuilder
             .baseUrl(baseUrl)
+            .requestFactory(ClientHttpRequestFactories.get(ClientHttpRequestFactorySettings.DEFAULTS
+                .withConnectTimeout(Duration.ofMillis(connectTimeoutMs))
+                .withReadTimeout(Duration.ofMillis(readTimeoutMs))))
+            .build();
+        // P5：庫存跟著訂單搬到 order-service，所以這兩個呼叫從此打不同的服務。
+        // 兩個 RestClient 而不是一個加上完整網址：逾時預算是一樣的，但下游是兩個獨立的
+        // 失敗源，混在一個 client 裡會讓「是誰慢了」在追蹤上變得難以分辨。
+        this.inventoryRestClient = restClientBuilder
+            .baseUrl(orderServiceBaseUrl)
             .requestFactory(ClientHttpRequestFactories.get(ClientHttpRequestFactorySettings.DEFAULTS
                 .withConnectTimeout(Duration.ofMillis(connectTimeoutMs))
                 .withReadTimeout(Duration.ofMillis(readTimeoutMs))))
@@ -73,7 +84,7 @@ public class MonolithFlashSaleClient implements FlashSaleClient {
     @Override
     public int availableQuantity(Long flashSaleId) {
         try {
-            AvailableQuantityResponse response = restClient.get()
+            AvailableQuantityResponse response = inventoryRestClient.get()
                 .uri("/internal/flash-sales/{id}/available-quantity", flashSaleId)
                 .retrieve()
                 .body(AvailableQuantityResponse.class);

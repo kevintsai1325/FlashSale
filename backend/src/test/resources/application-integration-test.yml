@@ -7,10 +7,6 @@ spring:
       ddl-auto: validate
   flyway:
     enabled: true
-  rabbitmq:
-    listener:
-      simple:
-        auto-startup: false
 
 app:
   scheduling:

@@ -22,8 +22,15 @@ data:
   APP_FLASH_SALE_BASE_URL: http://backend:8080
   # backend 問 analytics-service 要後台儀表板的聚合數字。
   APP_ANALYTICS_BASE_URL: http://analytics-service:8080
+  # backend 與 purchase-service 問 order-service 要訂單與庫存。
+  APP_ORDER_SERVICE_BASE_URL: http://order-service:8080
+  # order-service 問 backend 要「進行中的活動」清單（庫存對帳用）。
+  APP_PLATFORM_BASE_URL: http://backend:8080
   SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
   MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+  APP_HEALTH_PURCHASE_SERVICE_URL: http://purchase-service:8080/actuator/health/readiness
+  APP_HEALTH_ORDER_SERVICE_URL: http://order-service:8080/actuator/health/readiness
+  APP_HEALTH_ANALYTICS_SERVICE_URL: http://analytics-service:8080/actuator/health/readiness
   APP_HEALTH_MAILPIT_URL: http://mailpit:8025/api/v1/info
   APP_HEALTH_ZIPKIN_URL: http://zipkin:9411/health
   APP_HEALTH_FRONTEND_URL: http://frontend/internal-health

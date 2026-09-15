@@ -26,11 +26,19 @@ public class SystemHealthService {
     @Autowired
     public SystemHealthService(
             HealthEndpoint healthEndpoint,
+            @Value("${app.health.purchase-service-url:}") String purchaseServiceUrl,
+            @Value("${app.health.order-service-url:}") String orderServiceUrl,
+            @Value("${app.health.analytics-service-url:}") String analyticsServiceUrl,
             @Value("${app.health.mailpit-url:}") String mailpitUrl,
             @Value("${app.health.zipkin-url:}") String zipkinUrl,
             @Value("${app.health.frontend-url:}") String frontendUrl,
             @Value("${app.health.nginx-url:}") String nginxUrl) {
         this(healthEndpoint, Clock.systemUTC(), List.of(
+            // P5：三個兄弟服務。它們是獨立的行程，只能用 HTTP 探測 ——
+            // 拆分之後「系統健康」不再是單一個 actuator 端點答得出來的問題。
+            new NamedProbe("purchase-service", new HttpHealthProbe(purchaseServiceUrl)),
+            new NamedProbe("order-service", new HttpHealthProbe(orderServiceUrl)),
+            new NamedProbe("analytics-service", new HttpHealthProbe(analyticsServiceUrl)),
             new NamedProbe("Mailpit", new HttpHealthProbe(mailpitUrl)),
             new NamedProbe("Zipkin", new HttpHealthProbe(zipkinUrl)),
             new NamedProbe("Frontend", new HttpHealthProbe(frontendUrl)),
@@ -49,7 +57,6 @@ public class SystemHealthService {
         services.add(core("Backend", "readinessState", checkedAt));
         services.add(core("PostgreSQL", "db", checkedAt));
         services.add(core("Redis", "redis", checkedAt));
-        services.add(core("RabbitMQ", "rabbit", checkedAt));
 
         List<CompletableFuture<ServiceHealthView>> futures = probes.stream()
             .map(probe -> CompletableFuture.supplyAsync(() -> probe.check(checkedAt), probeExecutor))
@@ -57,7 +64,10 @@ public class SystemHealthService {
         CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
         futures.stream().map(CompletableFuture::join).forEach(services::add);
 
-        boolean coreDown = services.subList(0, 4).stream()
+        // 「核心」只算 platform 自己的三項。兄弟服務掛掉確實會讓系統降級，但把它們算進
+        // 總體狀態，會讓 analytics（一個純讀取的旁路）壞掉時整個儀表板變紅 ——
+        // 那種警報很快就會被無視。它們各自的狀態在清單裡看得到。
+        boolean coreDown = services.subList(0, 3).stream()
             .anyMatch(service -> service.status() != ServiceHealthStatus.UP);
         return new SystemHealthView(coreDown ? ServiceHealthStatus.DOWN : ServiceHealthStatus.UP,
             checkedAt, List.copyOf(services));

@@ -1,6 +1,5 @@
 package com.flashsale.admin.application.dto;
 
-import com.flashsale.order.application.dto.PurchaseRequestView;
 
 import java.math.BigDecimal;
 import java.time.Instant;

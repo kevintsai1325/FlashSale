@@ -32,6 +32,19 @@ psql_purchase_exec() {
     --no-psqlrc -X -v ON_ERROR_STOP=1 -U flashsale -d purchase "$@"
 }
 
+# P5：訂單、訂單明細、狀態歷程、付款紀錄與庫存都在 order-service 的資料庫。
+psql_order_exec() {
+  compose exec -T postgres-order psql \
+    --no-psqlrc -X -v ON_ERROR_STOP=1 -U flashsale -d orders "$@"
+}
+
+# P5：analytics 的投影完全是衍生資料，刪掉之後可以靠重放事件重建 ——
+# 但示範資料的清理仍然要動它，否則後台儀表板會繼續顯示那些已經不存在的訂單。
+psql_analytics_exec() {
+  compose exec -T postgres-analytics psql \
+    --no-psqlrc -X -v ON_ERROR_STOP=1 -U flashsale -d analytics "$@"
+}
+
 db_scalar() {
   psql_exec -Atq -c "$1"
 }
@@ -53,7 +66,7 @@ require_local_docker_engine() {
 
 require_healthy_stack() {
   local service container_id health
-  local services=(postgres postgres-purchase redis rabbitmq kafka mailpit zipkin backend purchase-service frontend nginx)
+  local services=(postgres postgres-purchase postgres-order postgres-analytics redis rabbitmq kafka mailpit zipkin backend purchase-service order-service analytics-service frontend nginx)
 
   for service in "${services[@]}"; do
     container_id="$(compose ps -q "$service")"
@@ -265,22 +278,6 @@ WHERE id = (
     LIMIT 1
 );
 
-INSERT INTO inventory (
-    flash_sale_id, total_quantity, available_quantity, reserved_quantity, sold_quantity, version
-)
-SELECT fs.id, 1000, 1000, 0, 0, 0
-FROM flash_sales fs
-JOIN products p ON p.id = fs.product_id
-WHERE p.name = :'demo_product_name'
-ORDER BY fs.id
-LIMIT 1
-ON CONFLICT (flash_sale_id) DO UPDATE
-SET total_quantity = EXCLUDED.total_quantity,
-    available_quantity = EXCLUDED.available_quantity,
-    reserved_quantity = EXCLUDED.reserved_quantity,
-    sold_quantity = EXCLUDED.sold_quantity,
-    version = inventory.version + 1;
-
 COMMIT;
 SQL
 
@@ -291,6 +288,11 @@ SQL
     return 1
   fi
 
+  # P5：庫存在 order-service 的資料庫，所以要另外打一次。
+  # 沒有跨資料庫的交易——活動已經建好了，庫存失敗時活動會留著沒有庫存的狀態。
+  # 這個工具是本機示範用的，失敗就重跑；正式流程走的是後台 API，那邊的順序是
+  # 「先宣告庫存、再提交活動」（見 AdminFlashSaleService）。
+  seed_order_inventory "$flash_sale_id" || return 1
   redis_reset_exact_stock "$flash_sale_id" || return 1
 
   printf 'Demo data is ready (product=%s, flashSale=%s).\n' "$product_id" "$flash_sale_id"
@@ -313,6 +315,85 @@ purchase_request_predicate() {
     predicate="${predicate} OR flash_sale_id IN (${sale_ids})"
   fi
   printf '%s' "$predicate"
+}
+
+# order-service 與 analytics 的示範資料。與 purchase 那側一樣，id 清單必須先在 platform
+# 查好再傳進來 —— 那兩個資料庫裡沒有 users / products / flash_sales。
+order_target_predicate() {
+  local user_ids="$1" sale_ids="$2" predicate
+  predicate="$(demo_prefix_predicate order_no)"
+  if [[ -n "$user_ids" ]]; then
+    predicate="${predicate} OR user_id IN (${user_ids})"
+  fi
+  if [[ -n "$sale_ids" ]]; then
+    predicate="${predicate} OR flash_sale_id IN (${sale_ids})"
+  fi
+  printf '%s' "$predicate"
+}
+
+list_order_cleanup_counts() {
+  local predicate sale_ids
+  predicate="$(order_target_predicate "$1" "$2")"
+  sale_ids="$2"
+  psql_order_exec -At <<SQL
+WITH demo_orders AS (
+    SELECT id FROM orders WHERE ${predicate}
+)
+SELECT 'order.orders=' || (SELECT count(*) FROM demo_orders)
+UNION ALL SELECT 'order.order_items=' || (SELECT count(*) FROM order_items WHERE order_id IN (SELECT id FROM demo_orders))
+UNION ALL SELECT 'order.payment_records=' || (SELECT count(*) FROM payment_records WHERE order_id IN (SELECT id FROM demo_orders))
+UNION ALL SELECT 'order.order_status_history=' || (SELECT count(*) FROM order_status_history WHERE order_id IN (SELECT id FROM demo_orders))
+UNION ALL SELECT 'order.inventory=' || (SELECT count(*) FROM inventory WHERE ${sale_ids:+flash_sale_id IN ($sale_ids)}${sale_ids:-false});
+SQL
+}
+
+delete_order_demo_data() {
+  local predicate sale_ids
+  predicate="$(order_target_predicate "$1" "$2")"
+  sale_ids="$2"
+  psql_order_exec <<SQL
+BEGIN;
+
+CREATE TEMP TABLE demo_order_ids ON COMMIT DROP AS
+SELECT id FROM orders WHERE ${predicate};
+
+DELETE FROM outbox_events
+WHERE $(demo_prefix_predicate aggregate_id)
+   OR (aggregate_type = 'Order' AND aggregate_id IN (SELECT id::text FROM demo_order_ids));
+DELETE FROM consumed_messages WHERE $(demo_prefix_predicate message_id);
+DELETE FROM payment_records WHERE order_id IN (SELECT id FROM demo_order_ids);
+DELETE FROM order_status_history WHERE order_id IN (SELECT id FROM demo_order_ids);
+DELETE FROM order_items WHERE order_id IN (SELECT id FROM demo_order_ids);
+DELETE FROM orders WHERE id IN (SELECT id FROM demo_order_ids);
+DELETE FROM inventory WHERE ${sale_ids:+flash_sale_id IN ($sale_ids)}${sale_ids:-false};
+
+COMMIT;
+SQL
+}
+
+# 投影是衍生資料，但不清掉的話後台儀表板會繼續顯示已經不存在的訂單。
+delete_analytics_demo_data() {
+  local user_ids="$1" sale_ids="$2"
+  psql_analytics_exec <<SQL
+BEGIN;
+DELETE FROM order_projection WHERE ${user_ids:+user_id IN ($user_ids) OR }${sale_ids:+flash_sale_id IN ($sale_ids) OR }false;
+DELETE FROM purchase_request_projection WHERE ${user_ids:+user_id IN ($user_ids) OR }${sale_ids:+flash_sale_id IN ($sale_ids) OR }false;
+COMMIT;
+SQL
+}
+
+seed_order_inventory() {
+  local flash_sale_id="$1"
+  psql_order_exec <<SQL
+INSERT INTO inventory (flash_sale_id, total_quantity, available_quantity, reserved_quantity, sold_quantity, version)
+VALUES (${flash_sale_id}, 1000, 1000, 0, 0, 0)
+ON CONFLICT (flash_sale_id) DO UPDATE
+SET total_quantity = EXCLUDED.total_quantity,
+    available_quantity = EXCLUDED.available_quantity,
+    reserved_quantity = EXCLUDED.reserved_quantity,
+    sold_quantity = EXCLUDED.sold_quantity,
+    version = inventory.version + 1;
+SQL
 }
 
 list_purchase_cleanup_counts() {
@@ -366,32 +447,12 @@ WITH demo_users AS (
     SELECT id FROM products WHERE name = :'demo_product_name'
 ), demo_sales AS (
     SELECT id FROM flash_sales WHERE product_id IN (SELECT id FROM demo_products)
-), demo_orders AS (
-    -- 拆庫前這裡還要繞經 purchase_requests 才找得到訂單；現在 orders 自己有 flash_sale_id。
-    SELECT id FROM orders
-    WHERE user_id IN (SELECT id FROM demo_users)
-       OR ${order_predicate}
-       OR flash_sale_id IN (SELECT id FROM demo_sales)
-       OR id IN (SELECT order_id FROM order_items WHERE product_id IN (SELECT id FROM demo_products))
-), demo_outbox AS (
-    SELECT id FROM outbox_events
-    WHERE ${aggregate_predicate}
-       OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (
-              SELECT purchase_request_id::text FROM orders WHERE id IN (SELECT id FROM demo_orders)))
-       OR (aggregate_type = 'Order' AND aggregate_id IN (SELECT id::text FROM demo_orders))
 )
 SELECT 'users=' || (SELECT count(*) FROM demo_users)
 UNION ALL SELECT 'products=' || (SELECT count(*) FROM demo_products)
 UNION ALL SELECT 'flash_sales=' || (SELECT count(*) FROM demo_sales)
-UNION ALL SELECT 'inventory=' || (SELECT count(*) FROM inventory WHERE flash_sale_id IN (SELECT id FROM demo_sales))
-UNION ALL SELECT 'orders=' || (SELECT count(*) FROM demo_orders)
-UNION ALL SELECT 'order_items=' || (SELECT count(*) FROM order_items WHERE order_id IN (SELECT id FROM demo_orders) OR product_id IN (SELECT id FROM demo_products))
-UNION ALL SELECT 'payment_records=' || (SELECT count(*) FROM payment_records WHERE order_id IN (SELECT id FROM demo_orders))
-UNION ALL SELECT 'order_status_history=' || (SELECT count(*) FROM order_status_history WHERE order_id IN (SELECT id FROM demo_orders))
 UNION ALL SELECT 'refresh_tokens=' || (SELECT count(*) FROM refresh_tokens WHERE user_id IN (SELECT id FROM demo_users))
 UNION ALL SELECT 'notification_deliveries=' || (SELECT count(*) FROM notification_deliveries WHERE user_id IN (SELECT id FROM demo_users))
-UNION ALL SELECT 'outbox_events=' || (SELECT count(*) FROM demo_outbox)
-UNION ALL SELECT 'consumed_messages=' || (SELECT count(*) FROM consumed_messages WHERE ${message_predicate} OR message_id IN (SELECT id::text FROM demo_outbox))
 UNION ALL SELECT 'api_audit_logs=' || (SELECT count(*) FROM api_audit_logs WHERE user_id IN (SELECT id FROM demo_users) OR trace_id IN (:'demo_user_trace_id', :'demo_admin_trace_id'));
 SQL
 }
@@ -424,6 +485,7 @@ cleanup_demo_data() {
   printf 'Cleanup targets in database %s:\n' "$database_name"
   list_cleanup_counts
   list_purchase_cleanup_counts "$demo_user_ids" "$sale_ids"
+  list_order_cleanup_counts "$demo_user_ids" "$sale_ids"
 
   if [[ -n "$sale_ids" ]]; then
     IFS=',' read -ra demo_sale_ids <<<"$sale_ids"
@@ -439,6 +501,8 @@ cleanup_demo_data() {
   # 位置在稽核柵欄之前，因為柵欄一旦開啟就必須走到 end_audit_cleanup_barrier —— 
   # 在柵欄裡提早 return 會把它留在開啟狀態。
   delete_purchase_demo_data "$demo_user_ids" "$sale_ids" || return 1
+  delete_order_demo_data "$demo_user_ids" "$sale_ids" || return 1
+  delete_analytics_demo_data "$demo_user_ids" "$sale_ids" || return 1
   begin_audit_cleanup_barrier "$demo_user_ids" || return 1
 
   local cleanup_status=0 remaining_audits
@@ -459,34 +523,9 @@ SELECT id FROM products WHERE name = :'demo_product_name';
 CREATE TEMP TABLE demo_sale_ids ON COMMIT DROP AS
 SELECT id FROM flash_sales WHERE product_id IN (SELECT id FROM demo_product_ids);
 
-CREATE TEMP TABLE demo_order_ids ON COMMIT DROP AS
-SELECT id FROM orders
-WHERE user_id IN (SELECT id FROM demo_user_ids)
-   OR ${order_predicate}
-   OR flash_sale_id IN (SELECT id FROM demo_sale_ids)
-   OR id IN (SELECT order_id FROM order_items WHERE product_id IN (SELECT id FROM demo_product_ids));
-
-CREATE TEMP TABLE demo_outbox_ids ON COMMIT DROP AS
-SELECT id FROM outbox_events
-WHERE ${aggregate_predicate}
-   OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (
-          SELECT purchase_request_id::text FROM orders WHERE id IN (SELECT id FROM demo_order_ids)))
-   OR (aggregate_type = 'Order' AND aggregate_id IN (SELECT id::text FROM demo_order_ids));
-
-DELETE FROM consumed_messages
-WHERE ${message_predicate}
-   OR message_id IN (SELECT id::text FROM demo_outbox_ids);
-DELETE FROM outbox_events WHERE id IN (SELECT id FROM demo_outbox_ids);
 DELETE FROM api_audit_logs
 WHERE user_id IN (SELECT id FROM demo_user_ids)
    OR trace_id IN (:'demo_user_trace_id', :'demo_admin_trace_id');
-DELETE FROM payment_records WHERE order_id IN (SELECT id FROM demo_order_ids);
-DELETE FROM order_status_history WHERE order_id IN (SELECT id FROM demo_order_ids);
-DELETE FROM order_items
-WHERE order_id IN (SELECT id FROM demo_order_ids)
-   OR product_id IN (SELECT id FROM demo_product_ids);
-DELETE FROM orders WHERE id IN (SELECT id FROM demo_order_ids);
-DELETE FROM inventory WHERE flash_sale_id IN (SELECT id FROM demo_sale_ids);
 DELETE FROM flash_sales WHERE id IN (SELECT id FROM demo_sale_ids);
 DELETE FROM refresh_tokens WHERE user_id IN (SELECT id FROM demo_user_ids);
 DELETE FROM notification_deliveries WHERE user_id IN (SELECT id FROM demo_user_ids);

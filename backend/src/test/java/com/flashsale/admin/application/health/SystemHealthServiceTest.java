@@ -26,6 +26,9 @@ class SystemHealthServiceTest {
             new HttpHealthProbe.Result(ServiceHealthStatus.DOWN, "狀態異常"));
         SystemHealthService service = new SystemHealthService(endpoint,
             Clock.fixed(now, ZoneOffset.UTC), List.of(
+                // P5：兄弟服務也是 HTTP 探測。它們掛掉不該讓總體狀態變紅 ——
+                // 這條測試守的就是那個分界。
+                new SystemHealthService.NamedProbe("order-service", downProbe),
                 new SystemHealthService.NamedProbe("Mailpit", downProbe),
                 new SystemHealthService.NamedProbe("Zipkin", downProbe),
                 new SystemHealthService.NamedProbe("Frontend", downProbe),
@@ -36,6 +39,7 @@ class SystemHealthServiceTest {
 
         assertThat(result.overallStatus()).isEqualTo(ServiceHealthStatus.UP);
         assertThat(result.checkedAt()).isEqualTo(now);
+        // 3 個本地核心（Backend / PostgreSQL / Redis）加上 5 個探測。
         assertThat(result.services()).hasSize(8);
     }
 

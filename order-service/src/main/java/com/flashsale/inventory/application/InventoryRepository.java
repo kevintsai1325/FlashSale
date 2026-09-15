@@ -9,6 +9,7 @@ public interface InventoryRepository {
     Optional<Inventory> findByFlashSaleId(Long flashSaleId);
     Inventory save(Inventory inventory);
 
-    // Admin dashboard aggregate (com.flashsale.admin).
+    // 批次查詢給 platform 的店面列表與後台儀表板用（見 InternalInventoryController）。
+    List<Inventory> findAllByFlashSaleIdIn(List<Long> flashSaleIds);
     List<Inventory> findAll();
 }

@@ -140,6 +140,9 @@ cleanup_redis_failure_prevents_database_delete() {
   list_cleanup_counts() { :; }
   list_purchase_cleanup_counts() { :; }
   delete_purchase_demo_data() { :; }
+  list_order_cleanup_counts() { :; }
+  delete_order_demo_data() { :; }
+  delete_analytics_demo_data() { :; }
   redis_delete_exact_stock() { return 19; }
   psql_exec() {
     database_delete_started=1
@@ -163,6 +166,7 @@ seed_rebuilds_the_exact_redis_stock() {
   register_user_if_absent() { :; }
   psql_exec() { while IFS= read -r _line; do :; done; }
   db_scalar() { printf '7|42\n'; }
+  seed_order_inventory() { :; }
   redis_reset_exact_stock() { redis_reset_id="$1"; }
 
   seed_demo_data >/dev/null 2>&1 || return 1
@@ -247,6 +251,9 @@ cleanup_audit_barrier_begin_failure_prevents_database_delete() {
   list_cleanup_counts() { :; }
   list_purchase_cleanup_counts() { :; }
   delete_purchase_demo_data() { :; }
+  list_order_cleanup_counts() { :; }
+  delete_order_demo_data() { :; }
+  delete_analytics_demo_data() { :; }
   redis_delete_exact_stock() { :; }
   begin_audit_cleanup_barrier() { return 1; }
   psql_exec() {
@@ -275,6 +282,9 @@ cleanup_always_ends_audit_barrier_even_after_delete_failure() {
   list_cleanup_counts() { :; }
   list_purchase_cleanup_counts() { :; }
   delete_purchase_demo_data() { :; }
+  list_order_cleanup_counts() { :; }
+  delete_order_demo_data() { :; }
+  delete_analytics_demo_data() { :; }
   redis_delete_exact_stock() { :; }
   begin_audit_cleanup_barrier() { :; }
   psql_exec() { return 1; }
@@ -296,6 +306,7 @@ seed_redis_failure_is_reported() {
   register_user_if_absent() { :; }
   psql_exec() { while IFS= read -r _line; do :; done; }
   db_scalar() { printf '7|42\n'; }
+  seed_order_inventory() { :; }
   redis_reset_exact_stock() { return 23; }
 
   if seed_demo_data >/dev/null 2>&1; then

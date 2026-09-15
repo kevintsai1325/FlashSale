@@ -1,8 +1,6 @@
 package com.flashsale.testsupport;
 
-import com.flashsale.common.config.RabbitConfig;
 import org.junit.jupiter.api.AfterEach;
-import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -13,9 +11,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.containers.KafkaContainer;
-import org.testcontainers.containers.RabbitMQContainer;
-import org.testcontainers.utility.DockerImageName;
 
 /**
  * Shared base for every backend IT: Postgres/Redis/RabbitMQ containers are started exactly once
@@ -34,8 +29,7 @@ import org.testcontainers.utility.DockerImageName;
  * *before* this class's own {@code @BeforeEach} methods would run — a {@code @BeforeEach} reset
  * here would wipe out the fixture data a test just asked for.
  *
- * <p>The integration-test profile disables annotation-driven scheduling and Rabbit listener
- * auto-startup. Scheduler and consumer beans remain available, so tests explicitly invoke each
+ * <p>The integration-test profile disables annotation-driven scheduling. Scheduler and consumer beans remain available, so tests explicitly invoke each
  * asynchronous step and can safely share these containers without cached contexts racing for
  * messages or modifying another test's rows. Production keeps both background mechanisms enabled
  * by default.
@@ -54,16 +48,10 @@ public abstract class AbstractIntegrationTest {
     protected static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
         .withCommand("postgres", "-c", "max_connections=300");
     protected static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
-    protected static final RabbitMQContainer RABBITMQ = new RabbitMQContainer("rabbitmq:3.13-management-alpine");
-    // P4 步驟 3：領域事件走 Kafka。沒有它的話，Kafka-bound 的 outbox 列會發佈失敗、
-    // 永遠停在未發佈 —— 而「outbox 全部發佈完成」是既有的驗收條件之一。
-    protected static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.1"));
 
     static {
         POSTGRES.start();
         REDIS.start();
-        RABBITMQ.start();
-        KAFKA.start();
     }
 
     @DynamicPropertySource
@@ -73,36 +61,22 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
-        registry.add("spring.rabbitmq.host", RABBITMQ::getHost);
-        registry.add("spring.rabbitmq.port", RABBITMQ::getAmqpPort);
-        registry.add("spring.rabbitmq.username", RABBITMQ::getAdminUsername);
-        registry.add("spring.rabbitmq.password", RABBITMQ::getAdminPassword);
-        registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
         registry.add("spring.mail.host", () -> "localhost");
         registry.add("spring.mail.port", () -> "2525");
     }
 
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private StringRedisTemplate redisTemplate;
-    @Autowired private RabbitAdmin rabbitAdmin;
 
     @AfterEach
     void resetSharedInfrastructure() {
         jdbcTemplate.execute("""
             TRUNCATE TABLE
-                order_status_history, payment_records, order_items, orders,
-                inventory, flash_sales, refresh_tokens, notification_deliveries, products, users,
-                outbox_events, consumed_messages, api_audit_logs
+                flash_sales, refresh_tokens, notification_deliveries, products, users, api_audit_logs
             RESTART IDENTITY CASCADE
             """);
+        // P5 之後 platform 不收發任何訊息，所以這裡沒有佇列要清 —— Redis 仍然要清，
+        // 排程的分散式鎖住在那裡。
         redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
-        rabbitAdmin.purgeQueue(RabbitConfig.CREATE_ORDER_QUEUE, false);
-        rabbitAdmin.purgeQueue(RabbitConfig.CREATE_ORDER_DLQ, false);
-        rabbitAdmin.purgeQueue(RabbitConfig.STOCK_RELEASE_QUEUE, false);
-        rabbitAdmin.purgeQueue(RabbitConfig.STOCK_RELEASE_DLQ, false);
-        // P4：終態回寫給 purchase-service 的佇列。backend 也宣告它（見 RabbitConfig 的註解），
-        // 所以測試之間必須一起清乾淨，否則上一個測試留下的終態事件會漏到下一個測試。
-        rabbitAdmin.purgeQueue(RabbitConfig.PURCHASE_RESOLVED_QUEUE, false);
-        rabbitAdmin.purgeQueue(RabbitConfig.PURCHASE_RESOLVED_DLQ, false);
     }
 }

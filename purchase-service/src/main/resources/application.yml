@@ -67,6 +67,9 @@ app:
     read-timeout-ms: ${APP_FLASH_SALE_READ_TIMEOUT_MS:1000}
     cache-ttl-ms: ${APP_FLASH_SALE_CACHE_TTL_MS:2000}
     cache-grace-ms: ${APP_FLASH_SALE_CACHE_GRACE_MS:60000}
+  order-service:
+    # P5：Redis 庫存鍵的種入值改向 order-service 要 —— 庫存跟著訂單搬走了。
+    base-url: ${APP_ORDER_SERVICE_BASE_URL:http://localhost:8083}
 
 server:
   port: 8080

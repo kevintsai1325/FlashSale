@@ -23,4 +23,7 @@ public class FlashSaleRepositoryImpl implements FlashSaleRepository {
 
     @Override
     public FlashSale save(FlashSale flashSale) { return jpaRepository.save(flashSale); }
+
+    @Override
+    public void flush() { jpaRepository.flush(); }
 }

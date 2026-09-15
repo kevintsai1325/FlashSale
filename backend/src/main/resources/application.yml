@@ -22,47 +22,14 @@ spring:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: ${SPRING_DATA_REDIS_PORT:6379}
-  kafka:
-    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      # acks=all + 冪等 producer：outbox 已經保證「至少一次」，這裡要的是不要更差。
-      # acks=1 在 leader 掛掉時會靜默掉訊息，而 outbox 那邊已經標記成已發佈，永遠補不回來。
-      acks: all
-      properties:
-        enable.idempotence: true
-        # 逾時要短：發送被包在 outbox 的資料庫交易裡（見 OutboxPublisher.publishBatch），
-        # broker 掛掉時預設的 delivery.timeout.ms=120000 會讓那個交易連同列鎖卡住兩分鐘。
-        max.block.ms: 5000
-        request.timeout.ms: 5000
-        delivery.timeout.ms: 10000
-    template:
-      observation-enabled: true
-    listener:
-      observation-enabled: true
-  rabbitmq:
-    host: ${SPRING_RABBITMQ_HOST:localhost}
-    port: ${SPRING_RABBITMQ_PORT:5672}
-    username: ${SPRING_RABBITMQ_USERNAME:guest}
-    password: ${SPRING_RABBITMQ_PASSWORD:guest}
-    template:
-      observation-enabled: true
-    listener:
-      simple:
-        concurrency: 5
-        observation-enabled: true
-        retry:
-          enabled: true
-          max-attempts: 3
-          initial-interval: 1000
-          multiplier: 2.0
-          max-interval: 10000
-        default-requeue-rejected: false
-
 app:
   audit:
     retention-days: 30
+  order-service:
+    # 訂單與庫存的所有權在 order-service（P5）。店面列表與後台都要跨服務問它。
+    base-url: ${APP_ORDER_SERVICE_BASE_URL:http://localhost:8083}
+    connect-timeout-ms: ${APP_ORDER_SERVICE_CONNECT_TIMEOUT_MS:500}
+    read-timeout-ms: ${APP_ORDER_SERVICE_READ_TIMEOUT_MS:2000}
   analytics:
     # 後台儀表板的聚合來源。不經 Nginx，走叢集內部的 Service 名稱。
     # 逾時比搶購熱路徑寬鬆：後台頁面的使用者願意等，而失敗只會讓那一區塊顯示 0。
@@ -70,6 +37,9 @@ app:
     connect-timeout-ms: ${APP_ANALYTICS_CONNECT_TIMEOUT_MS:500}
     read-timeout-ms: ${APP_ANALYTICS_READ_TIMEOUT_MS:2000}
   health:
+    purchase-service-url: ${APP_HEALTH_PURCHASE_SERVICE_URL:}
+    order-service-url: ${APP_HEALTH_ORDER_SERVICE_URL:}
+    analytics-service-url: ${APP_HEALTH_ANALYTICS_SERVICE_URL:}
     mailpit-url: ${APP_HEALTH_MAILPIT_URL:}
     zipkin-url: ${APP_HEALTH_ZIPKIN_URL:}
     frontend-url: ${APP_HEALTH_FRONTEND_URL:}
@@ -108,7 +78,8 @@ management:
       roles: ADMIN
       group:
         readiness:
-          include: readinessState,db,redis,rabbit
+          # P5 之後 platform 不連 RabbitMQ 也不連 Kafka —— 它剩下的都是同步的請求／回應。
+          include: readinessState,db,redis
         liveness:
           include: livenessState
   health:
