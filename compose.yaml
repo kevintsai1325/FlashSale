@@ -250,6 +250,33 @@ services:
       timeout: 5s
       retries: 10
 
+  # P6：即時大屏的串流運算（Application mode，job 烤進映像）。
+  flink-jobmanager:
+    build: ./flink-jobs
+    command: ["standalone-job", "--job-classname", "com.flashsale.flink.RealtimeDashboardJob"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 2
+        parallelism.default: 1
+    ports:
+      - "8082:8081"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  flink-taskmanager:
+    build: ./flink-jobs
+    command: ["taskmanager"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 2
+    depends_on:
+      - flink-jobmanager
+
   frontend:
     build: ./frontend
     depends_on:

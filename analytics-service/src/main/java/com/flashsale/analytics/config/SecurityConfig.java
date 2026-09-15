@@ -9,8 +9,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtGra
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * 這個服務沒有面向使用者的端點：只有 platform 會在叢集內部呼叫它的 /internal/。
- * 仍然驗證 token 是為了讓 /actuator/metrics 維持 ADMIN 限定 —— 與其他三個服務同一套。
+ * 這個服務的對外端點只有一個：即時大屏的 SSE（P6）。其餘都是 /internal/，
+ * 只有 platform 會在叢集內部呼叫。兩者都需要驗證 token —— 大屏顯示的是全站成交金額。
  */
 @Configuration
 public class SecurityConfig {
@@ -34,6 +34,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/internal/**").permitAll()
+                // P6：即時大屏。它顯示全站成交金額，所以要 ADMIN。
+                .requestMatchers("/api/realtime/**").hasRole("ADMIN")
                 .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN")
                 .anyRequest().denyAll())
             .oauth2ResourceServer(oauth2 -> oauth2

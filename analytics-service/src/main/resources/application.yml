@@ -35,6 +35,11 @@ app:
     purchase-events-topic: flashsale.purchase-events
     # 消費者群組。改名等於從頭重放一次（offset 從 earliest 開始）。
     group-id: ${APP_KAFKA_GROUP_ID:analytics-service}
+    # P6：Flink 算好的即時指標。
+    realtime-metrics-topic: flashsale.realtime-metrics
+    # 刻意用不同的群組：即時大屏只關心「現在」，而讀取模型要從頭重放。
+    # 共用一個群組會讓其中一方的 offset 需求綁架另一方。
+    realtime-group-id: ${APP_KAFKA_REALTIME_GROUP_ID:analytics-realtime}
 
 server:
   port: 8080

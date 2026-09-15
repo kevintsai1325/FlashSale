@@ -17,6 +17,7 @@ import { AdminFlashSalesPage } from './features/admin/AdminFlashSalesPage'
 import { AdminNotificationsPage } from './features/admin/AdminNotificationsPage'
 import { AdminNotificationDetailPage } from './features/admin/AdminNotificationDetailPage'
 import { SystemHealthPage } from './features/admin/SystemHealthPage'
+import { RealtimeDashboardPage } from './features/admin/RealtimeDashboardPage'
 
 export const router = createBrowserRouter([
   { path: '/flash-sales/:id', element: <FlashSaleDetailPage /> },
@@ -43,6 +44,7 @@ export const router = createBrowserRouter([
       { path: '/admin/notifications', element: <AdminNotificationsPage /> },
       { path: '/admin/notifications/:id', element: <AdminNotificationDetailPage /> },
       { path: '/admin/system-health', element: <SystemHealthPage /> },
+      { path: '/admin/realtime', element: <RealtimeDashboardPage /> },
     ],
   },
 ])

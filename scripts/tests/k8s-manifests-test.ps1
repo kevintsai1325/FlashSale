@@ -73,7 +73,7 @@ $loadTestResources = @($resources | Where-Object {
 })
 Assert-True ($loadTestResources.Count -eq 0) 'Base kustomization must not render load-test resources.'
 
-Assert-True ($resources.Count -eq 43) "Expected exactly 43 rendered resources, got $($resources.Count)."
+Assert-True ($resources.Count -eq 46) "Expected exactly 46 rendered resources, got $($resources.Count)."
 
 # PDB 是常態設定而不是實驗器材：自願性中斷（節點維護、叢集升級）時要保住最低可用副本數。
 $budgets = @($resources | Where-Object { $_.kind -eq 'PodDisruptionBudget' })
@@ -110,6 +110,7 @@ $expectedStages = @{
         'Deployment/purchase-service', 'Service/purchase-service',
         'Deployment/analytics-service', 'Service/analytics-service',
         'Deployment/order-service', 'Service/order-service',
+        'Deployment/flink-jobmanager', 'Service/flink-jobmanager', 'Deployment/flink-taskmanager',
         'Deployment/frontend', 'Service/frontend', 'Deployment/nginx', 'Service/nginx')
 }
 $allowedStages = @($expectedStages.Keys)
@@ -125,13 +126,13 @@ foreach ($stage in $expectedStages.Keys) {
     Assert-True (($actual -join ',') -eq ($expected -join ',')) "$stage stage resources do not match the staged deployment contract."
 }
 
-$expectedWorkloads = @('postgres', 'postgres-purchase', 'postgres-analytics', 'postgres-order', 'redis', 'rabbitmq', 'kafka', 'mailpit', 'zipkin', 'backend', 'purchase-service', 'order-service', 'analytics-service', 'frontend', 'nginx')
+$expectedWorkloads = @('postgres', 'postgres-purchase', 'postgres-analytics', 'postgres-order', 'redis', 'rabbitmq', 'kafka', 'mailpit', 'zipkin', 'backend', 'purchase-service', 'order-service', 'analytics-service', 'flink-jobmanager', 'flink-taskmanager', 'frontend', 'nginx')
 $workloads = @($resources | Where-Object { $_.kind -in @('Deployment', 'StatefulSet') })
-Assert-True ($workloads.Count -eq 15) "Expected exactly fifteen workloads, got $($workloads.Count)."
+Assert-True ($workloads.Count -eq 17) "Expected exactly seventeen workloads, got $($workloads.Count)."
 Assert-True ((@($workloads | ForEach-Object { $_.metadata.name } | Sort-Object) -join ',') -eq (($expectedWorkloads | Sort-Object) -join ',')) 'The rendered workload names do not match the baseline contract.'
 # backend 與 purchase-service 是水平擴展的工作負載（Week 8 P1 / P4）。其餘皆為單副本：四個 StatefulSet 是有狀態
 # 相依元件，mailpit/zipkin/frontend/nginx 不在搶購的關鍵路徑上，擴展它們不會改善任何指標。
-$singleReplicaWorkloads = @('postgres', 'postgres-purchase', 'postgres-analytics', 'postgres-order', 'redis', 'rabbitmq', 'kafka', 'mailpit', 'zipkin', 'analytics-service', 'frontend', 'nginx')
+$singleReplicaWorkloads = @('postgres', 'postgres-purchase', 'postgres-analytics', 'postgres-order', 'redis', 'rabbitmq', 'kafka', 'mailpit', 'zipkin', 'analytics-service', 'flink-jobmanager', 'flink-taskmanager', 'frontend', 'nginx')
 foreach ($workload in $workloads) {
     $name = $workload.metadata.name
     if ($singleReplicaWorkloads -contains $name) {
@@ -170,6 +171,7 @@ foreach ($name in @('postgres', 'postgres-purchase', 'postgres-analytics', 'post
 
 $localImages = @{ backend = 'flashsale-backend:local'; 'purchase-service' = 'flashsale-purchase-service:local';
     'analytics-service' = 'flashsale-analytics-service:local'; 'order-service' = 'flashsale-order-service:local';
+    'flink-jobmanager' = 'flashsale-flink-jobs:local'; 'flink-taskmanager' = 'flashsale-flink-jobs:local';
     frontend = 'flashsale-frontend:local'; nginx = 'flashsale-nginx:local' }
 foreach ($name in $localImages.Keys) {
     $workload = @($workloads | Where-Object { $_.metadata.name -eq $name })[0]
@@ -266,4 +268,4 @@ Assert-True ($postgresArgs -match 'max_connections=(\d+)') 'postgres must pin ma
 $maxConnections = [int]$Matches[1]
 Assert-True (($maxReplicas * $poolSize) -le $maxConnections) "HPA maxReplicas ($maxReplicas) x HikariCP pool ($poolSize) = $($maxReplicas * $poolSize) exceeds postgres max_connections ($maxConnections). Raise max_connections in k8s/base/data.yaml first."
 
-Write-Host 'PASS: Kubernetes rendered-resource contract (43 resources, exact stages, minimal RBAC, 15 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, backend rollout strategy, backend PodDisruptionBudget, liveness timeout, the HPA/connection-pool ceiling, and the purchase-service split).'
+Write-Host 'PASS: Kubernetes rendered-resource contract (46 resources, exact stages, minimal RBAC, 17 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, backend rollout strategy, backend PodDisruptionBudget, liveness timeout, the HPA/connection-pool ceiling, and the purchase-service split).'

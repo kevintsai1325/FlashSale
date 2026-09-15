@@ -172,6 +172,85 @@ kind: Service
 metadata: {name: analytics-service, namespace: flashsale, labels: {flashsale.dev/stage: application}}
 spec: {selector: {app: analytics-service}, ports: [{name: http, port: 8080, targetPort: 8080}]}
 ---
+# P6：即時大屏的串流運算。Flink 的 **Application mode** —— job 的 jar 烤進映像，
+# JobManager 啟動時直接跑它，沒有「提交 job」這個步驟。
+#
+# 為什麼不用 Flink Kubernetes Operator：它的價值在 job 的自動 failover 與版本升級，
+# 單節點展示不出來，卻要多裝 cert-manager 與一組 CRD，而 operator 的非同步 reconcile
+# 會讓「kubectl diff 對 k8s/base 無漂移」這個既有的驗證手段失效。
+# 升級路徑：要多個 job、要自動 failover 時，整段換成 FlinkDeployment CR。
+#
+# JobManager 掛掉時 job 不會自動重新提交 —— 這是上面那個取捨的代價，寫出來而不是假裝沒有。
+# 「重啟 TaskManager 後聚合仍正確」那條驗收用的是 TaskManager，它由 Deployment 自動拉回來。
+apiVersion: v1
+kind: Service
+metadata: {name: flink-jobmanager, namespace: flashsale, labels: {flashsale.dev/stage: application}}
+spec:
+  selector: {app: flink-jobmanager}
+  ports:
+    - {name: rpc, port: 6123, targetPort: 6123}
+    - {name: blob, port: 6124, targetPort: 6124}
+    - {name: ui, port: 8081, targetPort: 8081}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: flink-jobmanager, namespace: flashsale, labels: {flashsale.dev/stage: application}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: flink-jobmanager}}
+  template:
+    metadata: {labels: {app: flink-jobmanager}}
+    spec:
+      containers:
+        - name: jobmanager
+          image: flashsale-flink-jobs:local
+          imagePullPolicy: Never
+          args: ["standalone-job", "--job-classname", "com.flashsale.flink.RealtimeDashboardJob"]
+          env:
+            - {name: KAFKA_BOOTSTRAP_SERVERS, value: "kafka:9092"}
+            # jobmanager.rpc.address 必須是 TaskManager 連得到的名字，也就是 Service 名稱。
+            # 預設是 Pod 的 hostname，那個名字在叢集裡解析不到，症狀是 TaskManager 一直重連。
+            - name: FLINK_PROPERTIES
+              value: |
+                jobmanager.rpc.address: flink-jobmanager
+                taskmanager.numberOfTaskSlots: 2
+                parallelism.default: 1
+          ports: [{containerPort: 6123}, {containerPort: 6124}, {containerPort: 8081}]
+          startupProbe: {tcpSocket: {port: 6123}, failureThreshold: 40, periodSeconds: 5, timeoutSeconds: 3}
+          readinessProbe: {httpGet: {path: /config, port: 8081}, initialDelaySeconds: 10, periodSeconds: 10, timeoutSeconds: 5}
+          livenessProbe: {tcpSocket: {port: 6123}, initialDelaySeconds: 30, periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 250m, memory: 768Mi}, limits: {cpu: "1", memory: 1536Mi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: flink-taskmanager, namespace: flashsale, labels: {flashsale.dev/stage: application}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: flink-taskmanager}}
+  template:
+    metadata: {labels: {app: flink-taskmanager}}
+    spec:
+      containers:
+        - name: taskmanager
+          image: flashsale-flink-jobs:local
+          imagePullPolicy: Never
+          args: ["taskmanager"]
+          env:
+            - {name: KAFKA_BOOTSTRAP_SERVERS, value: "kafka:9092"}
+            - name: FLINK_PROPERTIES
+              value: |
+                jobmanager.rpc.address: flink-jobmanager
+                taskmanager.numberOfTaskSlots: 2
+                # 固定 RPC 埠。Flink 的預設是 0（隨機），而隨機埠沒辦法做 tcpSocket 探測 ——
+                # 症狀是 TaskManager 明明已經向 ResourceManager 註冊成功，
+                # readiness 卻一直失敗、Pod 被反覆重啟。
+                taskmanager.rpc.port: 6122
+          ports: [{containerPort: 6122}]
+          startupProbe: {tcpSocket: {port: 6122}, failureThreshold: 40, periodSeconds: 5, timeoutSeconds: 3}
+          readinessProbe: {tcpSocket: {port: 6122}, initialDelaySeconds: 10, periodSeconds: 10, timeoutSeconds: 5}
+          livenessProbe: {tcpSocket: {port: 6122}, initialDelaySeconds: 30, periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 500m, memory: 1Gi}, limits: {cpu: "2", memory: 2Gi}}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata: {name: frontend, namespace: flashsale, labels: {flashsale.dev/stage: application}}

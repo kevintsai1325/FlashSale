@@ -31,6 +31,9 @@ export function AdminNav() {
         <NavLink to="/admin/system-health" className={navLinkClassName}>
           系統健康度
         </NavLink>
+        <NavLink to="/admin/realtime" className={navLinkClassName}>
+          即時大屏
+        </NavLink>
         <Link to="/" className="admin-nav-link">
           回前台
         </Link>

@@ -1,0 +1,112 @@
+.realtime-page {
+  padding: 1.5rem;
+  background: #0f172a;
+  color: #e2e8f0;
+  min-height: calc(100vh - 3.5rem);
+}
+
+.realtime-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.realtime-header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+}
+
+.realtime-live { color: #4ade80; }
+.realtime-offline { color: #fbbf24; }
+
+.realtime-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.realtime-tile {
+  background: #1e293b;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.realtime-tile h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.realtime-value {
+  margin: 0;
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.realtime-chart {
+  background: #1e293b;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  min-height: 9rem;
+}
+
+.realtime-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 7rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.realtime-bars li {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.realtime-bar {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  background: #38bdf8;
+  border-radius: 2px 2px 0 0;
+}
+
+.realtime-top {
+  background: #1e293b;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.realtime-top h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.realtime-top-list {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.realtime-top-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+}
+
+.realtime-top-qty {
+  font-variant-numeric: tabular-nums;
+  color: #38bdf8;
+}
+
+.realtime-empty {
+  color: #94a3b8;
+  margin: 0;
+}

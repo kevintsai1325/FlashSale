@@ -31,6 +31,15 @@ export function setAccessToken(token: string | null) {
   accessToken = token
 }
 
+/**
+ * 即時大屏用。EventSource 不能帶自訂標頭，所以那條 SSE 連線是用 fetch 開的，
+ * 而它需要拿到目前的 token —— 把 token 放進查詢字串是另一個選項，但那會讓它
+ * 出現在 Nginx 的存取日誌裡。
+ */
+export function getAccessToken() {
+  return accessToken
+}
+
 function notifySessionExpired() {
   if (!sessionExpirationNotified) {
     sessionExpirationNotified = true

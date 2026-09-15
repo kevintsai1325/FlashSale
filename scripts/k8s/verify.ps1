@@ -49,7 +49,7 @@ Assert-KubernetesPreflight -KubectlCommand $KubectlCommand | Out-Null
 foreach ($name in @('postgres', 'postgres-purchase', 'postgres-analytics', 'postgres-order', 'redis', 'rabbitmq', 'kafka')) {
     Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'rollout', 'status', "statefulset/$name", '--timeout=240s') -Operation "waiting for statefulset/$name" | Out-Null
 }
-foreach ($name in @('mailpit', 'zipkin', 'backend', 'purchase-service', 'order-service', 'analytics-service', 'frontend', 'nginx')) {
+foreach ($name in @('mailpit', 'zipkin', 'backend', 'purchase-service', 'order-service', 'analytics-service', 'flink-jobmanager', 'flink-taskmanager', 'frontend', 'nginx')) {
     Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'rollout', 'status', "deployment/$name", '--timeout=240s') -Operation "waiting for deployment/$name" | Out-Null
 }
 
@@ -64,7 +64,7 @@ function Get-DesiredReplicas {
 
 $expectedAppPods = 0
 foreach ($name in @('postgres', 'postgres-purchase', 'postgres-analytics', 'postgres-order', 'redis', 'rabbitmq', 'kafka')) { $expectedAppPods += Get-DesiredReplicas -Kind 'statefulset' -Name $name }
-foreach ($name in @('mailpit', 'zipkin', 'backend', 'purchase-service', 'order-service', 'analytics-service', 'frontend', 'nginx')) { $expectedAppPods += Get-DesiredReplicas -Kind 'deployment' -Name $name }
+foreach ($name in @('mailpit', 'zipkin', 'backend', 'purchase-service', 'order-service', 'analytics-service', 'flink-jobmanager', 'flink-taskmanager', 'frontend', 'nginx')) { $expectedAppPods += Get-DesiredReplicas -Kind 'deployment' -Name $name }
 
 $backendDesired = Get-DesiredReplicas -Kind 'deployment' -Name 'backend'
 $backendReady = (Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'get', 'deployment', 'backend', '-o', 'jsonpath={.status.readyReplicas}') -Operation 'checking Backend readiness' | Out-String).Trim()

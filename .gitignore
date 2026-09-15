@@ -6,8 +6,12 @@ backend/build/
 purchase-service/build/
 order-service/build/
 analytics-service/build/
+flink-jobs/build/
 purchase-service/.gradle/
 backend/.gradle/
+order-service/.gradle/
+analytics-service/.gradle/
+flink-jobs/.gradle/
 frontend/node_modules/
 frontend/dist/
 .worktrees/

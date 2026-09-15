@@ -244,6 +244,73 @@ Kafka 上看得一清二楚（同一個 `orderId` 連續出現兩次）。
 這個缺陷在拆分前一直存在,只是沒有人看得見:RabbitMQ 的消費端本來就會去重,
 重複投遞被安靜地吸收掉。直到事件被送上 Kafka、被一個會累加的下游讀到,它才顯形。
 
+## 即時大屏：Flink 的串流聚合（P6）
+
+```
+order-service ──OrderCreated──▶ Kafka(order-events) ──▶ Flink ──▶ Kafka(realtime-metrics)
+                                                                        │
+                                                       analytics-service ─SSE─▶ 瀏覽器大屏
+```
+
+三個數字：**秒級 GMV**、**每秒訂單數**、**近 10 秒熱門商品 Top 5**。
+
+### 為什麼是事件時間，不是處理時間
+
+視窗以事件自己的 `createdAt` 切，不是以 Flink 收到它的時間。兩者在正常情況下差幾毫秒，
+但在「消費端落後之後追上」時差很多 —— 用處理時間的話，追上的那一秒會把前面累積的
+全部算進同一個視窗，大屏上出現一根不存在的尖峰。
+
+代價是**大屏必然落後**：watermark 是「已見的最大事件時間減去允許的亂序（2 秒）」，
+所以最後兩秒的視窗要等到更晚的事件到達才會定案。流量停止時，最後幾個視窗就停在那裡不動 ——
+那不是壞掉，是「串流沒有結束，只是暫停了」。示範腳本因此一秒送一位買家，
+而不是把流量一次打完。
+
+### 遲到事件：重算並覆蓋，不是累加
+
+`allowedLateness` 再給 10 秒。這段時間內遲到的事件會讓**已經送出的視窗重新計算並再送一次**。
+下游因此必須以 `windowEnd` 為鍵覆蓋先前的值 —— 累加會把同一秒算兩次。
+這個規則貫穿整條鏈：Flink 的 sink 用 `AT_LEAST_ONCE`（重複投遞是冪等的，
+不必為 `EXACTLY_ONCE` 付出被 checkpoint 間隔綁住的延遲）、analytics 的 hub 以 type 保留最新一筆、
+大屏的 `mergeGmv` 以 windowEnd 覆蓋（有測試守著）。
+
+### GMV 的定義：下單金額，不是已付款金額
+
+這個系統的付款是模擬的、由使用者手動觸發，用已付款金額做即時大屏會是一條幾乎不動的線。
+驗收時與 `order_db` 的 `SUM(total_amount)` 對照，兩邊用的是同一個定義。
+
+### 驗收：串流的聚合與資料庫的真相對得起來
+
+`scripts/k8s/verify-realtime-gmv.sh` 把 Kafka 上的 GMV 視窗加總，與 `order_db` 的
+`SUM(total_amount)` 比對。兩者來源不同（一個是事件流、一個是資料庫的 row），
+對得起來才代表事件流沒有漏掉、也沒有重複算。
+
+**比較的是「已經關閉的視窗」那一段時間，不是「到現在為止」。** 上界取 Flink 這一側
+最大的 `windowEnd` —— 那是串流明確宣告「這之前我算完了」的時刻。拿「到現在為止」去比，
+量到的是 watermark 的必然延遲，不是正確性。
+
+### 為什麼不用 Flink Kubernetes Operator
+
+用的是 **Application mode**：job 的 jar 烤進映像，JobManager 啟動時直接跑它，
+沒有「提交 job」這個步驟 —— 而那個步驟在宣告式部署裡本來就很難做對
+（誰負責提交？重啟之後誰再提交一次？）。
+
+Operator 的價值在 job 的自動 failover 與版本升級，單節點展示不出來，卻要多裝 cert-manager
+與一組 CRD，而它的非同步 reconcile 會讓「`kubectl diff` 對 `k8s/base` 無漂移」這個既有的
+驗證手段失效。代價寫在 manifest 裡：**JobManager 掛掉時 job 不會自動重新提交。**
+
+### 大屏的傳輸：SSE，而且不用 EventSource
+
+單向推送用 SSE：瀏覽器端有內建的自動重連，Nginx 端只要關掉 buffering，
+伺服器端只是一個 `SseEmitter`。WebSocket 要多一套握手、心跳與重連，換來的雙向能力用不到。
+
+但**沒有用 `EventSource`** —— 它不能帶 `Authorization` 標頭，而這支端點需要 ADMIN。
+另一個選項是把 token 放進查詢字串，那會讓它出現在 Nginx 的存取日誌裡。
+所以用 `fetch` + `ReadableStream` 自己解析 SSE，自動重連也自己寫。
+
+Nginx 那側三個設定缺一不可：`proxy_buffering off`（否則事件會攢在緩衝區，
+大屏變成每隔幾十秒跳一次）、`proxy_http_version 1.1` 加空的 `Connection` 標頭、
+以及夠長的 `proxy_read_timeout`（大屏會開著一整天）。
+
 ## 核心搶購資料流
 
 搶購 API 是「接受後非同步完成」的設計:HTTP 端只做「能不能買」與「Redis 預扣」,真正建立訂單
