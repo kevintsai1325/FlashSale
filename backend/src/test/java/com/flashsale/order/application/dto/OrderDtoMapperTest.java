@@ -30,6 +30,6 @@ class OrderDtoMapperTest {
     }
 
     private Order orderWithProductSnapshot() {
-        return Order.createPendingPayment(42L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
+        return Order.createPendingPayment(42L, 7L, 700L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
     }
 }

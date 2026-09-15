@@ -42,7 +42,7 @@ class PaymentControllerTest {
     @Test
     void submitPaymentReturnsProductSnapshots() throws Exception {
         Order order = Order.createPendingPayment(
-            42L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
+            42L, 7L, 700L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
         order.pay();
         when(submitPaymentService.submit(101L, 42L, PaymentResult.SUCCESS)).thenReturn(order);
 

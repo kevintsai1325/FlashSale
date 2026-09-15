@@ -73,7 +73,8 @@ public class OrderPurchaseConsumer {
         Product product = productRepository.findById(event.productId())
             .orElseThrow(() -> new IllegalStateException("Product " + event.productId() + " not found"));
         Order order = Order.createPendingPayment(
-            event.userId(), event.productId(), product.getName(), event.quantity(), event.unitPrice());
+            event.userId(), event.flashSaleId(), event.purchaseRequestId(),
+            event.productId(), product.getName(), event.quantity(), event.unitPrice());
         Order savedOrder = orderRepository.save(order);
         orderStatusHistoryRepository.record(savedOrder.getId(), null, OrderStatus.PENDING_PAYMENT);
 

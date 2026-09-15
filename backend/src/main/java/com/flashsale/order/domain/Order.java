@@ -22,6 +22,14 @@ public class Order {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    // 訂單自己記得來自哪一場活動、哪一筆搶購請求。補償流程需要 flashSaleId 才能釋放庫存，
+    // 而 purchase_requests 已經是別的服務的資料 —— 反查它就是跨服務查詢。
+    @Column(name = "flash_sale_id")
+    private Long flashSaleId;
+
+    @Column(name = "purchase_request_id")
+    private Long purchaseRequestId;
+
     @Column(name = "total_amount", nullable = false)
     private BigDecimal totalAmount;
 
@@ -40,10 +48,13 @@ public class Order {
 
     protected Order() {}
 
-    public static Order createPendingPayment(Long userId, Long productId, String productName, int quantity, BigDecimal unitPrice) {
+    public static Order createPendingPayment(Long userId, Long flashSaleId, Long purchaseRequestId, Long productId,
+                                              String productName, int quantity, BigDecimal unitPrice) {
         Order order = new Order();
         order.orderNo = "ORD-" + UUID.randomUUID();
         order.userId = userId;
+        order.flashSaleId = flashSaleId;
+        order.purchaseRequestId = purchaseRequestId;
         order.totalAmount = unitPrice.multiply(BigDecimal.valueOf(quantity));
         order.status = OrderStatus.PENDING_PAYMENT;
         order.paymentDueAt = Instant.now().plus(15, ChronoUnit.MINUTES);
@@ -82,6 +93,8 @@ public class Order {
     public Long getId() { return id; }
     public String getOrderNo() { return orderNo; }
     public Long getUserId() { return userId; }
+    public Long getFlashSaleId() { return flashSaleId; }
+    public Long getPurchaseRequestId() { return purchaseRequestId; }
     public BigDecimal getTotalAmount() { return totalAmount; }
     public OrderStatus getStatus() { return status; }
     public Instant getPaymentDueAt() { return paymentDueAt; }

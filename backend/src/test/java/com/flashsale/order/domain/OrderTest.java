@@ -10,12 +10,12 @@ import static org.assertj.core.api.Assertions.*;
 class OrderTest {
 
     private Order pendingOrder() {
-        return Order.createPendingPayment(1L, 10L, "Test Product", 2, new BigDecimal("9.99"));
+        return Order.createPendingPayment(1L, 7L, 700L, 10L, "Test Product", 2, new BigDecimal("9.99"));
     }
 
     @Test
     void createsOrderItemWithProductNameSnapshot() {
-        Order order = Order.createPendingPayment(1L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
+        Order order = Order.createPendingPayment(1L, 7L, 700L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
 
         OrderItem item = order.getItems().getFirst();
 
@@ -61,7 +61,7 @@ class OrderTest {
 
     @Test
     void totalQuantitySumsAllItems() {
-        Order order = Order.createPendingPayment(1L, 10L, "Test Product", 3, new BigDecimal("9.99"));
+        Order order = Order.createPendingPayment(1L, 7L, 700L, 10L, "Test Product", 3, new BigDecimal("9.99"));
         assertThat(order.totalQuantity()).isEqualTo(3);
     }
 }

@@ -82,7 +82,7 @@ class OrderControllerTest {
 
     private Order orderWithProductSnapshot() {
         Order order = Order.createPendingPayment(
-            42L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
+            42L, 7L, 700L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
         ReflectionTestUtils.setField(order, "id", 101L);
         return order;
     }
