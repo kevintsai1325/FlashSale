@@ -16,6 +16,7 @@ import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.method.support.ModelAndViewContainer;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -42,7 +43,7 @@ class PaymentControllerTest {
     @Test
     void submitPaymentReturnsProductSnapshots() throws Exception {
         Order order = Order.createPendingPayment(
-            42L, 7L, 700L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
+            42L, 7L, UUID.fromString("11111111-1111-1111-1111-111111111111"), 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
         order.pay();
         when(submitPaymentService.submit(101L, 42L, PaymentResult.SUCCESS)).thenReturn(order);
 

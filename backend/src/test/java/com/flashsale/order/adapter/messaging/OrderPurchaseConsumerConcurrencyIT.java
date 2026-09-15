@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.jdbc.Sql;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -54,7 +55,7 @@ class OrderPurchaseConsumerConcurrencyIT extends AbstractIntegrationTest {
             BUYER_ID);
     }
 
-    private Message messageFor(long purchaseRequestId, long outboxEventId) throws Exception {
+    private Message messageFor(UUID purchaseRequestId, long outboxEventId) throws Exception {
         CreateOrderRequestedEvent event = new CreateOrderRequestedEvent(
             purchaseRequestId, BUYER_ID, 1L, 1L, 1, new BigDecimal("9.99"));
         MessageProperties properties = new MessageProperties();
@@ -76,7 +77,7 @@ class OrderPurchaseConsumerConcurrencyIT extends AbstractIntegrationTest {
                 // 根本碰不到列鎖。
                 barrier.await(10, TimeUnit.SECONDS);
                 try {
-                    consumer.handle(messageFor(id, 1000L + id));
+                    consumer.handle(messageFor(new UUID(0L, id), 1000L + id));
                     return true;
                 } catch (RuntimeException expectedWhenStockIsGone) {
                     // 庫存賣完之後，剩下的消費會撞上「Redis/Postgres 庫存漂移」這個防護，

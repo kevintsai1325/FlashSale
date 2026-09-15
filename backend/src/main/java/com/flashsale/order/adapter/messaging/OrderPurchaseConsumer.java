@@ -80,7 +80,7 @@ public class OrderPurchaseConsumer {
 
         // 終態回寫給 purchase-service。與建單在同一個交易裡寫進 outbox，
         // 所以「訂單建立了但搶購請求還停在 PENDING」不會是一個持久的狀態。
-        outboxWriter.write("PurchaseRequest", String.valueOf(event.purchaseRequestId()), EventTypes.PURCHASE_RESOLVED,
+        outboxWriter.write("PurchaseRequest", event.purchaseRequestId().toString(), EventTypes.PURCHASE_RESOLVED,
             new PurchaseResolvedEvent(event.purchaseRequestId(), "SUCCEEDED", savedOrder.getId()));
 
         purchaseMetrics.orderCreated();

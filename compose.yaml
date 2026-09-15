@@ -72,6 +72,7 @@ services:
       APP_HEALTH_ZIPKIN_URL: http://zipkin:9411/health
       APP_HEALTH_FRONTEND_URL: http://frontend/internal-health
       APP_HEALTH_NGINX_URL: http://nginx:8080/internal-health
+      APP_PURCHASE_SERVICE_BASE_URL: http://purchase-service:8080
     depends_on:
       postgres:
         condition: service_healthy

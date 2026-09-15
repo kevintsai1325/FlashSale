@@ -10,12 +10,10 @@ import com.flashsale.common.exception.NotFoundException;
 import com.flashsale.common.web.ApiAuditLogJpaRepository;
 import com.flashsale.order.application.OrderRepository;
 import com.flashsale.order.application.OrderStatusHistoryRepository;
-import com.flashsale.order.application.PurchaseRequestRepository;
 import com.flashsale.order.application.dto.PurchaseRequestView;
 import com.flashsale.order.domain.Order;
 import com.flashsale.order.domain.OrderStatus;
 import com.flashsale.order.domain.OrderStatusHistory;
-import com.flashsale.order.domain.PurchaseRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -43,16 +41,13 @@ public class AdminOrderQueryService {
     private static final Duration CORRELATION_WINDOW = Duration.ofMinutes(5);
 
     private final OrderRepository orderRepository;
-    private final PurchaseRequestRepository purchaseRequestRepository;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
     private final ApiAuditLogJpaRepository apiAuditLogRepository;
 
     public AdminOrderQueryService(OrderRepository orderRepository,
-                                   PurchaseRequestRepository purchaseRequestRepository,
                                    OrderStatusHistoryRepository orderStatusHistoryRepository,
                                    ApiAuditLogJpaRepository apiAuditLogRepository) {
         this.orderRepository = orderRepository;
-        this.purchaseRequestRepository = purchaseRequestRepository;
         this.orderStatusHistoryRepository = orderStatusHistoryRepository;
         this.apiAuditLogRepository = apiAuditLogRepository;
     }
@@ -77,9 +72,7 @@ public class AdminOrderQueryService {
             .map(i -> new AdminOrderItemView(i.getProductId(), i.getQuantity(), i.getUnitPrice()))
             .toList();
 
-        PurchaseRequestView purchaseRequest = purchaseRequestRepository.findByOrderId(orderId)
-            .map(AdminOrderQueryService::toPurchaseRequestView)
-            .orElse(null);
+        PurchaseRequestView purchaseRequest = toPurchaseRequestView(order);
 
         List<OrderStatusHistory> historyEntities = orderStatusHistoryRepository.findByOrderId(orderId);
         List<OrderStatusHistoryView> statusHistory = historyEntities.stream()
@@ -107,7 +100,19 @@ public class AdminOrderQueryService {
             statusHistory, relatedApiLogs);
     }
 
-    private static PurchaseRequestView toPurchaseRequestView(PurchaseRequest request) {
-        return new PurchaseRequestView(request.getRequestId(), request.getStatus().name(), request.getOrderId());
+    /**
+     * 拆庫前這是去 purchase_requests 查一筆回來；現在全部由訂單自己的欄位推導。
+     *
+     * 狀態固定是 SUCCEEDED 而不是查來的：**訂單存在本身就是搶購成功的證明** ——
+     * 訂單只由建單成功的那條路徑產生，而那條路徑同時把終態改成 SUCCEEDED。
+     * 推導得出來的東西不值得為它跨一次服務。
+     *
+     * purchaseRequestId 為 null 的是 V4 migration 之前建立的舊訂單，那時還沒有這個欄位。
+     */
+    private static PurchaseRequestView toPurchaseRequestView(Order order) {
+        if (order.getPurchaseRequestId() == null) {
+            return null;
+        }
+        return new PurchaseRequestView(order.getPurchaseRequestId(), "SUCCEEDED", order.getId());
     }
 }

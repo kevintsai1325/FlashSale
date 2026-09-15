@@ -4,6 +4,7 @@ import com.flashsale.order.domain.Order;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -30,6 +31,6 @@ class OrderDtoMapperTest {
     }
 
     private Order orderWithProductSnapshot() {
-        return Order.createPendingPayment(42L, 7L, 700L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
+        return Order.createPendingPayment(42L, 7L, UUID.fromString("11111111-1111-1111-1111-111111111111"), 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
     }
 }

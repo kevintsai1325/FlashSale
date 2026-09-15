@@ -15,6 +15,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.jdbc.Sql;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -35,6 +36,8 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
     @Autowired OrderPurchaseConsumer consumer;
 
     private static final long BUYER_ID = 202L;
+    private static final UUID REQUEST_ONE = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID REQUEST_TWO = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     // orders.user_id 有外鍵指向 users。拆分前這一步是靠 HTTP 註冊帶出來的，
     // 現在測試直接從事件開始，就必須自己把買家種進去。
@@ -44,8 +47,8 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
             BUYER_ID, "consumer-it-" + BUYER_ID + "@example.com");
     }
 
-    private void requestOrder(long purchaseRequestId, long flashSaleId, long productId, int quantity) throws Exception {
-        outboxWriter.write("PurchaseRequest", String.valueOf(purchaseRequestId), EventTypes.CREATE_ORDER_REQUESTED,
+    private void requestOrder(UUID purchaseRequestId, long flashSaleId, long productId, int quantity) throws Exception {
+        outboxWriter.write("PurchaseRequest", purchaseRequestId.toString(), EventTypes.CREATE_ORDER_REQUESTED,
             new CreateOrderRequestedEvent(purchaseRequestId, BUYER_ID, flashSaleId, productId, quantity, new BigDecimal("9.99")));
         outboxPublisher.publishPending();
         Message message = rabbitTemplate.receive(RabbitConfig.CREATE_ORDER_QUEUE, 5_000);
@@ -57,7 +60,7 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
     @Sql("/db/testdata/inventory-fixtures.sql")
     void createsTheOrderDecrementsStockAndReportsTheTerminalStateBack() throws Exception {
         seedBuyer();
-        requestOrder(101L, 1L, 1L, 1);
+        requestOrder(REQUEST_ONE, 1L, 1L, 1);
 
         Integer orderCount = jdbcTemplate.queryForObject("select count(*) from orders", Integer.class);
         assertThat(orderCount).isEqualTo(1);
@@ -76,7 +79,7 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
         String resolvedPayload = jdbcTemplate.queryForObject(
             "select payload::text from outbox_events where event_type = 'PurchaseResolved'", String.class);
         assertThat(resolvedPayload)
-            .contains("\"purchaseRequestId\": 101")
+            .contains("\"purchaseRequestId\": \"" + REQUEST_ONE + "\"")
             .contains("\"status\": \"SUCCEEDED\"")
             .contains("\"orderId\": " + createdOrderId);
     }
@@ -93,7 +96,7 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
         jdbcTemplate.update("INSERT INTO inventory (id, flash_sale_id, total_quantity, available_quantity, reserved_quantity, sold_quantity, version) " +
             "VALUES (2, 2, 1, 1, 0, 0, 0)");
 
-        requestOrder(102L, 2L, 2L, 1);
+        requestOrder(REQUEST_TWO, 2L, 2L, 1);
 
         assertThat(meterRegistry.get("purchase.order.created").counter().count()).isGreaterThan(before);
     }

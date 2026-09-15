@@ -4,18 +4,19 @@ import com.flashsale.common.exception.ConflictException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
 
 class OrderTest {
 
     private Order pendingOrder() {
-        return Order.createPendingPayment(1L, 7L, 700L, 10L, "Test Product", 2, new BigDecimal("9.99"));
+        return Order.createPendingPayment(1L, 7L, UUID.fromString("11111111-1111-1111-1111-111111111111"), 10L, "Test Product", 2, new BigDecimal("9.99"));
     }
 
     @Test
     void createsOrderItemWithProductNameSnapshot() {
-        Order order = Order.createPendingPayment(1L, 7L, 700L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
+        Order order = Order.createPendingPayment(1L, 7L, UUID.fromString("11111111-1111-1111-1111-111111111111"), 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
 
         OrderItem item = order.getItems().getFirst();
 
@@ -61,7 +62,7 @@ class OrderTest {
 
     @Test
     void totalQuantitySumsAllItems() {
-        Order order = Order.createPendingPayment(1L, 7L, 700L, 10L, "Test Product", 3, new BigDecimal("9.99"));
+        Order order = Order.createPendingPayment(1L, 7L, UUID.fromString("11111111-1111-1111-1111-111111111111"), 10L, "Test Product", 3, new BigDecimal("9.99"));
         assertThat(order.totalQuantity()).isEqualTo(3);
     }
 }

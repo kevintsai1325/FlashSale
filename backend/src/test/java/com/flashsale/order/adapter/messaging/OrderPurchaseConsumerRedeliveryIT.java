@@ -30,12 +30,9 @@ class OrderPurchaseConsumerRedeliveryIT extends AbstractIntegrationTest {
     void redeliveredMessageWithTheSameOutboxEventIdDoesNotCreateASecondOrder() throws Exception {
         jdbcTemplate.update(
             "insert into users (id, email, password_hash, role, status) values (999, 'redelivery@example.com', 'x', 'USER', 'ACTIVE')");
-        jdbcTemplate.update(
-            "insert into purchase_requests (id, request_id, idempotency_key, user_id, flash_sale_id, status) " +
-            "values (999, gen_random_uuid(), 'redelivery-key', 999, 1, 'PENDING')");
 
         String payload = objectMapper.writeValueAsString(new java.util.HashMap<>() {{
-            put("purchaseRequestId", 999);
+            put("purchaseRequestId", "99900000-0000-0000-0000-000000000000");
             put("userId", 999);
             put("flashSaleId", 1);
             put("productId", 1);

@@ -8,11 +8,13 @@
 -- 刻意不加 flash_sale_id 的外鍵：flash_sales 屬於 platform、orders 屬於 order-service，
 -- P5 拆庫後這條外鍵會跨越服務邊界。現在加、下一階段再拆掉，等於做白工。
 ALTER TABLE orders ADD COLUMN flash_sale_id BIGINT;
-ALTER TABLE orders ADD COLUMN purchase_request_id BIGINT;
+-- 存的是 purchase-service 對外公開的 UUID，不是 purchase_requests 的 BIGSERIAL 主鍵：
+-- 跨服務參照只能用對方公開的識別碼，本地代理鍵是那個資料庫的實作細節。
+ALTER TABLE orders ADD COLUMN purchase_request_id UUID;
 
 UPDATE orders o
    SET flash_sale_id = pr.flash_sale_id,
-       purchase_request_id = pr.id
+       purchase_request_id = pr.request_id
   FROM purchase_requests pr
  WHERE pr.order_id = o.id;
 

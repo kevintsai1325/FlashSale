@@ -31,12 +31,9 @@ class OrderCreateDlqHandlerIT extends AbstractIntegrationTest {
     void dlqMessageMarksPurchaseRequestFailedAndWritesStockReleaseOutboxEvent() throws Exception {
         jdbcTemplate.update(
             "insert into users (id, email, password_hash, role, status) values (998, 'dlq@example.com', 'x', 'USER', 'ACTIVE')");
-        jdbcTemplate.update(
-            "insert into purchase_requests (id, request_id, idempotency_key, user_id, flash_sale_id, status) " +
-            "values (998, gen_random_uuid(), 'dlq-key', 998, 1, 'PENDING')");
 
         String payload = objectMapper.writeValueAsString(new HashMap<>() {{
-            put("purchaseRequestId", 998);
+            put("purchaseRequestId", "99800000-0000-0000-0000-000000000000");
             put("userId", 998);
             put("flashSaleId", 1);
             put("productId", 1);

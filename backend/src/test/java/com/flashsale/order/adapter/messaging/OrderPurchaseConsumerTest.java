@@ -13,6 +13,8 @@ import com.flashsale.order.application.OrderStatusHistoryRepository;
 import com.flashsale.order.application.event.CreateOrderRequestedEvent;
 import com.flashsale.order.application.event.PurchaseResolvedEvent;
 import com.flashsale.order.domain.Order;
+import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +37,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OrderPurchaseConsumerTest {
+
+    private static final UUID REQUEST_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     @Mock ConsumedMessageGuard consumedMessageGuard;
     @Mock InventoryRepository inventoryRepository;
@@ -71,7 +75,7 @@ class OrderPurchaseConsumerTest {
         AtomicReference<Order> savedOrder = new AtomicReference<>();
         stubHappyPath(savedOrder);
 
-        consumer.handle(messageFor(new CreateOrderRequestedEvent(101L, 202L, 303L, 404L, 1, new BigDecimal("1999.00")), 505L));
+        consumer.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 1, new BigDecimal("1999.00")), 505L));
 
         assertThat(savedOrder.get().getItems())
             .singleElement()
@@ -88,12 +92,12 @@ class OrderPurchaseConsumerTest {
         AtomicReference<Order> savedOrder = new AtomicReference<>();
         stubHappyPath(savedOrder);
 
-        consumer.handle(messageFor(new CreateOrderRequestedEvent(101L, 202L, 303L, 404L, 1, new BigDecimal("1999.00")), 505L));
+        consumer.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 1, new BigDecimal("1999.00")), 505L));
 
         ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
-        verify(outboxWriter).write(eq("PurchaseRequest"), eq("101"), eq("PurchaseResolved"), payload.capture());
+        verify(outboxWriter).write(eq("PurchaseRequest"), eq(REQUEST_ID.toString()), eq("PurchaseResolved"), payload.capture());
         assertThat(payload.getValue())
-            .isEqualTo(new PurchaseResolvedEvent(101L, "SUCCEEDED", 9001L));
+            .isEqualTo(new PurchaseResolvedEvent(REQUEST_ID, "SUCCEEDED", 9001L));
     }
 
     private Message messageFor(CreateOrderRequestedEvent event, Long outboxEventId) throws Exception {

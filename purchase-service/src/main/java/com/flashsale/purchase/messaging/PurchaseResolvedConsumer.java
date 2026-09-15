@@ -39,7 +39,7 @@ public class PurchaseResolvedConsumer {
     public void handle(Message message) throws IOException {
         PurchaseResolvedEvent event = objectMapper.readValue(message.getBody(), PurchaseResolvedEvent.class);
 
-        PurchaseRequest request = purchaseRequestRepository.findById(event.purchaseRequestId())
+        PurchaseRequest request = purchaseRequestRepository.findByRequestId(event.purchaseRequestId())
             .orElseThrow(() -> new IllegalStateException(
                 "PurchaseRequest " + event.purchaseRequestId() + " not found"));
 

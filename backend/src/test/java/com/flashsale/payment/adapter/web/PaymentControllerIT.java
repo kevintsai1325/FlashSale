@@ -63,12 +63,9 @@ class PaymentControllerIT extends AbstractIntegrationTest {
     void failedSimulatedPaymentCancelsOrderAndReleasesInventory() throws Exception {
         String token = registerAndLogin("pay-fail@example.com");
         jdbcTemplate.update(
-            "insert into orders (id, order_no, user_id, total_amount, status, payment_due_at) " +
-            "values (882, 'ORD-882', (select id from users where email = 'pay-fail@example.com'), 9.99, 'PENDING_PAYMENT', now() + interval '15 minutes')");
+            "insert into orders (id, order_no, user_id, total_amount, status, payment_due_at, flash_sale_id) " +
+            "values (882, 'ORD-882', (select id from users where email = 'pay-fail@example.com'), 9.99, 'PENDING_PAYMENT', now() + interval '15 minutes', 1)");
         jdbcTemplate.update("insert into order_items (order_id, product_id, product_name, quantity, unit_price) values (882, 1, 'Payment Failure Test Product', 1, 9.99)");
-        jdbcTemplate.update(
-            "insert into purchase_requests (request_id, idempotency_key, user_id, flash_sale_id, order_id, status) " +
-            "values (gen_random_uuid(), 'pay-fail-key', (select id from users where email = 'pay-fail@example.com'), 1, 882, 'SUCCEEDED')");
         jdbcTemplate.update("update inventory set available_quantity = 0, sold_quantity = 1 where flash_sale_id = 1");
 
         mockMvc.perform(post("/api/orders/882/payments").contentType(APPLICATION_JSON)

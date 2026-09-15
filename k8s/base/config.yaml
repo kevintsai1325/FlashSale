@@ -20,6 +20,8 @@ data:
   SPRING_RABBITMQ_USERNAME: flashsale
   # purchase-service 問 backend 要活動資料的位址。叢集內部的 Service 名稱，不經 Nginx。
   APP_FLASH_SALE_BASE_URL: http://backend:8080
+  # 反向：backend 問 purchase-service 要後台儀表板的搶購統計。
+  APP_PURCHASE_SERVICE_BASE_URL: http://purchase-service:8080
   MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
   APP_HEALTH_MAILPIT_URL: http://mailpit:8025/api/v1/info
   APP_HEALTH_ZIPKIN_URL: http://zipkin:9411/health

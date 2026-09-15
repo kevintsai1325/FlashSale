@@ -6,6 +6,8 @@ import com.flashsale.common.messaging.OutboxWriter;
 import com.flashsale.inventory.application.event.StockReleaseRequestedEvent;
 import com.flashsale.order.application.event.CreateOrderRequestedEvent;
 import com.flashsale.order.application.event.PurchaseResolvedEvent;
+import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +32,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class OrderCreateDlqHandlerCompensationTest {
 
+    private static final UUID REQUEST_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
     @Mock ConsumedMessageGuard consumedMessageGuard;
     @Mock OutboxWriter outboxWriter;
 
@@ -51,11 +55,11 @@ class OrderCreateDlqHandlerCompensationTest {
     void releasesStockAndReportsFailureBackToPurchaseService() throws Exception {
         when(consumedMessageGuard.tryConsume("707", "order-create-dlq-handler")).thenReturn(true);
 
-        handler.handle(messageFor(new CreateOrderRequestedEvent(101L, 202L, 303L, 404L, 2, new BigDecimal("19.99")), 707L));
+        handler.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 2, new BigDecimal("19.99")), 707L));
 
-        verify(outboxWriter).write(eq("PurchaseRequest"), eq("101"), eq("PurchaseResolved"),
-            eq(new PurchaseResolvedEvent(101L, "FAILED", null)));
-        verify(outboxWriter).write(eq("PurchaseRequest"), eq("101"), eq("StockReleaseRequested"),
+        verify(outboxWriter).write(eq("PurchaseRequest"), eq(REQUEST_ID.toString()), eq("PurchaseResolved"),
+            eq(new PurchaseResolvedEvent(REQUEST_ID, "FAILED", null)));
+        verify(outboxWriter).write(eq("PurchaseRequest"), eq(REQUEST_ID.toString()), eq("StockReleaseRequested"),
             eq(new StockReleaseRequestedEvent(303L, 2)));
     }
 
@@ -63,7 +67,7 @@ class OrderCreateDlqHandlerCompensationTest {
     void aRedeliveredDlqMessageDoesNotCompensateTwice() throws Exception {
         when(consumedMessageGuard.tryConsume("707", "order-create-dlq-handler")).thenReturn(false);
 
-        handler.handle(messageFor(new CreateOrderRequestedEvent(101L, 202L, 303L, 404L, 2, new BigDecimal("19.99")), 707L));
+        handler.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 2, new BigDecimal("19.99")), 707L));
 
         verifyNoInteractions(outboxWriter);
     }

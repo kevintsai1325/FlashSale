@@ -13,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -30,7 +31,7 @@ class SubmitPaymentServiceTest {
     SubmitPaymentService service;
 
     private Order pendingOrderOwnedBy(Long userId) {
-        return Order.createPendingPayment(userId, 7L, 700L, 10L, "Test Product", 1, new BigDecimal("9.99"));
+        return Order.createPendingPayment(userId, 7L, UUID.fromString("11111111-1111-1111-1111-111111111111"), 10L, "Test Product", 1, new BigDecimal("9.99"));
     }
 
     @Test

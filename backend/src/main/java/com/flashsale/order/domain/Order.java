@@ -28,7 +28,7 @@ public class Order {
     private Long flashSaleId;
 
     @Column(name = "purchase_request_id")
-    private Long purchaseRequestId;
+    private UUID purchaseRequestId;
 
     @Column(name = "total_amount", nullable = false)
     private BigDecimal totalAmount;
@@ -48,7 +48,7 @@ public class Order {
 
     protected Order() {}
 
-    public static Order createPendingPayment(Long userId, Long flashSaleId, Long purchaseRequestId, Long productId,
+    public static Order createPendingPayment(Long userId, Long flashSaleId, UUID purchaseRequestId, Long productId,
                                               String productName, int quantity, BigDecimal unitPrice) {
         Order order = new Order();
         order.orderNo = "ORD-" + UUID.randomUUID();
@@ -94,7 +94,7 @@ public class Order {
     public String getOrderNo() { return orderNo; }
     public Long getUserId() { return userId; }
     public Long getFlashSaleId() { return flashSaleId; }
-    public Long getPurchaseRequestId() { return purchaseRequestId; }
+    public UUID getPurchaseRequestId() { return purchaseRequestId; }
     public BigDecimal getTotalAmount() { return totalAmount; }
     public OrderStatus getStatus() { return status; }
     public Instant getPaymentDueAt() { return paymentDueAt; }

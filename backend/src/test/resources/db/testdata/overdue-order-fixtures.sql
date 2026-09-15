@@ -21,15 +21,14 @@ VALUES (1, 1, 9.99, now() - interval '1 minute', now() + interval '1 hour', 1, '
 INSERT INTO inventory (id, flash_sale_id, total_quantity, available_quantity, reserved_quantity, sold_quantity, version)
 VALUES (1, 1, 1, 0, 0, 1, 0);
 
-INSERT INTO orders (id, order_no, user_id, total_amount, status, payment_due_at)
-VALUES (1, 'ORD-OVERDUE-1', 1, 9.99, 'PENDING_PAYMENT', now() - interval '1 hour');
+-- flash_sale_id 是 compensate() 釋放庫存的依據（V4 之後由訂單自己帶著，不再反查 purchase_requests）。
+INSERT INTO orders (id, order_no, user_id, total_amount, status, payment_due_at, flash_sale_id, purchase_request_id)
+VALUES (1, 'ORD-OVERDUE-1', 1, 9.99, 'PENDING_PAYMENT', now() - interval '1 hour',
+        1, '11111111-1111-1111-1111-111111111111');
 
 INSERT INTO order_items (id, order_id, product_id, product_name, quantity, unit_price)
 VALUES (1, 1, 1, 'Limited Sneakers', 1, 9.99);
 
--- compensate() 會用 findByOrderId 找這筆；找不到會拋 IllegalStateException。
-INSERT INTO purchase_requests (id, request_id, idempotency_key, user_id, flash_sale_id, order_id, status)
-VALUES (1, '11111111-1111-1111-1111-111111111111', 'overdue-fixture-key', 1, 1, 1, 'SUCCEEDED');
 
 -- 讓序列跳過手動指定的 id，避免後續 INSERT 撞主鍵。
 SELECT setval('users_id_seq', (SELECT max(id) FROM users));
@@ -38,4 +37,3 @@ SELECT setval('flash_sales_id_seq', (SELECT max(id) FROM flash_sales));
 SELECT setval('inventory_id_seq', (SELECT max(id) FROM inventory));
 SELECT setval('orders_id_seq', (SELECT max(id) FROM orders));
 SELECT setval('order_items_id_seq', (SELECT max(id) FROM order_items));
-SELECT setval('purchase_requests_id_seq', (SELECT max(id) FROM purchase_requests));

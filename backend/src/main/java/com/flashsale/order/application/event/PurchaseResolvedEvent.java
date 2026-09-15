@@ -1,5 +1,7 @@
 package com.flashsale.order.application.event;
 
+import java.util.UUID;
+
 /**
  * 建單成功或補償失敗之後，回頭告訴 purchase-service 這筆搶購的終態。
  *
@@ -8,4 +10,5 @@ package com.flashsale.order.application.event;
  *
  * 對應 purchase-service 的 PurchaseResolvedEvent，欄位形狀是契約。
  */
-public record PurchaseResolvedEvent(Long purchaseRequestId, String status, Long orderId) {}
+public record PurchaseResolvedEvent(UUID purchaseRequestId, String status, Long orderId) {}
+

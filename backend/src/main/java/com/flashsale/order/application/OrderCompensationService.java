@@ -7,7 +7,6 @@ import com.flashsale.inventory.application.event.StockReleaseRequestedEvent;
 import com.flashsale.inventory.domain.Inventory;
 import com.flashsale.order.domain.Order;
 import com.flashsale.order.domain.OrderStatus;
-import com.flashsale.order.domain.PurchaseRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,16 +14,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderCompensationService {
 
     private final OrderRepository orderRepository;
-    private final PurchaseRequestRepository purchaseRequestRepository;
     private final InventoryRepository inventoryRepository;
     private final OutboxWriter outboxWriter;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
 
-    public OrderCompensationService(OrderRepository orderRepository, PurchaseRequestRepository purchaseRequestRepository,
+    public OrderCompensationService(OrderRepository orderRepository,
                                      InventoryRepository inventoryRepository, OutboxWriter outboxWriter,
                                      OrderStatusHistoryRepository orderStatusHistoryRepository) {
         this.orderRepository = orderRepository;
-        this.purchaseRequestRepository = purchaseRequestRepository;
         this.inventoryRepository = inventoryRepository;
         this.outboxWriter = outboxWriter;
         this.orderStatusHistoryRepository = orderStatusHistoryRepository;
@@ -54,16 +51,20 @@ public class OrderCompensationService {
     private void compensate(Order order) {
         orderRepository.save(order);
         orderStatusHistoryRepository.record(order.getId(), OrderStatus.PENDING_PAYMENT, order.getStatus());
-        PurchaseRequest purchaseRequest = purchaseRequestRepository.findByOrderId(order.getId())
-            .orElseThrow(() -> new IllegalStateException("No purchase request linked to order " + order.getId()));
+        // 拆庫前這裡是從 orderId 反查 purchase_requests 拿 flashSaleId。那張表已經是
+        // purchase-service 的資料，所以改讀訂單自己記下的值（V4 migration 加的欄位）。
+        Long flashSaleId = order.getFlashSaleId();
+        if (flashSaleId == null) {
+            throw new IllegalStateException("Order " + order.getId() + " carries no flashSaleId; cannot release stock");
+        }
         int quantity = order.totalQuantity();
 
-        Inventory inventory = inventoryRepository.findByFlashSaleIdForUpdate(purchaseRequest.getFlashSaleId())
-            .orElseThrow(() -> new IllegalStateException("Inventory for flash sale " + purchaseRequest.getFlashSaleId() + " not found"));
+        Inventory inventory = inventoryRepository.findByFlashSaleIdForUpdate(flashSaleId)
+            .orElseThrow(() -> new IllegalStateException("Inventory for flash sale " + flashSaleId + " not found"));
         inventory.release(quantity);
         inventoryRepository.save(inventory);
 
         outboxWriter.write("Order", order.getId().toString(), EventTypes.STOCK_RELEASE_REQUESTED,
-            new StockReleaseRequestedEvent(purchaseRequest.getFlashSaleId(), quantity));
+            new StockReleaseRequestedEvent(flashSaleId, quantity));
     }
 }

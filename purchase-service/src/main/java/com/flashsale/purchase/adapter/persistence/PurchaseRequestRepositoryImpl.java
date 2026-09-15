@@ -23,11 +23,6 @@ public class PurchaseRequestRepositoryImpl implements PurchaseRequestRepository 
     }
 
     @Override
-    public Optional<PurchaseRequest> findById(Long id) {
-        return jpaRepository.findById(id);
-    }
-
-    @Override
     public Optional<PurchaseRequest> findByRequestId(UUID requestId) {
         return jpaRepository.findByRequestId(requestId);
     }

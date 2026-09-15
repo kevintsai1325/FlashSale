@@ -1,5 +1,7 @@
 package com.flashsale.purchase.messaging;
 
+import java.util.UUID;
+
 /**
  * backend 建單成功或補償失敗之後，回頭告訴 purchase-service 這筆搶購的終態。
  *
@@ -9,4 +11,4 @@ package com.flashsale.purchase.messaging;
  *
  * status 只會是 SUCCEEDED 或 FAILED；SUCCEEDED 時 orderId 必定不為 null。
  */
-public record PurchaseResolvedEvent(Long purchaseRequestId, String status, Long orderId) {}
+public record PurchaseResolvedEvent(UUID purchaseRequestId, String status, Long orderId) {}

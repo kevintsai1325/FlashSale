@@ -40,6 +40,9 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                // backend 用的內部統計 API。Nginx 對 /internal/ 一律回 404，
+                // 所以這條路徑只可能來自叢集內部——與 backend 那側的 /internal/flash-sales 同一套做法。
+                .requestMatchers("/internal/purchase-requests/**").permitAll()
                 .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN")
                 .anyRequest().authenticated())
             .exceptionHandling(exceptionHandling -> exceptionHandling

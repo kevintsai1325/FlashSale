@@ -48,10 +48,10 @@ public class OrderCreateDlqHandler {
 
         CreateOrderRequestedEvent event = objectMapper.readValue(message.getBody(), CreateOrderRequestedEvent.class);
 
-        outboxWriter.write("PurchaseRequest", String.valueOf(event.purchaseRequestId()), EventTypes.PURCHASE_RESOLVED,
+        outboxWriter.write("PurchaseRequest", event.purchaseRequestId().toString(), EventTypes.PURCHASE_RESOLVED,
             new PurchaseResolvedEvent(event.purchaseRequestId(), "FAILED", null));
 
-        outboxWriter.write("PurchaseRequest", String.valueOf(event.purchaseRequestId()), EventTypes.STOCK_RELEASE_REQUESTED,
+        outboxWriter.write("PurchaseRequest", event.purchaseRequestId().toString(), EventTypes.STOCK_RELEASE_REQUESTED,
             new StockReleaseRequestedEvent(event.flashSaleId(), event.quantity()));
     }
 }

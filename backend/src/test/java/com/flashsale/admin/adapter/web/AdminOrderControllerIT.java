@@ -84,18 +84,15 @@ class AdminOrderControllerIT extends AbstractIntegrationTest {
             "insert into flash_sales (id, product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status) " +
             "values (601, 601, 12.50, now() - interval '1 hour', now() + interval '1 hour', 2, 'ACTIVE')");
 
+        // 訂單自己帶著 flash_sale_id 與 purchase_request_id（V4）：後台詳情的搶購請求區塊
+        // 從這兩個欄位推導，不再去查 purchase_requests——那張表已經是 purchase-service 的。
         jdbcTemplate.update(
-            "insert into orders (order_no, user_id, total_amount, status, created_at) " +
-            "values ('ORD-ADMIN-1', ?, 25.00, 'PAID', now() - interval '10 minutes')", shopperId);
+            "insert into orders (order_no, user_id, total_amount, status, created_at, flash_sale_id, purchase_request_id) " +
+            "values ('ORD-ADMIN-1', ?, 25.00, 'PAID', now() - interval '10 minutes', 601, gen_random_uuid())", shopperId);
         Long orderId = jdbcTemplate.queryForObject("select id from orders where order_no = 'ORD-ADMIN-1'", Long.class);
 
         jdbcTemplate.update(
             "insert into order_items (order_id, product_id, product_name, quantity, unit_price) values (?, 601, 'Admin Order Product', 2, 12.50)", orderId);
-
-        jdbcTemplate.update(
-            "insert into purchase_requests (request_id, idempotency_key, user_id, flash_sale_id, order_id, status, created_at) " +
-            "values (gen_random_uuid(), 'admin-order-key', ?, 601, ?, 'SUCCEEDED', now() - interval '10 minutes')",
-            shopperId, orderId);
 
         jdbcTemplate.update(
             "insert into order_status_history (order_id, from_status, to_status, changed_at) " +

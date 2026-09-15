@@ -17,6 +17,7 @@ import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.method.support.ModelAndViewContainer;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 import java.util.List;
 import java.util.Optional;
 
@@ -82,7 +83,7 @@ class OrderControllerTest {
 
     private Order orderWithProductSnapshot() {
         Order order = Order.createPendingPayment(
-            42L, 7L, 700L, 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
+            42L, 7L, UUID.fromString("11111111-1111-1111-1111-111111111111"), 2L, "限量鍵盤", 3, new BigDecimal("499.00"));
         ReflectionTestUtils.setField(order, "id", 101L);
         return order;
     }
