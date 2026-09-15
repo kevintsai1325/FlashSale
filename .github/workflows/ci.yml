@@ -32,6 +32,26 @@ jobs:
       - name: Run backend tests
         run: ./gradlew test
 
+  # P4 步驟 1 建了這個服務的映像卻沒有跑它的測試——CI 只跑 backend。
+  # 步驟 2 順手補上：一個沒有人執行的測試套件等於沒有測試套件。
+  purchase-service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: purchase-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Ensure gradlew is executable
+        run: chmod +x gradlew
+      - name: Run purchase-service tests
+        run: ./gradlew test
+
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 10

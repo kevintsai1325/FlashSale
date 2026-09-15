@@ -214,10 +214,10 @@ if (($Arguments.Count -ge 9) -and (($Arguments[0..8] -join ' ') -eq '--context r
     function New-PodItem($name, $phase, $ready) {
         @{ metadata = @{ name = $name }; status = @{ phase = $phase; conditions = @(@{ type = 'Ready'; status = $ready }) } }
     }
-    if ($mode -eq 'wrong-pod-count') { $items = @(1..8 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
-    elseif ($mode -eq 'pod-not-ready') { $items = @(1..8 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) + @(New-PodItem 'pod-9' 'Pending' 'False') }
-    elseif ($mode -eq 'multi-replica') { $items = @(1..11 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
-    else { $items = @(1..9 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
+    if ($mode -eq 'wrong-pod-count') { $items = @(1..9 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
+    elseif ($mode -eq 'pod-not-ready') { $items = @(1..9 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) + @(New-PodItem 'pod-10' 'Pending' 'False') }
+    elseif ($mode -eq 'multi-replica') { $items = @(1..12 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
+    else { $items = @(1..10 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
     @{ items = $items } | ConvertTo-Json -Depth 8 -Compress
     exit 0
 }
@@ -363,8 +363,8 @@ try {
     Assert-True (@($deployLines | Where-Object { $_ -notmatch '^(config\tcurrent-context|--context\trancher-desktop|stdin-secret\t)' }).Count -eq 0) 'Every deploy kubectl operation after current-context must explicitly select rancher-desktop.'
     Assert-True (($deployLines -join "`n") -notmatch 'test-postgres-password|test-rabbitmq-password|test-private-key|test-public-key') 'kubectl arguments/logs must not expose decoded secrets.'
     Assert-True ($deployResult.Output -notmatch 'test-postgres-password|test-rabbitmq-password|test-private-key|test-public-key') 'deploy output must not expose decoded secrets.'
-    Assert-True (@($deployLines | Where-Object { $_ -match 'rollout\trestart\tdeployment/(backend|frontend|nginx)' }).Count -eq 3) 'Deploy must restart backend, frontend, and nginx after application apply.'
-    Assert-True (@($deployLines | Where-Object { $_ -match 'rollout\tstatus\t(statefulset/(postgres|redis|rabbitmq)|deployment/(mailpit|zipkin))' }).Count -eq 5) 'Deploy must wait for all five dependencies before applying the application stage.'
+    Assert-True (@($deployLines | Where-Object { $_ -match 'rollout\trestart\tdeployment/(backend|purchase-service|frontend|nginx)' }).Count -eq 4) 'Deploy must restart backend, purchase-service, frontend, and nginx after application apply.'
+    Assert-True (@($deployLines | Where-Object { $_ -match 'rollout\tstatus\t(statefulset/(postgres|postgres-purchase|redis|rabbitmq)|deployment/(mailpit|zipkin))' }).Count -eq 6) 'Deploy must wait for all six dependencies before applying the application stage.'
 
     if ($null -ne $alternatePowerShellCommand) {
         Set-ShimMode 'reachable'
@@ -432,7 +432,7 @@ try {
     Assert-True ($verifyResult.ExitCode -eq 0) "verify.ps1 must pass all deterministic workload and endpoint checks. Output: $($verifyResult.Output) Log: $((Get-LogLines $kubectlLog) -join ' || ')"
     $verifyLines = Get-LogLines $kubectlLog
     Assert-True (@($verifyLines | Where-Object { $_ -notmatch '^(config\tcurrent-context|--context\trancher-desktop)' }).Count -eq 0) 'Every kubectl operation after current-context must explicitly select rancher-desktop.'
-    Assert-True (@($verifyLines | Where-Object { $_ -match 'rollout\tstatus' }).Count -eq 8) 'verify.ps1 must wait for exactly eight workloads.'
+    Assert-True (@($verifyLines | Where-Object { $_ -match 'rollout\tstatus' }).Count -eq 10) 'verify.ps1 must wait for exactly ten workloads.'
     Assert-True (@(Get-LogLines $httpLog).Count -eq 2) 'verify.ps1 must execute both HTTPS endpoint checks.'
 
     Set-ShimMode 'rollout-failure'
@@ -450,7 +450,7 @@ try {
     Set-ShimMode 'wrong-pod-count'
     $wrongPodCountResult = Invoke-VerificationScript $verificationEnvironment
     Assert-True ($wrongPodCountResult.ExitCode -ne 0) 'verify.ps1 must fail when the running Pod count does not match the declared replica counts.'
-    Assert-True ($wrongPodCountResult.Output -match 'Expected 9 application Pods') 'Wrong Pod count failure must be actionable.'
+    Assert-True ($wrongPodCountResult.Output -match 'Expected 10 application Pods') 'Wrong Pod count failure must be actionable.'
 
     Set-ShimMode 'pod-not-ready'
     $podNotReadyResult = Invoke-VerificationScript $verificationEnvironment

@@ -24,7 +24,13 @@ tables this script touches:
 
 ```bash
 docker compose exec -T postgres psql -U flashsale -d flashsale <<'EOF'
-TRUNCATE TABLE purchase_requests, order_items, orders, inventory, flash_sales, products, users RESTART IDENTITY CASCADE;
+TRUNCATE TABLE order_items, orders, inventory, flash_sales, products, users RESTART IDENTITY CASCADE;
+EOF
+
+# P4 步驟 2 起 purchase-service 有自己的資料庫，要各自清一次。
+# 它的兩張表沒有外鍵指向上面那些，CASCADE 帶不到。
+docker compose exec -T postgres-purchase psql -U flashsale -d purchase <<'EOF'
+TRUNCATE TABLE purchase_requests, outbox_events RESTART IDENTITY;
 EOF
 ```
 
@@ -100,25 +106,31 @@ step:
 
 All queries below are scoped to `flash_sale_id = 1` (the id seeded in Step 1)
 so that, if you skip Step 0's reset, leftover rows from a previous run can't
-silently inflate these counts (`orders` has no `flash_sale_id` column of its
-own, so that one is scoped via a join through `purchase_requests`):
+silently inflate these counts.
+
+**這些查詢現在分在兩個資料庫。** 訂單與庫存在 platform、搶購請求在 purchase ——
+而且**兩邊沒有辦法用一句 SQL 對起來**。這正是 database per service 的代價：
+拆分前那個 `JOIN purchase_requests` 現在寫不出來，只能各查各的再用眼睛比對。
+（`orders` 自己有了 `flash_sale_id` 欄位，所以第一個查詢反而變簡單了。）
 
 ```bash
 docker compose exec -T postgres psql -U flashsale -d flashsale <<'EOF'
 -- Must equal STOCK (10): exactly as many orders as there was stock, never more.
-SELECT COUNT(*) AS successful_orders
-FROM orders o
-JOIN purchase_requests pr ON pr.order_id = o.id
-WHERE pr.flash_sale_id = 1;
-
--- Must equal VUS - STOCK (30 - 10 = 20): every buyer who didn't get stock is SOLD_OUT.
-SELECT COUNT(*) AS sold_out_requests FROM purchase_requests WHERE status = 'SOLD_OUT' AND flash_sale_id = 1;
+SELECT COUNT(*) AS successful_orders FROM orders WHERE flash_sale_id = 1;
 
 -- Sanity: inventory must never go negative or under-decrement.
 SELECT available_quantity, reserved_quantity, sold_quantity FROM inventory WHERE flash_sale_id = 1;
+EOF
+
+docker compose exec -T postgres-purchase psql -U flashsale -d purchase <<'EOF'
+-- Must equal VUS - STOCK (30 - 10 = 20): every buyer who didn't get stock is SOLD_OUT.
+SELECT COUNT(*) AS sold_out_requests FROM purchase_requests WHERE status = 'SOLD_OUT' AND flash_sale_id = 1;
 
 -- Sanity: every purchase_request should have landed in a terminal state (no VU stuck PENDING).
 SELECT status, COUNT(*) FROM purchase_requests WHERE flash_sale_id = 1 GROUP BY status ORDER BY status;
+
+-- Sanity: outbox 必須全部發佈完成。
+SELECT COUNT(*) AS unpublished_outbox FROM outbox_events WHERE published_at IS NULL;
 EOF
 ```
 

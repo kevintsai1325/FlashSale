@@ -1,5 +1,17 @@
 # 可重現的壓測工具
 
+> **⚠️ 這套工具自 P4（2026-09-14）起已經不能執行，結果檔僅供歷史對照。**
+>
+> 它的 Compose stack（`compose.benchmark.yaml`）只有 backend，而搶購的兩個端點在 P4 步驟 1
+> 就搬到 purchase-service 了；步驟 2 之後 `purchase_requests` 更是住在另一個資料庫，
+> `collect.ps1` 的不變量查詢全部打在錯的資料庫上。
+>
+> **刻意不修。** 現在量吞吐與擴展用的是 `load-tests/k8s/`（開放模型、跑在真的 K8s 上），
+> 那才是 P3 之後有效的方法論；把這套封閉模型的工具移植過來，只會得到一組
+> [P3 已經證明不能用來回答擴展問題](../../docs/portfolio/scaling-and-autoscaling.md)的數字。
+> 留著原始碼與結果檔，是因為 `docs/portfolio/performance-report.md` 引用了它們。
+
+
 這是一套針對目前 FlashSale 搶購流程的壓測工具。它會用獨立的 Docker Compose 專案、獨立的
 volume、獨立的 port 再跑一次整套服務,用 k6 施壓,並在每次測試產生一份 JSON 文件,同時記錄
 量測數字與量測當下成立的正確性不變量。

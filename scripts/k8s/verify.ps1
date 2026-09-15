@@ -46,10 +46,10 @@ public static class FlashSaleBaselineCertTrust {
 
 Assert-KubernetesPreflight -KubectlCommand $KubectlCommand | Out-Null
 
-foreach ($name in @('postgres', 'redis', 'rabbitmq')) {
+foreach ($name in @('postgres', 'postgres-purchase', 'redis', 'rabbitmq')) {
     Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'rollout', 'status', "statefulset/$name", '--timeout=240s') -Operation "waiting for statefulset/$name" | Out-Null
 }
-foreach ($name in @('mailpit', 'zipkin', 'backend', 'frontend', 'nginx')) {
+foreach ($name in @('mailpit', 'zipkin', 'backend', 'purchase-service', 'frontend', 'nginx')) {
     Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'rollout', 'status', "deployment/$name", '--timeout=240s') -Operation "waiting for deployment/$name" | Out-Null
 }
 
@@ -63,7 +63,7 @@ function Get-DesiredReplicas {
 }
 
 $expectedAppPods = 0
-foreach ($name in @('postgres', 'redis', 'rabbitmq')) { $expectedAppPods += Get-DesiredReplicas -Kind 'statefulset' -Name $name }
+foreach ($name in @('postgres', 'postgres-purchase', 'redis', 'rabbitmq')) { $expectedAppPods += Get-DesiredReplicas -Kind 'statefulset' -Name $name }
 foreach ($name in @('mailpit', 'zipkin', 'backend', 'purchase-service', 'frontend', 'nginx')) { $expectedAppPods += Get-DesiredReplicas -Kind 'deployment' -Name $name }
 
 $backendDesired = Get-DesiredReplicas -Kind 'deployment' -Name 'backend'

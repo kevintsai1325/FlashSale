@@ -12,11 +12,11 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 
 /**
- * 步驟 1 兩個服務共用同一張 outbox_events 表。這是安全的，不是碰運氣：
- * 發佈器用的是 SELECT ... FOR UPDATE SKIP LOCKED，本來就是為了多個發佈者同時撈而設計的
- * （backend 多副本時早就是這個情況）。多一個行程一起撈，對這個機制沒有差別。
+ * 這個服務自己資料庫裡的 outbox 表（P4 步驟 2 起）。
  *
- * 但它仍然是共用資料庫階段的妥協：步驟 2 拆庫時，每個服務要有自己的 outbox 表。
+ * outbox 模式的整個重點是「事件的寫入與業務資料的寫入在同一個本地交易裡」。
+ * 步驟 1 共用資料庫時這一點其實是勉強成立的 —— 交易確實是同一個，但那個資料庫
+ * 不屬於這個服務。拆庫之後它才真正成立。
  */
 @Entity
 @Table(name = "outbox_events")

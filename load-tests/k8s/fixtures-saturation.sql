@@ -3,7 +3,9 @@
 --
 -- 若沿用 purchase_limit_per_user = 1，同一個 token 第二次購買就會被擋成 REJECTED，
 -- 那條路徑不會碰到 Redis 預扣，量到的延遲會愈跑愈低，看起來像「系統變快了」。
-TRUNCATE TABLE purchase_requests, order_items, orders, inventory, flash_sales, products, users RESTART IDENTITY CASCADE;
+-- purchase_requests 不在這裡：P4 步驟 2 之後它住在 purchase-service 自己的資料庫，
+-- 由 fixtures-saturation-purchase.sql 負責清。
+TRUNCATE TABLE order_items, orders, inventory, flash_sales, products, users RESTART IDENTITY CASCADE;
 
 INSERT INTO products (id, name, description)
 VALUES (1, 'Saturation Test Item', 'Large stock, used only for throughput measurement');

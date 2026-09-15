@@ -46,7 +46,7 @@ kind: Service
 metadata: {name: backend, namespace: flashsale, labels: {flashsale.dev/stage: application}}
 spec: {selector: {app: backend}, ports: [{name: http, port: 8080, targetPort: 8080}]}
 ---
-# P4：搶購入口。與 backend 共用同一個 Postgres（步驟 1），自己連 Redis 做預扣，
+# P4：搶購入口。步驟 2 起有自己的 Postgres（postgres-purchase），自己連 Redis 做預扣，
 # 活動資料則走叢集內部的 HTTP 呼叫問 backend（APP_FLASH_SALE_BASE_URL）。
 apiVersion: apps/v1
 kind: Deployment
@@ -69,6 +69,9 @@ spec:
             preStop: {exec: {command: ["sleep", "5"]}}
           envFrom: [{configMapRef: {name: flashsale-config}}]
           env:
+            # ConfigMap 裡的 SPRING_DATASOURCE_URL 指向 platform 的資料庫，這裡蓋掉它。
+            # envFrom 先套用、env 後套用，所以這一條會贏。
+            - {name: SPRING_DATASOURCE_URL, value: jdbc:postgresql://postgres-purchase:5432/purchase}
             - {name: SPRING_DATASOURCE_PASSWORD, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: POSTGRES_PASSWORD}}}
             - {name: SPRING_RABBITMQ_PASSWORD, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: SPRING_RABBITMQ_PASSWORD}}}
             # 只要公鑰：purchase-service 驗證 token，不簽發 token。

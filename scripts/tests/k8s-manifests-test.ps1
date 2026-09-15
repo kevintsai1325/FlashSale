@@ -73,7 +73,7 @@ $loadTestResources = @($resources | Where-Object {
 })
 Assert-True ($loadTestResources.Count -eq 0) 'Base kustomization must not render load-test resources.'
 
-Assert-True ($resources.Count -eq 27) "Expected exactly 27 rendered resources, got $($resources.Count)."
+Assert-True ($resources.Count -eq 30) "Expected exactly 30 rendered resources, got $($resources.Count)."
 
 # PDB 是常態設定而不是實驗器材：自願性中斷（節點維護、叢集升級）時要保住最低可用副本數。
 $budgets = @($resources | Where-Object { $_.kind -eq 'PodDisruptionBudget' })
@@ -98,6 +98,7 @@ $expectedStages = @{
         'ServiceAccount/flashsale-backend', 'Role/flashsale-scheduler-lease', 'RoleBinding/flashsale-scheduler-lease')
     dependency = @(
         'Service/postgres-headless', 'Service/postgres', 'StatefulSet/postgres',
+        'Service/postgres-purchase-headless', 'Service/postgres-purchase', 'StatefulSet/postgres-purchase',
         'Service/redis-headless', 'Service/redis', 'StatefulSet/redis',
         'Service/rabbitmq-headless', 'Service/rabbitmq', 'StatefulSet/rabbitmq',
         'Deployment/mailpit', 'Service/mailpit', 'Deployment/zipkin', 'Service/zipkin'
@@ -119,13 +120,13 @@ foreach ($stage in $expectedStages.Keys) {
     Assert-True (($actual -join ',') -eq ($expected -join ',')) "$stage stage resources do not match the staged deployment contract."
 }
 
-$expectedWorkloads = @('postgres', 'redis', 'rabbitmq', 'mailpit', 'zipkin', 'backend', 'purchase-service', 'frontend', 'nginx')
+$expectedWorkloads = @('postgres', 'postgres-purchase', 'redis', 'rabbitmq', 'mailpit', 'zipkin', 'backend', 'purchase-service', 'frontend', 'nginx')
 $workloads = @($resources | Where-Object { $_.kind -in @('Deployment', 'StatefulSet') })
-Assert-True ($workloads.Count -eq 9) "Expected exactly nine workloads, got $($workloads.Count)."
+Assert-True ($workloads.Count -eq 10) "Expected exactly ten workloads, got $($workloads.Count)."
 Assert-True ((@($workloads | ForEach-Object { $_.metadata.name } | Sort-Object) -join ',') -eq (($expectedWorkloads | Sort-Object) -join ',')) 'The rendered workload names do not match the baseline contract.'
-# backend 與 purchase-service 是水平擴展的工作負載（Week 8 P1 / P4）。其餘皆為單副本：三個 StatefulSet 是有狀態
+# backend 與 purchase-service 是水平擴展的工作負載（Week 8 P1 / P4）。其餘皆為單副本：四個 StatefulSet 是有狀態
 # 相依元件，mailpit/zipkin/frontend/nginx 不在搶購的關鍵路徑上，擴展它們不會改善任何指標。
-$singleReplicaWorkloads = @('postgres', 'redis', 'rabbitmq', 'mailpit', 'zipkin', 'frontend', 'nginx')
+$singleReplicaWorkloads = @('postgres', 'postgres-purchase', 'redis', 'rabbitmq', 'mailpit', 'zipkin', 'frontend', 'nginx')
 foreach ($workload in $workloads) {
     $name = $workload.metadata.name
     if ($singleReplicaWorkloads -contains $name) {
@@ -137,7 +138,7 @@ foreach ($workload in $workloads) {
     Assert-True ($null -ne (Get-PropertyValue $containers[0] 'livenessProbe')) "$name must define a liveness probe."
 }
 
-foreach ($name in @('postgres', 'redis', 'rabbitmq', 'zipkin', 'backend', 'purchase-service')) {
+foreach ($name in @('postgres', 'postgres-purchase', 'redis', 'rabbitmq', 'zipkin', 'backend', 'purchase-service')) {
     $workload = @($workloads | Where-Object { $_.metadata.name -eq $name })[0]
     $startupProbe = Get-PropertyValue $workload.spec.template.spec.containers[0] 'startupProbe'
     Assert-True ($null -ne $startupProbe) "$name must define a startup probe."
@@ -145,7 +146,7 @@ foreach ($name in @('postgres', 'redis', 'rabbitmq', 'zipkin', 'backend', 'purch
 }
 
 $statefulSets = @($workloads | Where-Object { $_.kind -eq 'StatefulSet' })
-Assert-True ($statefulSets.Count -eq 3) 'Expected exactly three StatefulSets.'
+Assert-True ($statefulSets.Count -eq 4) 'Expected exactly four StatefulSets.'
 foreach ($statefulSet in $statefulSets) {
     $name = $statefulSet.metadata.name
     Assert-True ($statefulSet.spec.serviceName -eq "$name-headless") "$name must use its headless governing Service."
@@ -153,7 +154,7 @@ foreach ($statefulSet in $statefulSets) {
 }
 
 $services = @($resources | Where-Object { $_.kind -eq 'Service' })
-foreach ($name in @('postgres', 'redis', 'rabbitmq')) {
+foreach ($name in @('postgres', 'postgres-purchase', 'redis', 'rabbitmq')) {
     $clientService = @($services | Where-Object { $_.metadata.name -eq $name })
     $headlessService = @($services | Where-Object { $_.metadata.name -eq "$name-headless" })
     Assert-True ($clientService.Count -eq 1) "$name must retain one client-facing ClusterIP Service."
@@ -216,7 +217,9 @@ Assert-True ($null -ne (Get-PropertyValue (Get-PropertyValue $purchaseLifecycle 
 
 # purchase-service 只驗證 token，不簽發 token —— 它不該拿得到私鑰。
 # 這條斷言擋的是「複製 backend 的 env 區塊時順手把 JWT_PRIVATE_KEY 一起貼過來」。
-$purchaseSecretKeys = @($purchaseContainer.env | ForEach-Object { $_.valueFrom.secretKeyRef.key })
+# 有些 env 是字面值（SPRING_DATASOURCE_URL 蓋掉 ConfigMap 的那一條），沒有 valueFrom，
+# StrictMode 下直接取屬性會炸；先過濾再取。
+$purchaseSecretKeys = @($purchaseContainer.env | Where-Object { $null -ne (Get-PropertyValue $_ 'valueFrom') } | ForEach-Object { $_.valueFrom.secretKeyRef.key })
 Assert-True ($purchaseSecretKeys -notcontains 'JWT_PRIVATE_KEY') 'purchase-service must never receive the JWT signing key.'
 Assert-True ($purchaseSecretKeys -contains 'JWT_PUBLIC_KEY') 'purchase-service needs the JWT public key to verify tokens.'
 
@@ -257,4 +260,4 @@ Assert-True ($postgresArgs -match 'max_connections=(\d+)') 'postgres must pin ma
 $maxConnections = [int]$Matches[1]
 Assert-True (($maxReplicas * $poolSize) -le $maxConnections) "HPA maxReplicas ($maxReplicas) x HikariCP pool ($poolSize) = $($maxReplicas * $poolSize) exceeds postgres max_connections ($maxConnections). Raise max_connections in k8s/base/data.yaml first."
 
-Write-Host 'PASS: Kubernetes rendered-resource contract (27 resources, exact stages, minimal RBAC, 9 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, backend rollout strategy, backend PodDisruptionBudget, liveness timeout, the HPA/connection-pool ceiling, and the purchase-service split).'
+Write-Host 'PASS: Kubernetes rendered-resource contract (30 resources, exact stages, minimal RBAC, 10 workloads, probes, persistence, headless Services, Secret refs, namespace, local images, backend rollout strategy, backend PodDisruptionBudget, liveness timeout, the HPA/connection-pool ceiling, and the purchase-service split).'

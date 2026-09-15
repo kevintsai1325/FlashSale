@@ -23,6 +23,15 @@ psql_exec() {
     --no-psqlrc -X -v ON_ERROR_STOP=1 -U flashsale -d flashsale "$@"
 }
 
+# P4 步驟 2：purchase-service 有自己的資料庫。示範資料的清理因此要分兩次打，
+# 而且**兩次之間沒有交易**——跨資料庫的原子性不存在，這是拆庫實實在在的代價。
+# 順序上先清 purchase 再清 platform：反過來的話 platform 的列先沒了，
+# purchase 這邊就查不出哪些是示範資料。
+psql_purchase_exec() {
+  compose exec -T postgres-purchase psql \
+    --no-psqlrc -X -v ON_ERROR_STOP=1 -U flashsale -d purchase "$@"
+}
+
 db_scalar() {
   psql_exec -Atq -c "$1"
 }
@@ -44,7 +53,7 @@ require_local_docker_engine() {
 
 require_healthy_stack() {
   local service container_id health
-  local services=(postgres redis rabbitmq mailpit zipkin backend frontend nginx)
+  local services=(postgres postgres-purchase redis rabbitmq mailpit zipkin backend purchase-service frontend nginx)
 
   for service in "${services[@]}"; do
     container_id="$(compose ps -q "$service")"
@@ -291,6 +300,53 @@ SQL
   printf 'Zipkin: http://localhost:9411/\n'
 }
 
+# purchase-service 資料庫裡的示範資料。它的 purchase_requests 只認得使用者 id 與活動 id，
+# 而那兩張表都在 platform —— 所以 id 清單必須由呼叫端先在 platform 查好再傳進來。
+# 這就是跨服務查詢的真實樣子：沒有 JOIN，只有「先查一邊、把鍵帶過去、再查另一邊」。
+purchase_request_predicate() {
+  local user_ids="$1" sale_ids="$2" predicate
+  predicate="$(demo_prefix_predicate idempotency_key)"
+  if [[ -n "$user_ids" ]]; then
+    predicate="${predicate} OR user_id IN (${user_ids})"
+  fi
+  if [[ -n "$sale_ids" ]]; then
+    predicate="${predicate} OR flash_sale_id IN (${sale_ids})"
+  fi
+  printf '%s' "$predicate"
+}
+
+list_purchase_cleanup_counts() {
+  local predicate
+  predicate="$(purchase_request_predicate "$1" "$2")"
+  psql_purchase_exec -At <<SQL
+WITH demo_requests AS (
+    SELECT id FROM purchase_requests WHERE ${predicate}
+)
+SELECT 'purchase.purchase_requests=' || (SELECT count(*) FROM demo_requests)
+UNION ALL SELECT 'purchase.outbox_events=' || (SELECT count(*) FROM outbox_events
+    WHERE $(demo_prefix_predicate aggregate_id)
+       OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (SELECT id::text FROM demo_requests)));
+SQL
+}
+
+delete_purchase_demo_data() {
+  local predicate
+  predicate="$(purchase_request_predicate "$1" "$2")"
+  psql_purchase_exec <<SQL
+BEGIN;
+
+CREATE TEMP TABLE demo_request_ids ON COMMIT DROP AS
+SELECT id FROM purchase_requests WHERE ${predicate};
+
+DELETE FROM outbox_events
+WHERE $(demo_prefix_predicate aggregate_id)
+   OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (SELECT id::text FROM demo_request_ids));
+DELETE FROM purchase_requests WHERE id IN (SELECT id FROM demo_request_ids);
+
+COMMIT;
+SQL
+}
+
 list_cleanup_counts() {
   local order_predicate idempotency_predicate message_predicate aggregate_predicate
   order_predicate="$(demo_prefix_predicate order_no)"
@@ -310,28 +366,24 @@ WITH demo_users AS (
     SELECT id FROM products WHERE name = :'demo_product_name'
 ), demo_sales AS (
     SELECT id FROM flash_sales WHERE product_id IN (SELECT id FROM demo_products)
-), demo_purchase_requests AS (
-    SELECT id, order_id FROM purchase_requests
-    WHERE user_id IN (SELECT id FROM demo_users)
-       OR flash_sale_id IN (SELECT id FROM demo_sales)
-       OR ${idempotency_predicate}
 ), demo_orders AS (
+    -- 拆庫前這裡還要繞經 purchase_requests 才找得到訂單；現在 orders 自己有 flash_sale_id。
     SELECT id FROM orders
     WHERE user_id IN (SELECT id FROM demo_users)
        OR ${order_predicate}
-       OR id IN (SELECT order_id FROM demo_purchase_requests WHERE order_id IS NOT NULL)
+       OR flash_sale_id IN (SELECT id FROM demo_sales)
        OR id IN (SELECT order_id FROM order_items WHERE product_id IN (SELECT id FROM demo_products))
 ), demo_outbox AS (
     SELECT id FROM outbox_events
     WHERE ${aggregate_predicate}
-       OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (SELECT id::text FROM demo_purchase_requests))
+       OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (
+              SELECT purchase_request_id::text FROM orders WHERE id IN (SELECT id FROM demo_orders)))
        OR (aggregate_type = 'Order' AND aggregate_id IN (SELECT id::text FROM demo_orders))
 )
 SELECT 'users=' || (SELECT count(*) FROM demo_users)
 UNION ALL SELECT 'products=' || (SELECT count(*) FROM demo_products)
 UNION ALL SELECT 'flash_sales=' || (SELECT count(*) FROM demo_sales)
 UNION ALL SELECT 'inventory=' || (SELECT count(*) FROM inventory WHERE flash_sale_id IN (SELECT id FROM demo_sales))
-UNION ALL SELECT 'purchase_requests=' || (SELECT count(*) FROM demo_purchase_requests)
 UNION ALL SELECT 'orders=' || (SELECT count(*) FROM demo_orders)
 UNION ALL SELECT 'order_items=' || (SELECT count(*) FROM order_items WHERE order_id IN (SELECT id FROM demo_orders) OR product_id IN (SELECT id FROM demo_products))
 UNION ALL SELECT 'payment_records=' || (SELECT count(*) FROM payment_records WHERE order_id IN (SELECT id FROM demo_orders))
@@ -367,9 +419,11 @@ cleanup_demo_data() {
   aggregate_predicate="$(demo_prefix_predicate aggregate_id)"
 
   sale_ids="$(db_scalar "SELECT string_agg(fs.id::text, ',' ORDER BY fs.id) FROM flash_sales fs JOIN products p ON p.id = fs.product_id WHERE p.name = '$(sql_escape_literal "$DEMO_PRODUCT_NAME")';")"
+  demo_user_ids="$(db_scalar "SELECT string_agg(id::text, ',' ORDER BY id) FROM users WHERE email IN ('$(sql_escape_literal "$DEMO_USER_EMAIL")', '$(sql_escape_literal "$DEMO_ADMIN_EMAIL")');")"
 
   printf 'Cleanup targets in database %s:\n' "$database_name"
   list_cleanup_counts
+  list_purchase_cleanup_counts "$demo_user_ids" "$sale_ids"
 
   if [[ -n "$sale_ids" ]]; then
     IFS=',' read -ra demo_sale_ids <<<"$sale_ids"
@@ -378,8 +432,13 @@ cleanup_demo_data() {
     done
   fi
 
-  demo_user_ids="$(db_scalar "SELECT string_agg(id::text, ',' ORDER BY id) FROM users WHERE email IN ('$(sql_escape_literal "$DEMO_USER_EMAIL")', '$(sql_escape_literal "$DEMO_ADMIN_EMAIL")');")"
   demo_audit_predicate "$demo_user_ids" >/dev/null || return 1
+
+  # 先清 purchase 再清 platform：反過來的話 platform 的 users/flash_sales 先沒了，
+  # 上面那兩個 id 清單就再也查不出來，purchase 那邊的列會變成永遠清不掉的孤兒。
+  # 位置在稽核柵欄之前，因為柵欄一旦開啟就必須走到 end_audit_cleanup_barrier —— 
+  # 在柵欄裡提早 return 會把它留在開啟狀態。
+  delete_purchase_demo_data "$demo_user_ids" "$sale_ids" || return 1
   begin_audit_cleanup_barrier "$demo_user_ids" || return 1
 
   local cleanup_status=0 remaining_audits
@@ -400,23 +459,18 @@ SELECT id FROM products WHERE name = :'demo_product_name';
 CREATE TEMP TABLE demo_sale_ids ON COMMIT DROP AS
 SELECT id FROM flash_sales WHERE product_id IN (SELECT id FROM demo_product_ids);
 
-CREATE TEMP TABLE demo_purchase_request_ids ON COMMIT DROP AS
-SELECT id, order_id FROM purchase_requests
-WHERE user_id IN (SELECT id FROM demo_user_ids)
-   OR flash_sale_id IN (SELECT id FROM demo_sale_ids)
-   OR ${idempotency_predicate};
-
 CREATE TEMP TABLE demo_order_ids ON COMMIT DROP AS
 SELECT id FROM orders
 WHERE user_id IN (SELECT id FROM demo_user_ids)
    OR ${order_predicate}
-   OR id IN (SELECT order_id FROM demo_purchase_request_ids WHERE order_id IS NOT NULL)
+   OR flash_sale_id IN (SELECT id FROM demo_sale_ids)
    OR id IN (SELECT order_id FROM order_items WHERE product_id IN (SELECT id FROM demo_product_ids));
 
 CREATE TEMP TABLE demo_outbox_ids ON COMMIT DROP AS
 SELECT id FROM outbox_events
 WHERE ${aggregate_predicate}
-   OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (SELECT id::text FROM demo_purchase_request_ids))
+   OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (
+          SELECT purchase_request_id::text FROM orders WHERE id IN (SELECT id FROM demo_order_ids)))
    OR (aggregate_type = 'Order' AND aggregate_id IN (SELECT id::text FROM demo_order_ids));
 
 DELETE FROM consumed_messages
@@ -428,7 +482,6 @@ WHERE user_id IN (SELECT id FROM demo_user_ids)
    OR trace_id IN (:'demo_user_trace_id', :'demo_admin_trace_id');
 DELETE FROM payment_records WHERE order_id IN (SELECT id FROM demo_order_ids);
 DELETE FROM order_status_history WHERE order_id IN (SELECT id FROM demo_order_ids);
-DELETE FROM purchase_requests WHERE id IN (SELECT id FROM demo_purchase_request_ids);
 DELETE FROM order_items
 WHERE order_id IN (SELECT id FROM demo_order_ids)
    OR product_id IN (SELECT id FROM demo_product_ids);

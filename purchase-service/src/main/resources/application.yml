@@ -2,21 +2,21 @@ spring:
   application:
     name: purchase-service
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/flashsale}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/purchase}
     username: ${SPRING_DATASOURCE_USERNAME:flashsale}
     password: ${SPRING_DATASOURCE_PASSWORD:flashsale}
     hikari:
-      # 比 backend 的 30 小：purchase-service 只碰 purchase_requests 與 outbox_events 兩張表，
-      # 而步驟 1 兩個服務共用同一個 Postgres —— 兩邊的連線池會相加去撞 max_connections。
-      # 3 個副本 x 15 = 45，加上 backend 的 3 x 30 = 90，總共 135，仍在 300 以內。
+      # 15 而不是 backend 的 30：這個服務只碰兩張表、交易都很短。
+      # P4 步驟 2 之後兩邊連的是不同的 Postgres instance，連線池不再相加去撞同一個
+      # max_connections —— 這正是 database per service 在容量上的實際好處。
       maximum-pool-size: 15
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
   flyway:
-    # schema 的所有權在 backend。這裡明確關掉，不是靠「沒有加依賴」來隱性關閉。
-    enabled: false
+    # P4 步驟 2 起 schema 的所有權在這裡。
+    enabled: true
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}

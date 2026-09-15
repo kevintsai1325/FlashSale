@@ -1,0 +1,37 @@
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+app:
+  scheduling:
+    enabled: false
+
+management:
+  tracing:
+    sampling:
+      probability: 0
+
+# 只有公鑰：purchase-service 只驗證 token。測試不簽 token，改用 Spring Security Test 的
+# jwt() post-processor 直接塞一個已驗證的 principal —— 那條路徑不經過 JwtDecoder，
+# 但這個屬性仍然必須存在，否則 JwtKeyConfig 起不來、整個 context 啟動失敗。
+# 這把公鑰與 backend 測試用的是同一把，方便對照；正式環境由環境變數提供。
+JWT_PUBLIC_KEY: |
+  -----BEGIN PUBLIC KEY-----
+  MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA9lTL2QOmOPWl898hVrv5
+  y0XXHpsqaKsaL0zxbhC9qewOJLeK1v/+jKXV5hDnopfKwW75hZOf6tXfM5Xx31KY
+  qgUdUX5wLZpwJaQOpgQvZAQ7Wtws8qfqGcb3R5EMAYaKq4UZgoezllmTyWxvOOcr
+  fhJmfSMFdSmVXokdnCo4quhnegKl1NT/hZcojUAwca2XPZaRuqBU5hx545wTtn8v
+  GgVYmkw0qaNTgJTaMYGDCpfvu6ynUjUDQCoQ49taGcHILy4ahs7fk3/I0DZBat+P
+  7aqxsMQvA51UR8KT85fcw1QfSBgLgcrsPyAZ5eXEyWeYJivKo+LIEDBFFiEqGvgk
+  /QIDAQAB
+  -----END PUBLIC KEY-----

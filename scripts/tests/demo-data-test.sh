@@ -138,6 +138,8 @@ cleanup_redis_failure_prevents_database_delete() {
     esac
   }
   list_cleanup_counts() { :; }
+  list_purchase_cleanup_counts() { :; }
+  delete_purchase_demo_data() { :; }
   redis_delete_exact_stock() { return 19; }
   psql_exec() {
     database_delete_started=1
@@ -243,6 +245,8 @@ cleanup_audit_barrier_begin_failure_prevents_database_delete() {
     esac
   }
   list_cleanup_counts() { :; }
+  list_purchase_cleanup_counts() { :; }
+  delete_purchase_demo_data() { :; }
   redis_delete_exact_stock() { :; }
   begin_audit_cleanup_barrier() { return 1; }
   psql_exec() {
@@ -269,6 +273,8 @@ cleanup_always_ends_audit_barrier_even_after_delete_failure() {
     esac
   }
   list_cleanup_counts() { :; }
+  list_purchase_cleanup_counts() { :; }
+  delete_purchase_demo_data() { :; }
   redis_delete_exact_stock() { :; }
   begin_audit_cleanup_barrier() { :; }
   psql_exec() { return 1; }

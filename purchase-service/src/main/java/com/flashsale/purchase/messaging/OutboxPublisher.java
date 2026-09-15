@@ -19,11 +19,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * 與 backend 的發佈器是同一套機制，兩邊各跑一份、撈同一張表。SKIP LOCKED 讓它們互不搶單。
+ * 與 backend 的發佈器是同一套機制，但 P4 步驟 2 起各自撈**自己資料庫裡的**那張表。
  *
- * routingKeyFor 必須認得**全部**的 event type，包含只有 backend 會寫入的
- * StockReleaseRequested 與 PurchaseResolved —— 因為表是共用的，這個發佈器隨時可能撈到
- * 對方寫入的列。漏掉任何一種就會在執行期丟例外、讓那筆事件卡住不發。
+ * SKIP LOCKED 仍然是必要的 —— 這個服務自己就有三個副本，三份排程同時撈同一張表。
+ * 它不再是為了「兩個不同的服務共用一張表」。
  */
 @Component
 public class OutboxPublisher {
@@ -106,8 +105,6 @@ public class OutboxPublisher {
     private String routingKeyFor(String eventType) {
         return switch (eventType) {
             case EventTypes.CREATE_ORDER_REQUESTED -> RabbitConfig.CREATE_ORDER_ROUTING_KEY;
-            case EventTypes.STOCK_RELEASE_REQUESTED -> RabbitConfig.STOCK_RELEASE_ROUTING_KEY;
-            case EventTypes.PURCHASE_RESOLVED -> RabbitConfig.PURCHASE_RESOLVED_ROUTING_KEY;
             default -> throw new IllegalStateException("Unknown outbox event type: " + eventType);
         };
     }

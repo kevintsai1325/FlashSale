@@ -13,9 +13,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * 步驟 1 的 purchase_requests 表由 purchase-service 獨佔寫入。backend 仍然讀它
- * （admin 儀表板與訂單查詢），那是共用資料庫階段刻意接受的妥協，並且只有讀。
- * 步驟 2 拆庫時，那些讀取要換成 API 或讀模型。
+ * purchase_requests 在 P4 步驟 2 之後完全屬於這個服務：自己的資料庫、自己的 migration、
+ * 唯一的讀寫者。backend 原本的三處讀取分別換成了「訂單自己存下來的欄位」與
+ * 「一支內部統計 API」。
+ *
+ * user_id / flash_sale_id / order_id 都只是數字，沒有外鍵 —— 它們指向別的服務的資料。
  */
 @Entity
 @Table(name = "purchase_requests")

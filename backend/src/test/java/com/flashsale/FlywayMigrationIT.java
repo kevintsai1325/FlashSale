@@ -20,7 +20,7 @@ class FlywayMigrationIT extends AbstractIntegrationTest {
 
         assertThat(tables).containsExactlyInAnyOrder(
             "users", "refresh_tokens", "products", "flash_sales", "inventory",
-            "purchase_requests", "orders", "order_items", "payment_records",
+            "orders", "order_items", "payment_records",
             "outbox_events", "consumed_messages", "notification_deliveries",
             "api_audit_logs", "order_status_history", "flyway_schema_history"
         );

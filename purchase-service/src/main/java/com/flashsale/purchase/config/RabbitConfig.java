@@ -13,8 +13,8 @@ import org.springframework.context.annotation.Configuration;
  * 共用一個 constants library 會讓兩個服務綁在同一個版本上，正是拆分要解掉的東西。
  *
  * purchase-service 發佈 order.create，並消費 purchase.resolved。
- * stock.release 的 routing key 也在這裡，因為步驟 1 兩個服務共用 outbox_events 表，
- * 任何一邊的發佈器都可能撈到對方寫入的列，兩邊都必須認得全部的 event type。
+ * stock.release 的常數在步驟 2 一併移除：它只存在於「兩個服務共用同一張 outbox 表」
+ * 的那個階段，現在各有各的表，這個服務永遠不會發佈那種事件。
  */
 @Configuration
 public class RabbitConfig {
@@ -22,7 +22,6 @@ public class RabbitConfig {
     public static final String ORDER_EXCHANGE = "order.exchange";
 
     public static final String CREATE_ORDER_ROUTING_KEY = "order.create";
-    public static final String STOCK_RELEASE_ROUTING_KEY = "stock.release";
 
     public static final String PURCHASE_RESOLVED_QUEUE = "purchase.resolved.queue";
     public static final String PURCHASE_RESOLVED_ROUTING_KEY = "purchase.resolved";

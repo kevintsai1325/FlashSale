@@ -13,6 +13,21 @@ services:
       timeout: 5s
       retries: 10
 
+  # P4 步驟 2：purchase-service 自己的資料庫（獨立 instance，不是同一個 Postgres 的第二個 database）。
+  postgres-purchase:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: purchase
+      POSTGRES_USER: flashsale
+      POSTGRES_PASSWORD: flashsale
+    volumes:
+      - postgres_purchase_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flashsale"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     healthcheck:
@@ -95,7 +110,7 @@ services:
   purchase-service:
     build: ./purchase-service
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/flashsale
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-purchase:5432/purchase
       SPRING_DATASOURCE_USERNAME: flashsale
       SPRING_DATASOURCE_PASSWORD: flashsale
       # 只要公鑰：purchase-service 驗證 token，不簽發 token。
@@ -109,7 +124,7 @@ services:
       APP_FLASH_SALE_BASE_URL: http://backend:8080
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
-      postgres:
+      postgres-purchase:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -117,6 +132,11 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   frontend:
     build: ./frontend
@@ -147,3 +167,4 @@ services:
 
 volumes:
   postgres_data:
+  postgres_purchase_data:

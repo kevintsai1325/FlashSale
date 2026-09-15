@@ -45,6 +45,60 @@ spec:
     - metadata: {name: data}
       spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 10Gi}}}
 ---
+# P4 步驟 2：purchase-service 自己的 Postgres。
+#
+# 為什麼是獨立的 instance 而不是同一個 Postgres 開第二個 database：
+# database per service 的價值不在於「資料放在不同檔案裡」，而在於**移除跨服務直接讀寫的
+# 可能性**。同一個 instance 只是把耦合藏進連線字串，第一個趕工的人就會把跨庫查詢加回來。
+# 雲端上這個選擇對應的是「每個服務一個 RDS instance」。
+#
+# 代價是多一份記憶體，以及多一套備份／監控／升級。這個代價要寫進文件，不能假裝沒有。
+#
+# max_connections 用預設的 100：這裡只有 purchase-service 連進來，3 副本 x 15 = 45。
+# platform 那邊之所以要調到 300，正是因為所有服務都擠在同一個 instance ——
+# 拆庫之後那個理由在這裡不成立。
+apiVersion: v1
+kind: Service
+metadata: {name: postgres-purchase-headless, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  clusterIP: None
+  selector: {app: postgres-purchase}
+  ports: [{name: postgres, port: 5432, targetPort: 5432}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: postgres-purchase, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  selector: {app: postgres-purchase}
+  ports: [{name: postgres, port: 5432, targetPort: 5432}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: postgres-purchase, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  serviceName: postgres-purchase-headless
+  replicas: 1
+  selector: {matchLabels: {app: postgres-purchase}}
+  template:
+    metadata: {labels: {app: postgres-purchase}}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - {name: POSTGRES_DB, value: purchase}
+            - {name: POSTGRES_USER, value: flashsale}
+            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: POSTGRES_PASSWORD}}}
+          ports: [{containerPort: 5432}]
+          startupProbe: {exec: {command: [pg_isready, -U, flashsale]}, failureThreshold: 30, periodSeconds: 5, timeoutSeconds: 3}
+          readinessProbe: {exec: {command: [pg_isready, -U, flashsale]}, initialDelaySeconds: 5, periodSeconds: 5}
+          livenessProbe: {exec: {command: [pg_isready, -U, flashsale]}, initialDelaySeconds: 20, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: "1", memory: 1Gi}}
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 5Gi}}}
+---
 apiVersion: v1
 kind: Service
 metadata: {name: redis-headless, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}

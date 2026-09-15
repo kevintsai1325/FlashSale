@@ -37,11 +37,18 @@ dependencies {
     implementation("org.postgresql:postgresql:42.7.4")
     implementation("net.logstash.logback:logstash-logback-encoder:7.4")
 
-    // 刻意沒有 Flyway：步驟 1 共用同一個資料庫，schema 的所有權留在 backend。
-    // 兩個服務同時對同一個 schema 跑 migration 只會互相打架。步驟 2 拆庫時才會需要。
+    // P4 步驟 2：自己的資料庫、自己的 migration。步驟 1 時這裡刻意留空，
+    // 因為兩個服務對同一個 schema 各跑一套 migration 只會互相打架。
+    implementation("org.flywaydb:flyway-core")
+    implementation("org.flywaydb:flyway-database-postgresql")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
+    testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.testcontainers:postgresql")
+    testImplementation("org.testcontainers:rabbitmq")
+    testImplementation("com.redis:testcontainers-redis:2.2.2")
 }
 
 tasks.withType<Test> {

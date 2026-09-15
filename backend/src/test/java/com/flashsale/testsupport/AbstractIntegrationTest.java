@@ -83,7 +83,7 @@ public abstract class AbstractIntegrationTest {
     void resetSharedInfrastructure() {
         jdbcTemplate.execute("""
             TRUNCATE TABLE
-                order_status_history, payment_records, purchase_requests, order_items, orders,
+                order_status_history, payment_records, order_items, orders,
                 inventory, flash_sales, refresh_tokens, notification_deliveries, products, users,
                 outbox_events, consumed_messages, api_audit_logs
             RESTART IDENTITY CASCADE

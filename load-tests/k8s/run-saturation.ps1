@@ -138,6 +138,12 @@ try {
     Get-Content -LiteralPath $fixture -Raw -Encoding UTF8 |
         & kubectl --context $Context -n $Namespace exec -i postgres-0 -- psql -U flashsale -d flashsale -q -v ON_ERROR_STOP=1
     if ($LASTEXITCODE -ne 0) { throw '種資料失敗' }
+
+    # P4 步驟 2：purchase-service 有自己的資料庫，要各自清一次。
+    $purchaseFixture = Join-Path $repoRoot 'load-tests\k8sixtures-saturation-purchase.sql'
+    Get-Content -LiteralPath $purchaseFixture -Raw -Encoding UTF8 |
+        & kubectl --context $Context -n $Namespace exec -i postgres-purchase-0 -- psql -U flashsale -d purchase -q -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw 'purchase 資料庫重置失敗' }
     Invoke-Kubectl -Arguments @('-n', $Namespace, 'exec', 'redis-0', '--', 'redis-cli', 'DEL', 'stock:1') | Out-Null
 
     $apply = Invoke-Kubectl -Arguments @('apply', '-f', (Join-Path $repoRoot 'k8s\loadtest\backend-nodeport.yaml'))
