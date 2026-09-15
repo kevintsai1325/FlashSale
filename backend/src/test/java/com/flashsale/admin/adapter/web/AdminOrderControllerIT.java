@@ -1,6 +1,7 @@
 package com.flashsale.admin.adapter.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flashsale.common.client.OrderServiceClient;
 import com.flashsale.testsupport.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,7 +9,16 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -16,15 +26,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Exercises {@code GET /api/admin/orders} (list) and {@code GET /api/admin/orders/{id}}
- * (detail) end to end, same ADMIN/USER JWT pattern as {@link AdminDashboardControllerIT}.
+ * 後台訂單清單與詳情的 **BFF** 行為（P5）。
  *
- * <p>Seeds an order + item + linked purchase request + two {@code order_status_history} rows
- * directly via JDBC (this module has no order-creation flow of its own to drive through), plus
- * three {@code api_audit_logs} rows to prove the detail endpoint's time-window audit-log
- * correlation (see {@code AdminOrderQueryService}): one within the correlation window of the
- * order's {@code PENDING_PAYMENT} timestamp and same user (expected in the response), one far
- * outside the window (excluded), and one inside the window but for a different user (excluded).
+ * 訂單資料來自 order-service（mock），稽核紀錄來自 platform 自己的資料庫（真的寫進去）。
+ * 這個測試守的就是那個合併，以及「狀態篩選原封不動傳給擁有者」——
+ * 訂單本身的查詢與分頁是 order-service 的責任，由它自己的測試負責。
+ *
+ * 這也是拆分後整合測試的一般形狀：只驗自己這一側做的事。
  */
 class AdminOrderControllerIT extends AbstractIntegrationTest {
 
@@ -32,27 +40,19 @@ class AdminOrderControllerIT extends AbstractIntegrationTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired JdbcTemplate jdbcTemplate;
 
-    private String requestBody(String email, String password) throws Exception {
-        return objectMapper.writeValueAsString(new java.util.HashMap<>() {{
-            put("email", email);
-            put("password", password);
-        }});
-    }
+    private static final long ORDER_ID = 4242L;
+    private static final UUID PURCHASE_REQUEST_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
-    private String registerAndLogin(String email) throws Exception {
-        String body = requestBody(email, "secret123");
-        mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(body))
-            .andExpect(status().isCreated());
-        MvcResult login = mockMvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON).content(body))
-            .andExpect(status().isOk()).andReturn();
-        return objectMapper.readTree(login.getResponse().getContentAsString()).get("accessToken").asText();
+    private String requestBody(String email) throws Exception {
+        return objectMapper.writeValueAsString(java.util.Map.of("email", email, "password", "secret123"));
     }
 
     private String registerAdminAndLogin(String email) throws Exception {
-        String token = registerAndLogin(email);
+        String body = requestBody(email);
+        mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated());
         jdbcTemplate.update("update users set role = 'ADMIN' where email = ?", email);
-        // Role is baked into the JWT at login time, so re-login after the promotion.
-        String body = requestBody(email, "secret123");
+        // 角色在登入時就烤進 JWT，所以升級之後必須重新登入。
         MvcResult login = mockMvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON).content(body))
             .andExpect(status().isOk()).andReturn();
         return objectMapper.readTree(login.getResponse().getContentAsString()).get("accessToken").asText();
@@ -71,132 +71,80 @@ class AdminOrderControllerIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void adminSeesOrderListAndDetailWithHistoryAndCorrelatedAuditLogs() throws Exception {
+    void mergesOrderDetailFromOrderServiceWithPlatformOwnAuditLogs() throws Exception {
         String adminToken = registerAdminAndLogin("order-admin@example.com");
-
         jdbcTemplate.update("insert into users (email, password_hash, role) values ('order-shopper@example.com', 'x', 'USER')");
-        jdbcTemplate.update("insert into users (email, password_hash, role) values ('order-other-shopper@example.com', 'x', 'USER')");
+        jdbcTemplate.update("insert into users (email, password_hash, role) values ('order-other@example.com', 'x', 'USER')");
         Long shopperId = userId("order-shopper@example.com");
-        Long otherShopperId = userId("order-other-shopper@example.com");
+        Long otherShopperId = userId("order-other@example.com");
 
-        jdbcTemplate.update("insert into products (id, name) values (601, 'Admin Order Product')");
-        jdbcTemplate.update(
-            "insert into flash_sales (id, product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status) " +
-            "values (601, 601, 12.50, now() - interval '1 hour', now() + interval '1 hour', 2, 'ACTIVE')");
+        Instant pendingAt = Instant.now().minus(10, ChronoUnit.MINUTES);
+        when(orderServiceClient.orderDetail(ORDER_ID)).thenReturn(Optional.of(new OrderServiceClient.OrderDetail(
+            ORDER_ID, "ORD-ADMIN-1", shopperId, new BigDecimal("25.00"), "PAID",
+            null, pendingAt, 601L, PURCHASE_REQUEST_ID,
+            List.of(new OrderServiceClient.OrderItemView(601L, "Admin Order Product", 2, new BigDecimal("12.50"))),
+            List.of(new OrderServiceClient.StatusHistoryView(null, "PENDING_PAYMENT", pendingAt),
+                new OrderServiceClient.StatusHistoryView("PENDING_PAYMENT", "PAID", pendingAt.plusSeconds(60))))));
 
-        // 訂單自己帶著 flash_sale_id 與 purchase_request_id（V4）：後台詳情的搶購請求區塊
-        // 從這兩個欄位推導，不再去查 purchase_requests——那張表已經是 purchase-service 的。
-        jdbcTemplate.update(
-            "insert into orders (order_no, user_id, total_amount, status, created_at, flash_sale_id, purchase_request_id) " +
-            "values ('ORD-ADMIN-1', ?, 25.00, 'PAID', now() - interval '10 minutes', 601, gen_random_uuid())", shopperId);
-        Long orderId = jdbcTemplate.queryForObject("select id from orders where order_no = 'ORD-ADMIN-1'", Long.class);
-
-        jdbcTemplate.update(
-            "insert into order_items (order_id, product_id, product_name, quantity, unit_price) values (?, 601, 'Admin Order Product', 2, 12.50)", orderId);
-
-        jdbcTemplate.update(
-            "insert into order_status_history (order_id, from_status, to_status, changed_at) " +
-            "values (?, null, 'PENDING_PAYMENT', now() - interval '10 minutes')", orderId);
-        jdbcTemplate.update(
-            "insert into order_status_history (order_id, from_status, to_status, changed_at) " +
-            "values (?, 'PENDING_PAYMENT', 'PAID', now() - interval '9 minutes')", orderId);
-
-        // Within the correlation window (same time as PENDING_PAYMENT), same user -> expected.
+        // 時間窗內、同一個使用者 -> 會被帶進回應。
         insertAuditLog("/api/purchase", shopperId, "trace-order-creation", "now() - interval '10 minutes'");
-        // Far outside the window -> excluded.
+        // 時間窗外 -> 排除。
         insertAuditLog("/api/purchase", shopperId, "trace-far-away", "now() - interval '30 minutes'");
-        // Inside the window but a different user -> excluded.
+        // 時間窗內但是別人的 -> 排除。
         insertAuditLog("/api/purchase", otherShopperId, "trace-other-user", "now() - interval '10 minutes'");
 
-        // Scoped to status=PAID so this assertion stays valid regardless of what other order rows
-        // other test methods in this class may have inserted into the shared Testcontainers DB
-        // (see filtersOrderListByStatus, which deliberately avoids the PAID status for this reason).
-        mockMvc.perform(get("/api/admin/orders").param("status", "PAID").header("Authorization", "Bearer " + adminToken))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.totalElements").value(1))
-            .andExpect(jsonPath("$.content[0].orderNo").value("ORD-ADMIN-1"))
-            .andExpect(jsonPath("$.content[0].status").value("PAID"))
-            .andExpect(jsonPath("$.content[0].totalAmount").value(25.00));
-
-        mockMvc.perform(get("/api/admin/orders/" + orderId).header("Authorization", "Bearer " + adminToken))
+        mockMvc.perform(get("/api/admin/orders/" + ORDER_ID).header("Authorization", "Bearer " + adminToken))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.orderNo").value("ORD-ADMIN-1"))
             .andExpect(jsonPath("$.status").value("PAID"))
             .andExpect(jsonPath("$.items.length()").value(1))
             .andExpect(jsonPath("$.items[0].productId").value(601))
-            .andExpect(jsonPath("$.items[0].quantity").value(2))
+            // 訂單存在本身就是搶購成功的證明，所以狀態是推導的，不必再跨一次服務去問。
+            .andExpect(jsonPath("$.purchaseRequest.requestId").value(PURCHASE_REQUEST_ID.toString()))
             .andExpect(jsonPath("$.purchaseRequest.status").value("SUCCEEDED"))
-            .andExpect(jsonPath("$.purchaseRequest.orderId").value(orderId))
             .andExpect(jsonPath("$.statusHistory.length()").value(2))
-            .andExpect(jsonPath("$.statusHistory[0].fromStatus").doesNotExist())
-            .andExpect(jsonPath("$.statusHistory[0].toStatus").value("PENDING_PAYMENT"))
-            .andExpect(jsonPath("$.statusHistory[1].fromStatus").value("PENDING_PAYMENT"))
-            .andExpect(jsonPath("$.statusHistory[1].toStatus").value("PAID"))
+            // 這一項是 platform 自己的資料，也是這個端點不跟著訂單搬走的理由。
             .andExpect(jsonPath("$.relatedApiLogs.length()").value(1))
             .andExpect(jsonPath("$.relatedApiLogs[0].traceId").value("trace-order-creation"));
     }
 
     @Test
-    void filtersOrderListByStatus() throws Exception {
-        String adminToken = registerAdminAndLogin("order-status-admin@example.com");
+    void passesTheStatusFilterThroughToTheOwner() throws Exception {
+        String adminToken = registerAdminAndLogin("order-filter-admin@example.com");
+        when(orderServiceClient.orders(eq("CANCELLED"), eq(0), eq(20)))
+            .thenReturn(new OrderServiceClient.PagedOrders(List.of(new OrderServiceClient.OrderSummary(
+                7L, "ORD-CANCELLED", 1L, new BigDecimal("20.00"), "CANCELLED", Instant.now())), 1, 0, 20));
 
-        jdbcTemplate.update("insert into users (email, password_hash, role) values ('order-status-shopper@example.com', 'x', 'USER')");
-        Long shopperId = userId("order-status-shopper@example.com");
-
-        jdbcTemplate.update("insert into products (id, name) values (701, 'Status Filter Product')");
-        jdbcTemplate.update(
-            "insert into flash_sales (id, product_id, sale_price, starts_at, ends_at, purchase_limit_per_user, status) " +
-            "values (701, 701, 9.99, now() - interval '1 hour', now() + interval '1 hour', 2, 'ACTIVE')");
-
-        // Deliberately CANCELLED + EXPIRED, not PAID: adminSeesOrderListAndDetailWithHistoryAndCorrelatedAuditLogs
-        // (above) inserts a PAID order into this same shared Testcontainers DB, and test method
-        // execution order within a class isn't guaranteed, so any assertion here scoped to PAID
-        // (or an unscoped/unfiltered row-count assertion) could pass or fail depending on which
-        // test method happens to run first. CANCELLED/EXPIRED are otherwise unused in this class.
-        jdbcTemplate.update(
-            "insert into orders (order_no, user_id, total_amount, status, created_at) " +
-            "values ('ORD-STATUS-CANCELLED', ?, 20.00, 'CANCELLED', now() - interval '5 minutes')", shopperId);
-        jdbcTemplate.update(
-            "insert into orders (order_no, user_id, total_amount, status, created_at) " +
-            "values ('ORD-STATUS-EXPIRED', ?, 30.00, 'EXPIRED', now() - interval '15 minutes')", shopperId);
-
-        // No status filter -> includes both of this test's orders (order-independent: checks
-        // presence via response body content, not an exact totalElements count, since other test
-        // methods' orders may also be present in the shared table).
-        MvcResult unfiltered = mockMvc.perform(get("/api/admin/orders").param("size", "100").header("Authorization", "Bearer " + adminToken))
-            .andExpect(status().isOk())
-            .andReturn();
-        String unfilteredBody = unfiltered.getResponse().getContentAsString();
-        assertThat(unfilteredBody).contains("ORD-STATUS-CANCELLED").contains("ORD-STATUS-EXPIRED");
-
-        // status=CANCELLED -> only the CANCELLED order (safe: no other test in this class uses CANCELLED).
-        mockMvc.perform(get("/api/admin/orders").param("status", "CANCELLED").header("Authorization", "Bearer " + adminToken))
+        mockMvc.perform(get("/api/admin/orders").param("status", "CANCELLED")
+                .header("Authorization", "Bearer " + adminToken))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.totalElements").value(1))
-            .andExpect(jsonPath("$.content[0].orderNo").value("ORD-STATUS-CANCELLED"));
+            .andExpect(jsonPath("$.content[0].orderNo").value("ORD-CANCELLED"));
 
-        // status=EXPIRED -> only the EXPIRED order (safe: no other test in this class uses EXPIRED).
-        mockMvc.perform(get("/api/admin/orders").param("status", "EXPIRED").header("Authorization", "Bearer " + adminToken))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.totalElements").value(1))
-            .andExpect(jsonPath("$.content[0].orderNo").value("ORD-STATUS-EXPIRED"));
-    }
-
-    @Test
-    void nonAdminUserIsForbiddenFromBothOrderEndpoints() throws Exception {
-        String userToken = registerAndLogin("order-plain-user@example.com");
-
-        mockMvc.perform(get("/api/admin/orders").header("Authorization", "Bearer " + userToken))
-            .andExpect(status().isForbidden());
-        mockMvc.perform(get("/api/admin/orders/1").header("Authorization", "Bearer " + userToken))
-            .andExpect(status().isForbidden());
+        // 沒帶 status 時傳 null 過去，而不是某個預設值 —— 「全部狀態」的語意由擁有者定義。
+        mockMvc.perform(get("/api/admin/orders").header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk());
+        org.mockito.Mockito.verify(orderServiceClient).orders(isNull(), eq(0), eq(20));
     }
 
     @Test
     void unknownOrderIdReturnsNotFound() throws Exception {
-        String adminToken = registerAdminAndLogin("order-admin-404@example.com");
-
+        String adminToken = registerAdminAndLogin("order-404-admin@example.com");
+        // 共用底座預設就回 Optional.empty()：「查不到」是權威的答案，不是失敗。
         mockMvc.perform(get("/api/admin/orders/999999").header("Authorization", "Bearer " + adminToken))
             .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void nonAdminUserIsForbidden() throws Exception {
+        String body = requestBody("order-plain-user@example.com");
+        mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated());
+        MvcResult login = mockMvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON).content(body))
+            .andExpect(status().isOk()).andReturn();
+        String token = objectMapper.readTree(login.getResponse().getContentAsString()).get("accessToken").asText();
+
+        mockMvc.perform(get("/api/admin/orders").header("Authorization", "Bearer " + token))
+            .andExpect(status().isForbidden());
     }
 }

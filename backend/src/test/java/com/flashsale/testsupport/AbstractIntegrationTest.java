@@ -1,6 +1,10 @@
 package com.flashsale.testsupport;
 
+import com.flashsale.admin.adapter.http.AnalyticsClient;
+import com.flashsale.common.client.OrderServiceClient;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -63,6 +67,38 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         registry.add("spring.mail.host", () -> "localhost");
         registry.add("spring.mail.port", () -> "2525");
+    }
+
+    /**
+     * P5：**platform 的整合測試停在自己的行程邊界**，所有跨服務的 client 一律 mock。
+     *
+     * 放在共用底座而不是每個測試各自宣告，有兩個理由：一是少了它，任何一個測試只要
+     * 碰到店面或後台，就會去連一個不存在的 order-service 並以 Connection refused 收場；
+     * 二是所有測試共用同一組 mock 定義，Spring 的 context 快取才不會被拆成好幾份。
+     *
+     * 預設值是「空的、可用的」——需要具體資料的測試自己再 stub 一次。
+     */
+    @MockBean protected OrderServiceClient orderServiceClient;
+    @MockBean protected AnalyticsClient analyticsClient;
+
+    @BeforeEach
+    void stubCrossServiceClients() {
+        org.mockito.Mockito.when(orderServiceClient.inventories(org.mockito.ArgumentMatchers.any()))
+            .thenReturn(java.util.Map.of());
+        org.mockito.Mockito.when(orderServiceClient.declareInventory(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt()))
+            .thenAnswer(invocation -> new OrderServiceClient.InventoryView(
+                invocation.getArgument(1), invocation.getArgument(1), 0, 0));
+        org.mockito.Mockito.when(orderServiceClient.orders(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.anyInt()))
+            .thenReturn(new OrderServiceClient.PagedOrders(java.util.List.of(), 0, 0, 20));
+        org.mockito.Mockito.when(orderServiceClient.orderDetail(org.mockito.ArgumentMatchers.any()))
+            .thenReturn(java.util.Optional.empty());
+        org.mockito.Mockito.when(analyticsClient.summary())
+            .thenReturn(new AnalyticsClient.DashboardSummary(0, 0, java.util.Map.of(), java.math.BigDecimal.ZERO));
+        org.mockito.Mockito.when(analyticsClient.trends(org.mockito.ArgumentMatchers.any()))
+            .thenReturn(new AnalyticsClient.DashboardTrends(java.util.List.of(), java.util.List.of()));
     }
 
     @Autowired private JdbcTemplate jdbcTemplate;

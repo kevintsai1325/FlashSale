@@ -23,10 +23,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Verifies that {@code ApiAuditFilter} writes one row per HTTP request to
- * {@code api_audit_logs}, asynchronously (hence {@code awaitility} polling below). Only a
- * Postgres Testcontainer is used here — both endpoints exercised ({@code GET /api/flash-sales}
- * and {@code GET /api/orders/me}) are Postgres-only code paths with no Redis/RabbitMQ involved,
- * matching the precedent set by {@code FlashSaleControllerIT} and {@code AuthControllerLoginIT}.
+ * {@code api_audit_logs}, asynchronously (hence {@code awaitility} polling below).
+ *
+ * <p>P5：需要一個「未登入回 401、登入後回 200」的端點來驗稽核的兩種情況。
+ * 原本用的是 {@code GET /api/orders/me}，那支端點已經搬到 order-service ——
+ * 改用後台儀表板，它留在 platform，而且它的跨服務相依在共用底座上已經被 mock 掉了。
  */
 class ApiAuditFilterIT extends AbstractIntegrationTest {
 
@@ -89,11 +90,11 @@ class ApiAuditFilterIT extends AbstractIntegrationTest {
     void unauthenticatedRequestIsAuditedExactlyOnce() throws Exception {
         long beforeId = latestAuditId();
 
-        mockMvc.perform(get("/api/orders/me"))
+        mockMvc.perform(get("/api/admin/dashboard/summary"))
             .andExpect(status().isUnauthorized());
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-            List<Map<String, Object>> rows = auditRowsAfter(beforeId, "/api/orders/me", 401);
+            List<Map<String, Object>> rows = auditRowsAfter(beforeId, "/api/admin/dashboard/summary", 401);
             assertThat(rows).hasSize(1);
             assertThat(rows.getFirst().get("user_id")).isNull();
             assertThat(rows.getFirst().get("error_code")).isEqualTo("UNAUTHENTICATED");
@@ -160,14 +161,21 @@ class ApiAuditFilterIT extends AbstractIntegrationTest {
 
     @Test
     void authenticatedRequestIsAuditedWithUserId() throws Exception {
-        String accessToken = registerAndLogin("audit-user@example.com");
+        // 需要一個「已登入而且回 200」的端點。P5 之後 platform 剩下的已登入端點只有後台，
+        // 所以這裡把使用者升成 ADMIN —— 這個測試要驗的是稽核有沒有記到 userId，
+        // 不是權限本身（那由上面那條 403 的測試守）。
+        String email = "audit-user@example.com";
+        registerAndLogin(email);
+        jdbcTemplate.update("update users set role = 'ADMIN' where email = ?", email);
+        // 角色在登入時烤進 JWT，所以升級之後要重新登入（不是重新註冊）。
+        String accessToken = login(email);
 
-        mockMvc.perform(get("/api/orders/me").header("Authorization", "Bearer " + accessToken))
+        mockMvc.perform(get("/api/admin/dashboard/summary").header("Authorization", "Bearer " + accessToken))
             .andExpect(status().isOk());
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             Map<String, Object> row = jdbcTemplate.queryForMap(
-                "select * from api_audit_logs where path_template = '/api/orders/me' " +
+                "select * from api_audit_logs where path_template = '/api/admin/dashboard/summary' " +
                     "and method = 'GET' and status = 200 order by id desc limit 1");
             assertThat(row.get("user_id")).isNotNull();
             assertThat(row.get("request_id")).isEqualTo(row.get("trace_id"));
@@ -226,6 +234,14 @@ class ApiAuditFilterIT extends AbstractIntegrationTest {
                 .content(requestBody(email, "secret123")))
             .andExpect(status().isCreated());
 
+        String loginResponse = mockMvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
+                .content(requestBody(email, "secret123")))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(loginResponse).get("accessToken").asText();
+    }
+
+    private String login(String email) throws Exception {
         String loginResponse = mockMvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
                 .content(requestBody(email, "secret123")))
             .andExpect(status().isOk())

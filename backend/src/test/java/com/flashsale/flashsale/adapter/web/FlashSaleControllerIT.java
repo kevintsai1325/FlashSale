@@ -1,6 +1,8 @@
 package com.flashsale.flashsale.adapter.web;
 
+import com.flashsale.common.client.OrderServiceClient;
 import com.flashsale.testsupport.AbstractIntegrationTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -75,6 +77,16 @@ class FlashSaleControllerIT extends AbstractIntegrationTest {
     }
 
     @Autowired MockMvc mockMvc;
+
+    /**
+     * P5：庫存在 order-service，所以店面的數量是跨服務拿到的。
+     * 共用底座預設回空 Map（代表「問不到」），這裡換成這個測試要的數字。
+     */
+    @BeforeEach
+    void stubInventory() {
+        org.mockito.Mockito.when(orderServiceClient.inventories(java.util.List.of(1L)))
+            .thenReturn(java.util.Map.of(1L, new OrderServiceClient.InventoryView(100, 42, 0, 58)));
+    }
 
     @Test
     void listReturnsSeededSummaryWithoutAuthentication() throws Exception {

@@ -7,7 +7,6 @@ import com.flashsale.testsupport.AbstractIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -48,10 +47,10 @@ class AdminDashboardControllerIT extends AbstractIntegrationTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired JdbcTemplate jdbcTemplate;
 
-    @MockBean AnalyticsClient analyticsClient;
-
     // mock 依呼叫端給的錨點算桶，與真的 analytics-service 做的事一樣——
     // 回傳固定的桶起點會在測試跨越分鐘邊界時偶發性地對不上。
+    // analyticsClient 的 mock 在共用底座上（見 AbstractIntegrationTest）——
+    // 這裡只是把它從「空的」換成這個測試要的數字。
     @BeforeEach
     void stubAnalytics() {
         when(analyticsClient.summary()).thenReturn(new AnalyticsClient.DashboardSummary(

@@ -34,6 +34,8 @@ class OrderPurchaseConsumerRedeliveryIT extends AbstractIntegrationTest {
             put("userId", 999);
             put("flashSaleId", 1);
             put("productId", 1);
+            // P5：商品名稱由事件帶過來，不再查 catalog——少了它建單會撞 NOT NULL。
+            put("productName", "Limited Sneakers");
             put("quantity", 1);
             put("unitPrice", 9.99);
         }});

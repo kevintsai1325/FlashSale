@@ -18,6 +18,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class AdminFlashSaleControllerIT extends AbstractIntegrationTest {
 
+    /**
+     * P5：更新活動時會先跨服務讀一次庫存（用來判斷總量有沒有被改）。
+     * 共用底座預設回空 Map，那代表「查不到庫存」而不是「總量是 10」——
+     * 這幾個測試需要一個具體的數字，所以在這裡補上。
+     */
+    private void stubExistingInventory(long flashSaleId, int totalQuantity) {
+        org.mockito.Mockito.when(orderServiceClient.inventories(java.util.List.of(flashSaleId)))
+            .thenReturn(java.util.Map.of(flashSaleId,
+                new com.flashsale.common.client.OrderServiceClient.InventoryView(totalQuantity, totalQuantity, 0, 0)));
+    }
+
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired JdbcTemplate jdbcTemplate;
@@ -102,7 +113,7 @@ class AdminFlashSaleControllerIT extends AbstractIntegrationTest {
             "values (?, 9.99, now() - interval '1 hour', now() + interval '1 hour', 1, 'SCHEDULED')", productId);
         long saleId = jdbcTemplate.queryForObject(
             "select id from flash_sales where product_id = ?", Long.class, productId);
-        jdbcTemplate.update("insert into inventory (flash_sale_id, total_quantity, available_quantity) values (?, 10, 10)", saleId);
+        stubExistingInventory(saleId, 10);
 
         String body = "{\"salePrice\":19.99," +
             "\"startsAt\":\"" + Instant.now().minusSeconds(3600) + "\"," +
@@ -126,7 +137,7 @@ class AdminFlashSaleControllerIT extends AbstractIntegrationTest {
             "values (?, 9.99, now() + interval '1 hour', now() + interval '2 hour', 1, 'SCHEDULED')", productId);
         long saleId = jdbcTemplate.queryForObject(
             "select id from flash_sales where product_id = ?", Long.class, productId);
-        jdbcTemplate.update("insert into inventory (flash_sale_id, total_quantity, available_quantity) values (?, 10, 10)", saleId);
+        stubExistingInventory(saleId, 10);
 
         Instant newStarts = Instant.now().plusSeconds(3600 * 3);
         Instant newEnds = Instant.now().plusSeconds(3600 * 4);
@@ -146,10 +157,10 @@ class AdminFlashSaleControllerIT extends AbstractIntegrationTest {
         assertThat(((Number) saleRow.get("sale_price")).doubleValue()).isEqualTo(29.99);
         assertThat(((Number) saleRow.get("purchase_limit_per_user")).intValue()).isEqualTo(5);
 
-        var inventoryRow = jdbcTemplate.queryForMap(
-            "select total_quantity, available_quantity from inventory where flash_sale_id = ?", saleId);
-        assertThat(((Number) inventoryRow.get("total_quantity")).intValue()).isEqualTo(80);
-        assertThat(((Number) inventoryRow.get("available_quantity")).intValue()).isEqualTo(80);
+        // P5：庫存在 order-service。platform 這邊能驗的是「有沒有把新的總量宣告過去」，
+        // 而不是那一列長什麼樣 —— 後者由 order-service 自己的測試負責。
+        org.mockito.Mockito.verify(orderServiceClient)
+            .declareInventory(org.mockito.ArgumentMatchers.eq(saleId), org.mockito.ArgumentMatchers.eq(80));
     }
 
     @Test
