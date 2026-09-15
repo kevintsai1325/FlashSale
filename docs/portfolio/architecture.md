@@ -8,32 +8,62 @@
 
 ## 系統全貌
 
-整個系統共 9 個服務,以 Docker Compose 與本機 k3s 兩種形式交付。對外只開兩個埠:
+整個系統共 17 個服務,以 Docker Compose 與本機 k3s 兩種形式交付。對外只開兩個埠:
 Nginx 的 `8443`(HTTPS,唯一的正式入口)與 Zipkin 的 `9411`(本機除錯用)。其餘服務都沒有
 host port,只能從內部網路存取。
 
-搶購的 HTTP 入口自 P4 起由獨立的 `purchase-service` 承接,其餘業務仍在 `backend`
-這個模組化單體裡。**這次拆分沒有解決任何效能問題,也不是為了解決效能問題** ——
-拆分後多了一次跨行程呼叫,只會更慢。它換到的是服務邊界與獨立部署,付出的代價寫在
-[服務拆分的代價](#服務拆分的代價p4)。
+業務邏輯分在四個服務裡,而且**每個服務有自己的 PostgreSQL instance**——不是同一個
+instance 開多個 database,是四個獨立的 StatefulSet,所以跨服務的 JOIN 在物理上寫不出來:
+
+- `backend`(platform):身分、商品、活動、通知、後台 BFF。
+- `purchase-service`:搶購的 HTTP 入口(P4)。
+- `order-service`:訂單、庫存、付款(P5)。
+- `analytics-service`:唯讀的投影與即時大屏的推送端(P5)。
+
+**這些拆分都沒有解決任何效能問題,也不是為了解決效能問題** —— 拆分後多了跨行程呼叫,
+只會更慢。換到的是服務邊界與獨立部署,付出的代價逐節寫在
+[服務拆分的代價](#服務拆分的代價p4)與其後各節。
 
 ```mermaid
 flowchart LR
-    Client["瀏覽器 / curl"] -->|HTTPS 8443| Nginx["Nginx<br/>TLS 終止、限流、安全標頭"]
-    Nginx -->|其餘路徑| Frontend["Frontend<br/>React 19 + Vite"]
+    Client["瀏覽器 / curl"] -->|HTTPS 8443| Nginx["nginx<br/>TLS 終止、限流、安全標頭"]
+    Nginx -->|其餘路徑| Frontend["frontend<br/>React 19 + Vite"]
     Nginx -->|"搶購與輪詢兩個端點"| Purchase["purchase-service<br/>搶購入口"]
-    Nginx -->|"/api/、/swagger-ui/、/v3/api-docs、白名單 actuator"| Backend["Backend<br/>Spring Boot 3.3 / Java 21"]
-    Purchase -->|"活動資料(內部 API)"| Backend
-    Purchase --> Redis
-    Purchase --> Postgres
-    Purchase -->|"outbox 發佈 order.create"| Rabbit
-    Rabbit -->|"PurchaseResolved 事件"| Purchase
-    Backend --> Postgres[("PostgreSQL 16<br/>庫存與訂單的真實來源")]
-    Backend --> Redis[("Redis 7<br/>庫存預扣計數器")]
-    Backend -->|outbox 發佈| Rabbit["RabbitMQ 3.13<br/>order.exchange"]
-    Rabbit -->|非同步消費| Backend
-    Backend --> Mailpit["Mailpit<br/>本機收信匣"]
-    Backend -->|spans| Zipkin["Zipkin<br/>9411"]
+    Nginx -->|"^/api/orders"| Order["order-service<br/>訂單、庫存、付款"]
+    Nginx -->|"^/api/realtime/"| Analytics["analytics-service<br/>讀取模型、大屏推送"]
+    Nginx -->|"/api/ 其餘、swagger、白名單 actuator"| Backend["backend (platform)<br/>身分、商品、活動、通知、後台"]
+
+    Purchase -->|活動資料| Backend
+    Purchase -->|庫存灌種| Order
+    Order -->|進行中的活動| Backend
+    Backend -->|庫存與訂單| Order
+    Backend -->|儀表板聚合| Analytics
+
+    Backend --> PgPlatform[("postgres<br/>7 張表")]
+    Purchase --> PgPurchase[("postgres-purchase")]
+    Order --> PgOrder[("postgres-order")]
+    Analytics --> PgAnalytics[("postgres-analytics")]
+    Purchase --> Redis[("redis<br/>預扣計數器")]
+    Order --> Redis
+    Backend --> Redis
+
+    Purchase -->|"order.create"| Rabbit["rabbitmq<br/>order.exchange(命令)"]
+    Rabbit -->|"order.create"| Order
+    Order -->|"purchase.resolved"| Rabbit
+    Rabbit -->|"purchase.resolved"| Purchase
+
+    Purchase -->|"purchase-events"| Kafka["kafka(KRaft)<br/>領域事件、各 topic 3 分區"]
+    Order -->|"order-events"| Kafka
+    Kafka --> Analytics
+    Kafka -->|"order-events"| Flink["flink-jobmanager + flink-taskmanager<br/>Application mode"]
+    Flink -->|"realtime-metrics"| Kafka
+    Analytics -->|"SSE"| Frontend
+
+    Backend --> Mailpit["mailpit<br/>本機收信匣"]
+    Backend -->|spans| Zipkin["zipkin<br/>9411"]
+    Purchase -->|spans| Zipkin
+    Order -->|spans| Zipkin
+    Analytics -->|spans| Zipkin
     Developer["本機開發者"] -->|HTTP 9411| Zipkin
 ```
 
@@ -42,30 +72,41 @@ flowchart LR
 | 服務 | 對外埠 | 責任 | 不負責 |
 |---|---|---|---|
 | `nginx` | `8443` | TLS 終止(自簽憑證)、反向代理、`limit_req` 限流、CSP 等安全標頭、`/actuator/` 白名單以外一律 404 | 認證與授權決策 |
-| `frontend` | 無 | React 19 + Vite + TypeScript SPA,前台搶購與 `/admin/*` 後台頁面 | 任何商業規則 |
-| `backend` | 無 | 認證、活動、訂單、付款、通知、後台查詢、稽核;以及建單與庫存扣減的消費端 | 搶購的 HTTP 入口、靜態資源伺服 |
+| `frontend` | 無 | React 19 + Vite + TypeScript SPA,前台搶購、`/admin/*` 後台與即時大屏 | 任何商業規則 |
+| `backend` | 無 | 認證、商品、活動、通知、稽核,以及後台的 BFF(自己沒有的資料就去問擁有者) | 搶購入口、訂單與庫存的所有權、收發任何訊息 |
 | `purchase-service` | 無 | 搶購的兩個端點:接受搶購請求(冪等鍵、限購、Redis 預扣、寫 outbox)與輪詢終態 | 建單、庫存的真實來源、活動資料的所有權 |
-| `postgres` | 無 | 庫存、訂單、purchase request、outbox、稽核紀錄的唯一真實來源 | 高併發熱點計數 |
-| `redis` | 無 | 搶購瞬間的庫存預扣計數器(Lua 原子腳本) | 最終一致性的權威值 |
-| `rabbitmq` | 無 | `order.exchange` 直連交換器、建單與釋放庫存兩條佇列及其 DLQ | 訊息去重(由 DB 負責) |
+| `order-service` | 無 | 訂單、庫存與付款的真實來源;建單與釋放庫存的消費端 | 活動資料的所有權、搶購入口 |
+| `analytics-service` | 無 | 消費領域事件維護投影(CQRS 讀取模型)、供應後台聚合、以 SSE 推送即時指標 | 任何寫入業務資料的權限 |
+| `postgres` | 無 | platform 的 7 張表:身分、商品、活動、通知、稽核 | 訂單、庫存、搶購請求 |
+| `postgres-purchase` | 無 | 搶購請求與 purchase-service 的 outbox | 訂單與庫存 |
+| `postgres-order` | 無 | 訂單、訂單明細、狀態歷程、付款紀錄、庫存、order-service 的 outbox | 活動與商品的定義 |
+| `postgres-analytics` | 無 | 訂單與搶購請求的投影 | 權威數字(那在各服務自己的資料庫) |
+| `redis` | 無 | 搶購瞬間的庫存預扣計數器(Lua 原子腳本)、Redisson 排程鎖 | 最終一致性的權威值 |
+| `rabbitmq` | 無 | **命令**:`order.exchange` 直連交換器、建單與釋放庫存兩條佇列及其 DLQ | 訊息去重(由 DB 負責) |
+| `kafka` | 無 | **領域事件**:`flashsale.order-events`、`flashsale.purchase-events`、`flashsale.realtime-metrics`,各 3 分區 | 命令投遞、可用性宣稱(單 broker、複製因子 1) |
+| `flink-jobmanager` / `flink-taskmanager` | 無 | Application mode 的串流聚合:秒級 GMV、每秒訂單數、熱門 Top N | 權威數字;它算的是瞬時值 |
 | `mailpit` | 無 | 攔截註冊等通知信,避免本機 demo 寄出真實郵件 | 正式郵件投遞 |
-| `zipkin` | `9411` | 收集 Micrometer Tracing/Brave 送出的 span | 指標與日誌儲存 |
+| `zipkin` | `9411` | 收集四個服務經 Micrometer Tracing/Brave 送出的 span | 指標與日誌儲存 |
 
-backend 內部是模組化單體(modular monolith),依領域切成 `identity`、`catalog`、`flashsale`、
-`inventory`、`order`、`payment`、`notification`、`admin` 與共用的 `common`;每個模組再分
-`domain` / `application` / `adapter` 三層。邊界不是靠自律,而是由 ArchUnit 測試強制:
-`domain` 不得依賴 `adapter`、`domain` 不得依賴任何 Spring 類別,模組之間也不得直接依賴
-別的模組的 `adapter` 層。
+backend 內部是模組化單體(modular monolith),P5 之後依領域切成 `identity`、`catalog`、
+`flashsale`、`notification`、`admin` 與共用的 `common`(`inventory`、`order`、`payment`
+三個模組已整批搬去 `order-service`);每個模組再分 `domain` / `application` / `adapter`
+三層。邊界不是靠自律,而是由 ArchUnit 測試強制:`domain` 不得依賴 `adapter`、`domain`
+不得依賴任何 Spring 類別,模組之間也不得直接依賴別的模組的 `adapter` 層。
 
-Nginx 的路由規則([`nginx/nginx.conf`](../../nginx/nginx.conf))可以摘要成四類:
+Nginx 的路由規則([`nginx/nginx.conf`](../../nginx/nginx.conf))可以摘要成六類:
 
 - `/api/auth/login`、`/api/auth/register`:套用 `auth_limit`(5r/s、burst 10、nodelay)。
 - `/api/flash-sales/{id}/purchase-requests` 與 `/api/purchase-requests/{requestId}`:
   反向代理到 `purchase-service`;前者套用 `purchase_limit`(50r/s、burst 100、nodelay)。
+- `^/api/orders`:反向代理到 `order-service`(訂單查詢、取消與付款)。
+- `^/api/realtime/`:反向代理到 `analytics-service`。這條是 SSE,所以另外關掉
+  `proxy_buffering`、指定 `proxy_http_version 1.1` 與空的 `Connection` 標頭,
+  並把 `proxy_read_timeout` 拉到 3600s。
 - `/internal/`:一律 404。服務之間的內部 API 走叢集內部的 Service 名稱,不經過 Nginx。
 - `/api/`、`/swagger-ui/`、`/v3/api-docs`、`/actuator/health`、`/actuator/health/liveness`、
   `/actuator/health/readiness`、`/actuator/metrics` 與 `/actuator/metrics/{name}`:直接反向代理到 backend。
-- 其餘 `/actuator/` 路徑一律回 404,剩下的路徑交給 frontend。
+  其餘 `/actuator/` 路徑一律回 404,剩下的路徑交給 frontend。
 
 ## 服務拆分的代價(P4)
 
@@ -321,31 +362,42 @@ sequenceDiagram
     autonumber
     participant C as 用戶端
     participant N as Nginx
-    participant B as Backend
+    participant PS as purchase-service
+    participant BE as backend
     participant R as Redis
-    participant P as PostgreSQL
+    participant PP as postgres-purchase
     participant Q as RabbitMQ
+    participant OS as order-service
+    participant PO as postgres-order
 
     C->>N: POST /api/flash-sales/{id}/purchase-requests + Idempotency-Key
-    N->>B: 反向代理,套用 purchase_limit 限流
-    B->>P: 查冪等鍵、活動狀態、每人限購、是否已成功購買
-    B->>R: EVAL reserve-stock.lua
+    N->>PS: 反向代理,套用 purchase_limit 限流
+    PS->>BE: 取活動資料(內部 API,快取 2 秒)
+    PS->>PP: 查冪等鍵、每人限購、是否已成功購買
+    PS->>R: EVAL reserve-stock.lua
     alt 預扣成功
-        R-->>B: 回傳剩餘庫存
-        B->>P: 同一交易寫入 purchase_requests PENDING 與 outbox_events
-        B-->>C: 202 Accepted,status=PENDING
+        R-->>PS: 回傳剩餘庫存
+        PS->>PP: 同一交易寫入 purchase_requests PENDING 與 outbox_events
+        PS-->>C: 202 Accepted,status=PENDING
     else 庫存不足
-        R-->>B: 回傳 -1
-        B->>P: 寫入 purchase_requests SOLD_OUT
-        B-->>C: 202 Accepted,status=SOLD_OUT
+        R-->>PS: 回傳 -1
+        PS->>PP: 寫入 purchase_requests SOLD_OUT
+        PS-->>C: 202 Accepted,status=SOLD_OUT
     end
-    B->>Q: OutboxPublisher 每 500ms 撈一批未發佈事件送出 order.create
-    Q->>B: OrderPurchaseConsumer 消費 order.create.queue
-    B->>P: 去重、鎖庫存列、扣 Postgres 庫存、建立訂單、標記 SUCCEEDED
+    PS->>Q: OutboxPublisher 每 500ms 整批撈出、送出、標記(同一個交易)
+    Q->>OS: OrderPurchaseConsumer 消費 order.create.queue
+    OS->>PO: 去重、鎖庫存列、扣庫存、建立訂單
+    OS->>Q: 回送 purchase.resolved
+    Q->>PS: PurchaseResolvedConsumer 標記 SUCCEEDED 與 orderId
     C->>N: GET /api/purchase-requests/{requestId}
-    N->>B: 反向代理
-    B-->>C: 回傳終態與 orderId
+    N->>PS: 反向代理
+    PS-->>C: 回傳終態與 orderId
 ```
+
+**這張圖從 P5 起橫跨三個服務與兩個資料庫。** 終態不再是建單那一端直接寫下的——
+`order-service` 建完單之後要把結果沿 `purchase.resolved` 送回 `purchase-service`,
+由它更新自己資料庫裡的 `purchase_requests`。拆庫之後,「誰有權寫這一列」就是這條
+額外訊息存在的全部理由。
 
 幾個關鍵細節:
 
@@ -353,8 +405,9 @@ sequenceDiagram
   重送同一把鍵會直接回傳既有的 request,不會重複預扣。
 - **Redis 預扣**:[`reserve-stock.lua`](../../purchase-service/src/main/resources/redis/reserve-stock.lua)
   在單一原子腳本內完成 `GET` 與 `DECRBY`。回傳剩餘量代表成功,`-1` 代表庫存不足,
-  `-2` 代表 key 不存在——此時 backend 會從 Postgres 重新灌入庫存(`SETNX`)並重試一次,
-  仍失敗才回 `503 STOCK_GATEWAY_UNAVAILABLE`。
+  `-2` 代表 key 不存在——此時 purchase-service 會**向 order-service 問一次可購買量**
+  再灌入(`SETNX`)並重試一次,仍失敗才回 `503 STOCK_GATEWAY_UNAVAILABLE`。
+  P5 之後這是一次跨服務呼叫,不再是一次本地查詢。
 - **每人限購**:活動的 `purchase_limit_per_user` 在 HTTP 端檢查;已經有成功紀錄的使用者
   會拿到 `REJECTED` 而不是再預扣一次。
 - **outbox 與業務資料同一個交易**:`purchase_requests` 與 `outbox_events` 一起 commit,
@@ -365,26 +418,32 @@ sequenceDiagram
 
 ## 一致性與補償機制
 
-系統橫跨 Redis、PostgreSQL 與 RabbitMQ,沒有使用分散式交易,而是用「本地交易 + outbox +
-冪等消費 + 補償」把不一致收斂掉。
+系統橫跨 Redis、四個 PostgreSQL、RabbitMQ 與 Kafka,沒有使用分散式交易,而是用「本地交易
++ outbox + 冪等消費 + 補償」把不一致收斂掉。outbox 在 `purchase-service` 與 `order-service`
+各有一份(platform 自 P5 起不收發任何訊息)。
 
-- **Transactional outbox**:`OutboxWriter` 在業務交易內寫入 `outbox_events`(含 `trace_context` JSONB 欄位)。
-  `OutboxPublisher` 以 `@Scheduled(fixedDelay = 500)` 每批最多 50 筆、用 `FOR UPDATE` 撈出未發佈事件,
-  送到 `order.exchange`,routing key 為 `order.create` 或 `stock.release`,並在訊息標頭帶上 `outboxEventId`。
-- **冪等消費**:兩個 consumer 都先呼叫 `ConsumedMessageGuard.tryConsume(outboxEventId, consumerName)`,
+- **Transactional outbox**:`OutboxWriter` 在業務交易內寫入 `outbox_events`(含 `trace_context`
+  JSONB 欄位與 `event_id` UUID)。`OutboxPublisher` 以 `@Scheduled(fixedDelay = 500)` 每批最多
+  50 筆,**撈出、送出、標記全部在同一個交易裡**,並在訊息標頭帶上 `eventId`。
+  命令送到 `order.exchange`(routing key `order.create` / `stock.release` / `purchase.resolved`),
+  領域事件送到 Kafka,由 event type 決定走哪一條。
+- **`event_id` 是 UUID,不是 outbox 的流水號。** 去重鍵必須全域唯一:拆庫之後每個服務的
+  outbox 都從 1 開始,用流水號會與別人的歷史紀錄相撞——這是實際發生過的缺陷。
+- **冪等消費**:consumer 先呼叫 `ConsumedMessageGuard.tryConsume(eventId, consumerName)`,
   靠 `consumed_messages` 的唯一鍵做「插入成功才處理」,重送的訊息會被直接略過。
+  analytics 的投影不用這張表:它以來源 id 做 upsert,重放即冪等。
 - **重試與 DLQ**:listener 重試 3 次(初始 1s、倍率 2、上限 10s),`default-requeue-rejected: false`,
   最終失敗的訊息經 `x-dead-letter-exchange` 進入 `order.create.queue.dlq` 或 `stock.release.queue.dlq`,
   不會無限重投。
 - **補償而非回滾**:取消訂單、付款失敗與付款逾時都走 `OrderCompensationService`——先在 Postgres
   釋放庫存並記錄 `order_status_history`,再寫一筆 `STOCK_RELEASE_REQUESTED` outbox 事件;
   `StockReleaseConsumer` 收到後把 Redis 計數器加回去。
-- **排程守門員**:
-  - `PaymentTimeoutScheduler`(每 30 秒)把逾期未付款的訂單標成 `EXPIRED` 並補償庫存。
-  - `InventoryReconciliationScheduler`(每 60 秒)比對可購買活動的 Redis 值與 Postgres 值,
-    不一致就以 Postgres 為準覆寫 Redis,並留下 warn 日誌。
-  - `NotificationRetryScheduler`(每 60 秒)重試失敗的通知投遞。
-  - `ApiAuditRetentionScheduler`(每天 03:00)刪除超過 30 天的稽核紀錄。
+- **排程守門員**(四個都以 Redisson 鎖互斥,多副本下只有一個會真的執行):
+  - `PaymentTimeoutScheduler`(order-service,每 30 秒)把逾期未付款的訂單標成 `EXPIRED` 並補償庫存。
+  - `InventoryReconciliationScheduler`(order-service,每 60 秒)比對 Redis 值與 Postgres 值,
+    不一致就以 Postgres 為準覆寫 Redis,並留下 warn 日誌。**「哪些活動正在進行」要向 platform 問**。
+  - `NotificationRetryScheduler`(platform,每 60 秒)重試失敗的通知投遞。
+  - `ApiAuditRetentionScheduler`(platform,每天 03:00)刪除超過 30 天的稽核紀錄。
 
 訂單狀態機只有四種狀態:`PENDING_PAYMENT` → `PAID` / `CANCELLED` / `EXPIRED`,而且只有
 `PENDING_PAYMENT` 可以轉移;其他情況會丟出帶 `code` 的 409。付款失敗與使用者主動取消共用

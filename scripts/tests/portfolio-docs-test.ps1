@@ -48,7 +48,9 @@ function Get-ControllerRouteTemplates {
         (Join-Path $repoRoot 'backend\src\main\java'),
         (Join-Path $repoRoot 'purchase-service\src\main\java'),
         # P5：訂單與付款的路由在 order-service。
-        (Join-Path $repoRoot 'order-service\src\main\java')
+        (Join-Path $repoRoot 'order-service\src\main\java'),
+        # P6：即時大屏的 SSE 端點在 analytics-service。
+        (Join-Path $repoRoot 'analytics-service\src\main\java')
     )
     $controllers = @($javaRoots |
         Where-Object { Test-Path -LiteralPath $_ } |
@@ -56,13 +58,14 @@ function Get-ControllerRouteTemplates {
     foreach ($controller in $controllers) {
         $source = Read-TextFile -Path $controller.FullName
         $base = ''
-        $classMapping = [regex]::Match($source, '@RequestMapping\(\s*(?:value\s*=\s*)?"([^"]*)"')
+        $classMapping = [regex]::Match($source, '@RequestMapping\(\s*(?:(?:value|path)\s*=\s*)?"([^"]*)"')
         if ($classMapping.Success) {
             $base = $classMapping.Groups[1].Value
             # class 層級的 @RequestMapping 本身也是文件中合理的「這組 API 的基底路徑」寫法。
             $templates.Add((ConvertTo-RouteTemplate -Path $base)) | Out-Null
         }
-        $methodMappings = [regex]::Matches($source, '@(?:Get|Post|Put|Patch|Delete)Mapping\(\s*(?:value\s*=\s*)?(?:"([^"]*)")?')
+        # `path = "..."` 與 `value = "..."` 都要吃：analytics-service 的 SSE 端點用的是 path。
+        $methodMappings = [regex]::Matches($source, '@(?:Get|Post|Put|Patch|Delete)Mapping\(\s*(?:(?:value|path)\s*=\s*)?(?:"([^"]*)")?')
         foreach ($methodMapping in $methodMappings) {
             $suffix = $methodMapping.Groups[1].Value
             $full = $base + $suffix
@@ -425,8 +428,14 @@ foreach ($documentName in $documents.Keys) {
     }
 
     # 8. 自訂 metric 名稱必須真的存在於程式碼
+    # `purchase.resolved` 是 RabbitMQ 的 routing key，不是指標。
+    # 此正則只看得到字形，分不出語意，所以把路由鍵明列排除。
+    $routingKeys = @('purchase.resolved')
     $metricMatches = [regex]::Matches($text, 'purchase\.[a-z]+(?:\.[a-z]+)*')
     foreach ($metricMatch in $metricMatches) {
+        if ($routingKeys -contains $metricMatch.Value) {
+            continue
+        }
         if (-not $metricsSource.Contains($metricMatch.Value)) {
             Add-Failure ('{0}: metric name not found in any metrics class: {1}' -f $documentName, $metricMatch.Value)
         }
@@ -445,6 +454,68 @@ if (Test-Path -LiteralPath $apiExamplesPath) {
     }
     if (-not $apiExamplesText.Contains('demo.user@example.test')) {
         Add-Failure 'api-examples.md: expected the documented demo user identifier demo.user@example.test'
+    }
+}
+
+# 9.5 架構總圖必須列出每一個部署中的 workload
+#
+# 這條規則的由來：P5 與 P6 各加了服務，但 architecture.md 的「系統全貌」總圖停在 P4-1，
+# 連過兩個階段都沒被抓到——因為當時沒有任何斷言在看那張圖。
+# 路由有斷言（第 4 節）所以一直準，圖沒有所以爛掉。**守門只守它斷言的東西。**
+#
+# 方向是單向的：k8s 有的，圖上必須提到。反過來（圖上畫了但叢集沒有）不檢查，
+# 因為從 mermaid 可靠地反解出節點名稱要寫一個小 parser，而實際發生過的漂移是前者。
+$k8sBaseDir = Join-Path $repoRoot 'k8s\base'
+$architecturePath = Join-Path $portfolioDir 'architecture.md'
+if ((Test-Path -LiteralPath $k8sBaseDir) -and (Test-Path -LiteralPath $architecturePath)) {
+    $workloads = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($manifest in @(Get-ChildItem -LiteralPath $k8sBaseDir -Filter '*.yaml')) {
+        $manifestText = Read-TextFile -Path $manifest.FullName
+        foreach ($chunk in [regex]::Split($manifestText, '(?m)^---\s*$')) {
+            if ($chunk -notmatch '(?m)^kind:\s*(?:Deployment|StatefulSet)\s*$') {
+                continue
+            }
+            # 這些 manifest 的 metadata 是 flow-style（`metadata: {name: x, ...}`），
+            # 所以先試 flow-style，再退回一般的區塊式縮排。
+            $nameMatch = [regex]::Match($chunk, '(?m)^metadata:\s*\{[^}]*?name:\s*([A-Za-z0-9.-]+)')
+            if (-not $nameMatch.Success) {
+                $nameMatch = [regex]::Match($chunk, '(?m)^  name:\s*([A-Za-z0-9.-]+)\s*$')
+            }
+            if ($nameMatch.Success) {
+                $workloads.Add($nameMatch.Groups[1].Value) | Out-Null
+            }
+        }
+    }
+    if ($workloads.Count -lt 1) {
+        Add-Failure 'architecture.md: no Deployment/StatefulSet found under k8s/base - the diagram guard would pass vacuously'
+    }
+
+    # 只看第一個 mermaid 區塊：那是「系統全貌」的總圖，其餘是各節的局部圖。
+    $architectureText = Read-TextFile -Path $architecturePath
+    $overviewDiagram = New-Object 'System.Text.StringBuilder'
+    $inMermaid = $false
+    foreach ($line in ($architectureText -split "`r?`n")) {
+        if (-not $inMermaid) {
+            if ($line.Trim() -eq '```mermaid') {
+                $inMermaid = $true
+            }
+            continue
+        }
+        if ($line.TrimEnd() -match '^\s*```') {
+            break
+        }
+        $overviewDiagram.AppendLine($line) | Out-Null
+    }
+    $overviewText = $overviewDiagram.ToString()
+    if ([string]::IsNullOrWhiteSpace($overviewText)) {
+        Add-Failure 'architecture.md: could not find the system overview mermaid diagram'
+    } else {
+        $overviewLowered = $overviewText.ToLowerInvariant()
+        foreach ($workload in $workloads) {
+            if (-not $overviewLowered.Contains($workload.ToLowerInvariant())) {
+                Add-Failure ('architecture.md: the system overview diagram never mentions the deployed workload {0}' -f $workload)
+            }
+        }
     }
 }
 
