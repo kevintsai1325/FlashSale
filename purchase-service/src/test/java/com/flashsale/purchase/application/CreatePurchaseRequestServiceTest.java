@@ -39,7 +39,7 @@ class CreatePurchaseRequestServiceTest {
     CreatePurchaseRequestService service;
 
     private FlashSaleSnapshot activeSale() {
-        return new FlashSaleSnapshot(10L, 1L, new BigDecimal("9.99"),
+        return new FlashSaleSnapshot(10L, 1L, "item", new BigDecimal("9.99"),
             Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), 1);
     }
 
@@ -76,7 +76,7 @@ class CreatePurchaseRequestServiceTest {
     @Test
     void reservesTheRequestedQuantityRatherThanAlwaysTheFullLimit() {
         service = service();
-        FlashSaleSnapshot saleWithLimitOfFive = new FlashSaleSnapshot(10L, 1L, new BigDecimal("9.99"),
+        FlashSaleSnapshot saleWithLimitOfFive = new FlashSaleSnapshot(10L, 1L, "item", new BigDecimal("9.99"),
             Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), 5);
         when(purchaseRequestRepository.findByUserIdAndFlashSaleIdAndIdempotencyKey(1L, 10L, "idem-qty"))
             .thenReturn(Optional.empty());
@@ -154,7 +154,7 @@ class CreatePurchaseRequestServiceTest {
     @Test
     void throwsConflictWhenFlashSaleNotActive() {
         service = service();
-        FlashSaleSnapshot notYetStarted = new FlashSaleSnapshot(10L, 1L, new BigDecimal("9.99"),
+        FlashSaleSnapshot notYetStarted = new FlashSaleSnapshot(10L, 1L, "item", new BigDecimal("9.99"),
             Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), 1);
         when(purchaseRequestRepository.findByUserIdAndFlashSaleIdAndIdempotencyKey(1L, 10L, "idem-5"))
             .thenReturn(Optional.empty());

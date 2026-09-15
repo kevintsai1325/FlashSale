@@ -47,7 +47,7 @@ class PurchaseConcurrencyIT extends AbstractIntegrationTest {
     void stubTheFlashSale() {
         Instant now = Instant.now();
         when(flashSaleClient.fetch(anyLong())).thenReturn(new FlashSaleSnapshot(
-            FLASH_SALE_ID, 7L, new BigDecimal("9.99"),
+            FLASH_SALE_ID, 7L, "item", new BigDecimal("9.99"),
             now.minus(1, ChronoUnit.MINUTES), now.plus(1, ChronoUnit.HOURS), 1));
         when(flashSaleClient.availableQuantity(anyLong())).thenReturn(STOCK);
     }

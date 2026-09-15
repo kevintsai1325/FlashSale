@@ -78,7 +78,7 @@ class OrderPurchaseConsumerTest {
         AtomicReference<Order> savedOrder = new AtomicReference<>();
         stubHappyPath(savedOrder);
 
-        consumer.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 1, new BigDecimal("1999.00")), EVENT_ID));
+        consumer.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, "item", 1, new BigDecimal("1999.00")), EVENT_ID));
 
         assertThat(savedOrder.get().getItems())
             .singleElement()
@@ -95,7 +95,7 @@ class OrderPurchaseConsumerTest {
         AtomicReference<Order> savedOrder = new AtomicReference<>();
         stubHappyPath(savedOrder);
 
-        consumer.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 1, new BigDecimal("1999.00")), EVENT_ID));
+        consumer.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, "item", 1, new BigDecimal("1999.00")), EVENT_ID));
 
         ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
         verify(outboxWriter).write(eq("PurchaseRequest"), eq(REQUEST_ID.toString()), eq("PurchaseResolved"), payload.capture());

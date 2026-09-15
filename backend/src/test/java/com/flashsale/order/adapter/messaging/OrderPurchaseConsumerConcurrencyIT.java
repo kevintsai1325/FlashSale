@@ -57,7 +57,7 @@ class OrderPurchaseConsumerConcurrencyIT extends AbstractIntegrationTest {
 
     private Message messageFor(UUID purchaseRequestId, String eventId) throws Exception {
         CreateOrderRequestedEvent event = new CreateOrderRequestedEvent(
-            purchaseRequestId, BUYER_ID, 1L, 1L, 1, new BigDecimal("9.99"));
+            purchaseRequestId, BUYER_ID, 1L, 1L, "item", 1, new BigDecimal("9.99"));
         MessageProperties properties = new MessageProperties();
         properties.setHeader("eventId", eventId);
         return new Message(objectMapper.writeValueAsBytes(event), properties);

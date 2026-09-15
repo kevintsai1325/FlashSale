@@ -56,7 +56,7 @@ class OrderCreateDlqHandlerCompensationTest {
     void releasesStockAndReportsFailureBackToPurchaseService() throws Exception {
         when(consumedMessageGuard.tryConsume(EVENT_ID, "order-create-dlq-handler")).thenReturn(true);
 
-        handler.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 2, new BigDecimal("19.99")), EVENT_ID));
+        handler.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, "item", 2, new BigDecimal("19.99")), EVENT_ID));
 
         verify(outboxWriter).write(eq("PurchaseRequest"), eq(REQUEST_ID.toString()), eq("PurchaseResolved"),
             eq(new PurchaseResolvedEvent(REQUEST_ID, "FAILED", null)));
@@ -68,7 +68,7 @@ class OrderCreateDlqHandlerCompensationTest {
     void aRedeliveredDlqMessageDoesNotCompensateTwice() throws Exception {
         when(consumedMessageGuard.tryConsume(EVENT_ID, "order-create-dlq-handler")).thenReturn(false);
 
-        handler.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 2, new BigDecimal("19.99")), EVENT_ID));
+        handler.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, "item", 2, new BigDecimal("19.99")), EVENT_ID));
 
         verifyNoInteractions(outboxWriter);
     }

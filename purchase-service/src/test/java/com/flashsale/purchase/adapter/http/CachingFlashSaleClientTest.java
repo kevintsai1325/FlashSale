@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class CachingFlashSaleClientTest {
 
-    private static final FlashSaleSnapshot SALE = new FlashSaleSnapshot(10L, 1L, new BigDecimal("9.99"),
+    private static final FlashSaleSnapshot SALE = new FlashSaleSnapshot(10L, 1L, "item", new BigDecimal("9.99"),
         Instant.parse("2026-09-14T00:00:00Z"), Instant.parse("2026-09-15T00:00:00Z"), 3);
 
     private final PurchaseMetrics metrics = new PurchaseMetrics(new SimpleMeterRegistry());

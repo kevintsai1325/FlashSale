@@ -58,7 +58,7 @@ public class MonolithFlashSaleClient implements FlashSaleClient {
                 throw new ServiceUnavailableException("FLASH_SALE_LOOKUP_UNAVAILABLE",
                     "目前無法取得搶購活動 " + flashSaleId + " 的資料，請稍後再試");
             }
-            return new FlashSaleSnapshot(response.id(), response.productId(), response.salePrice(),
+            return new FlashSaleSnapshot(response.id(), response.productId(), response.productName(), response.salePrice(),
                 response.startsAt(), response.endsAt(), response.purchaseLimitPerUser());
         } catch (HttpClientErrorException.NotFound notFound) {
             throw new NotFoundException("FLASH_SALE_NOT_FOUND", "搶購活動 " + flashSaleId + " 不存在");

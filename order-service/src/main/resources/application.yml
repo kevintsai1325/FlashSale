@@ -1,0 +1,98 @@
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/orders}
+    username: ${SPRING_DATASOURCE_USERNAME:flashsale}
+    password: ${SPRING_DATASOURCE_PASSWORD:flashsale}
+    hikari:
+      # 20 而不是 backend 的 30：這個服務只有建單、付款與兩個排程，交易都短。
+      # 拆庫之後它連的是自己的 Postgres，連線池不再與別人相加去撞同一個 max_connections。
+      maximum-pool-size: 20
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+    template:
+      observation-enabled: true
+    listener:
+      simple:
+        concurrency: 5
+        observation-enabled: true
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000
+          multiplier: 2.0
+          max-interval: 10000
+        default-requeue-rejected: false
+
+app:
+  platform:
+    # 活動資料的所有權在 platform。庫存對帳排程需要「目前進行中的活動有哪些」。
+    base-url: ${APP_PLATFORM_BASE_URL:http://localhost:8080}
+    connect-timeout-ms: ${APP_PLATFORM_CONNECT_TIMEOUT_MS:500}
+    read-timeout-ms: ${APP_PLATFORM_READ_TIMEOUT_MS:2000}
+  scheduling:
+    enabled: ${APP_SCHEDULING_ENABLED:true}
+
+server:
+  port: 8080
+  tomcat:
+    threads:
+      max: 200
+    accept-count: 100
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+      roles: ADMIN
+      group:
+        readiness:
+          include: readinessState,db,redis,rabbit
+        liveness:
+          include: livenessState
+  health:
+    readinessstate:
+      enabled: true
+    livenessstate:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${MANAGEMENT_ZIPKIN_TRACING_ENDPOINT:http://localhost:9411/api/v2/spans}

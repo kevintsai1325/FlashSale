@@ -69,7 +69,8 @@ public class CreatePurchaseRequestService {
             purchaseRequestRepository.save(PurchaseRequest.pending(userId, flashSaleId, idempotencyKey)));
 
         outboxWriter.write("PurchaseRequest", request.getRequestId().toString(), EventTypes.CREATE_ORDER_REQUESTED,
-            new CreateOrderRequestedEvent(request.getRequestId(), userId, flashSaleId, flashSale.productId(), quantity, flashSale.salePrice()));
+            new CreateOrderRequestedEvent(request.getRequestId(), userId, flashSaleId, flashSale.productId(),
+                flashSale.productName(), quantity, flashSale.salePrice()));
 
         return request;
     }

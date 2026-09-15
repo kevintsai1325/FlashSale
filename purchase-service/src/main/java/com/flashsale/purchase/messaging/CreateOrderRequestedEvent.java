@@ -10,4 +10,4 @@ import java.util.UUID;
  * 而本地主鍵是 purchase_requests 這張表的實作細節，不該洩漏出服務邊界。
  */
 public record CreateOrderRequestedEvent(UUID purchaseRequestId, Long userId, Long flashSaleId, Long productId,
-                                         int quantity, BigDecimal unitPrice) {}
+                                         String productName, int quantity, BigDecimal unitPrice) {}

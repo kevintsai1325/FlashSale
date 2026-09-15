@@ -49,7 +49,7 @@ class OrderPurchaseConsumerIT extends AbstractIntegrationTest {
 
     private void requestOrder(UUID purchaseRequestId, long flashSaleId, long productId, int quantity) throws Exception {
         outboxWriter.write("PurchaseRequest", purchaseRequestId.toString(), EventTypes.CREATE_ORDER_REQUESTED,
-            new CreateOrderRequestedEvent(purchaseRequestId, BUYER_ID, flashSaleId, productId, quantity, new BigDecimal("9.99")));
+            new CreateOrderRequestedEvent(purchaseRequestId, BUYER_ID, flashSaleId, productId, "item", quantity, new BigDecimal("9.99")));
         outboxPublisher.publishPending();
         Message message = rabbitTemplate.receive(RabbitConfig.CREATE_ORDER_QUEUE, 5_000);
         assertThat(message).isNotNull();
