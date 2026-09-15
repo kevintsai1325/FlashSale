@@ -35,7 +35,7 @@ class StockReleaseConsumerIT extends AbstractIntegrationTest {
         }});
         MessageProperties props = new MessageProperties();
         props.setContentType(MessageProperties.CONTENT_TYPE_JSON);
-        props.setHeader("outboxEventId", 4242L);
+        props.setHeader("eventId", "42420000-0000-0000-0000-000000000000");
         Message message = new Message(payload.getBytes(StandardCharsets.UTF_8), props);
         consumer.handle(message);
 

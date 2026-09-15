@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Proves {@link OrderPurchaseConsumer}'s {@code ConsumedMessageGuard} check actually prevents a
  * redelivered/duplicated message from creating a second order — simulates the redelivery
  * RabbitMQ would perform after an unacked message by manually publishing the exact same
- * {@code outboxEventId} header + body twice.
+ * {@code eventId} header + body twice.
  */
 @Sql("/db/testdata/inventory-fixtures.sql")
 class OrderPurchaseConsumerRedeliveryIT extends AbstractIntegrationTest {
@@ -43,7 +43,7 @@ class OrderPurchaseConsumerRedeliveryIT extends AbstractIntegrationTest {
         for (int i = 0; i < 2; i++) {
             MessageProperties props = new MessageProperties();
             props.setContentType(MessageProperties.CONTENT_TYPE_JSON);
-            props.setHeader("outboxEventId", 555L);
+            props.setHeader("eventId", "55500000-0000-0000-0000-000000000000");
             Message message = new Message(payload.getBytes(StandardCharsets.UTF_8), props);
             consumer.handle(message);
         }
@@ -58,6 +58,6 @@ class OrderPurchaseConsumerRedeliveryIT extends AbstractIntegrationTest {
 
         Integer orderCount = jdbcTemplate.queryForObject(
             "select count(*) from orders where user_id = 999", Integer.class);
-        assertThat(orderCount).as("a redelivered message with the same outboxEventId must not create a second order").isEqualTo(1);
+        assertThat(orderCount).as("a redelivered message with the same eventId must not create a second order").isEqualTo(1);
     }
 }

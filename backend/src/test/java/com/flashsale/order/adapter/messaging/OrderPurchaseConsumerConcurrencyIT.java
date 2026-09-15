@@ -55,11 +55,11 @@ class OrderPurchaseConsumerConcurrencyIT extends AbstractIntegrationTest {
             BUYER_ID);
     }
 
-    private Message messageFor(UUID purchaseRequestId, long outboxEventId) throws Exception {
+    private Message messageFor(UUID purchaseRequestId, String eventId) throws Exception {
         CreateOrderRequestedEvent event = new CreateOrderRequestedEvent(
             purchaseRequestId, BUYER_ID, 1L, 1L, 1, new BigDecimal("9.99"));
         MessageProperties properties = new MessageProperties();
-        properties.setHeader("outboxEventId", outboxEventId);
+        properties.setHeader("eventId", eventId);
         return new Message(objectMapper.writeValueAsBytes(event), properties);
     }
 
@@ -77,7 +77,7 @@ class OrderPurchaseConsumerConcurrencyIT extends AbstractIntegrationTest {
                 // 根本碰不到列鎖。
                 barrier.await(10, TimeUnit.SECONDS);
                 try {
-                    consumer.handle(messageFor(new UUID(0L, id), 1000L + id));
+                    consumer.handle(messageFor(new UUID(0L, id), new UUID(1L, id).toString()));
                     return true;
                 } catch (RuntimeException expectedWhenStockIsGone) {
                     // 庫存賣完之後，剩下的消費會撞上「Redis/Postgres 庫存漂移」這個防護，

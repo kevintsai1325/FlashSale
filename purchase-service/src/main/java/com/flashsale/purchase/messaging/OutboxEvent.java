@@ -10,6 +10,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * 這個服務自己資料庫裡的 outbox 表（P4 步驟 2 起）。
@@ -25,6 +26,11 @@ public class OutboxEvent {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    // 事件的全域唯一識別碼，消費端用它去重。**不能用上面那個 id** ——
+    // 它是這個資料庫的序號，拆庫之後每個服務都從 1 開始，跨服務的去重表會直接撞在一起。
+    @Column(name = "event_id", nullable = false, unique = true)
+    private UUID eventId;
 
     @Column(name = "aggregate_type", nullable = false)
     private String aggregateType;
@@ -54,6 +60,7 @@ public class OutboxEvent {
     public static OutboxEvent create(String aggregateType, String aggregateId, String eventType,
                                       String payloadJson, StoredTraceContext traceContext) {
         OutboxEvent event = new OutboxEvent();
+        event.eventId = UUID.randomUUID();
         event.aggregateType = aggregateType;
         event.aggregateId = aggregateId;
         event.eventType = eventType;
@@ -68,6 +75,7 @@ public class OutboxEvent {
     }
 
     public Long getId() { return id; }
+    public UUID getEventId() { return eventId; }
     public String getEventType() { return eventType; }
     public String getPayload() { return payload; }
     public Instant getPublishedAt() { return publishedAt; }

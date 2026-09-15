@@ -61,7 +61,7 @@ public class OutboxPublisher {
     public void publishEvent(OutboxEvent event) {
         MessageProperties props = new MessageProperties();
         props.setContentType(MessageProperties.CONTENT_TYPE_JSON);
-        props.setHeader("outboxEventId", event.getId());
+        props.setHeader("eventId", event.getEventId().toString());
         Message message = new Message(event.getPayload().getBytes(StandardCharsets.UTF_8), props);
         sendWithStoredParent(event, message);
 

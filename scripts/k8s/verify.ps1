@@ -95,7 +95,7 @@ foreach ($pod in @($allPodsJson.items)) {
 if ($restarts -ne 0) { throw "Expected zero container restarts, got $restarts" }
 
 $pvcCount = @(Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'get', 'pvc', '--no-headers') -Operation 'checking persistent volume claims').Count
-if ($pvcCount -ne 3) { throw "Expected three PVCs, got $pvcCount" }
+if ($pvcCount -ne 4) { throw "Expected four PVCs, got $pvcCount" }
 
 if ($null -eq $HttpRequest) { $HttpRequest = ${function:Invoke-InsecureHttpsGet} }
 $healthResponse = & $HttpRequest 'https://localhost:8443/actuator/health/readiness'

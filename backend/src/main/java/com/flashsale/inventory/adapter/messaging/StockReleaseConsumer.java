@@ -31,8 +31,8 @@ public class StockReleaseConsumer {
     @RabbitListener(queues = RabbitConfig.STOCK_RELEASE_QUEUE)
     @Transactional
     public void handle(Message message) throws IOException {
-        Long outboxEventId = (Long) message.getMessageProperties().getHeaders().get("outboxEventId");
-        if (!consumedMessageGuard.tryConsume(String.valueOf(outboxEventId), CONSUMER_NAME)) {
+        String eventId = (String) message.getMessageProperties().getHeaders().get("eventId");
+        if (!consumedMessageGuard.tryConsume(eventId, CONSUMER_NAME)) {
             return;
         }
         StockReleaseRequestedEvent event = objectMapper.readValue(message.getBody(), StockReleaseRequestedEvent.class);

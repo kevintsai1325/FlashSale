@@ -39,6 +39,7 @@ import static org.mockito.Mockito.when;
 class OrderPurchaseConsumerTest {
 
     private static final UUID REQUEST_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final String EVENT_ID = "22222222-2222-2222-2222-222222222222";
 
     @Mock ConsumedMessageGuard consumedMessageGuard;
     @Mock InventoryRepository inventoryRepository;
@@ -58,7 +59,7 @@ class OrderPurchaseConsumerTest {
     }
 
     private void stubHappyPath(AtomicReference<Order> savedOrder) {
-        when(consumedMessageGuard.tryConsume("505", "order-purchase-consumer")).thenReturn(true);
+        when(consumedMessageGuard.tryConsume(EVENT_ID, "order-purchase-consumer")).thenReturn(true);
         when(inventoryRepository.findByFlashSaleIdForUpdate(303L))
             .thenReturn(Optional.of(Inventory.initialize(303L, 1)));
         when(productRepository.findById(404L)).thenReturn(Optional.of(Product.create("限量鍵盤", "消費時的商品名稱")));
@@ -75,7 +76,7 @@ class OrderPurchaseConsumerTest {
         AtomicReference<Order> savedOrder = new AtomicReference<>();
         stubHappyPath(savedOrder);
 
-        consumer.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 1, new BigDecimal("1999.00")), 505L));
+        consumer.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 1, new BigDecimal("1999.00")), EVENT_ID));
 
         assertThat(savedOrder.get().getItems())
             .singleElement()
@@ -92,7 +93,7 @@ class OrderPurchaseConsumerTest {
         AtomicReference<Order> savedOrder = new AtomicReference<>();
         stubHappyPath(savedOrder);
 
-        consumer.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 1, new BigDecimal("1999.00")), 505L));
+        consumer.handle(messageFor(new CreateOrderRequestedEvent(REQUEST_ID, 202L, 303L, 404L, 1, new BigDecimal("1999.00")), EVENT_ID));
 
         ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
         verify(outboxWriter).write(eq("PurchaseRequest"), eq(REQUEST_ID.toString()), eq("PurchaseResolved"), payload.capture());
@@ -100,9 +101,9 @@ class OrderPurchaseConsumerTest {
             .isEqualTo(new PurchaseResolvedEvent(REQUEST_ID, "SUCCEEDED", 9001L));
     }
 
-    private Message messageFor(CreateOrderRequestedEvent event, Long outboxEventId) throws Exception {
+    private Message messageFor(CreateOrderRequestedEvent event, String eventId) throws Exception {
         MessageProperties properties = new MessageProperties();
-        properties.setHeader("outboxEventId", outboxEventId);
+        properties.setHeader("eventId", eventId);
         return new Message(objectMapper.writeValueAsBytes(event), properties);
     }
 }

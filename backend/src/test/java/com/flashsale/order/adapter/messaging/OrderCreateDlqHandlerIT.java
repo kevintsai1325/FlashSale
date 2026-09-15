@@ -44,7 +44,7 @@ class OrderCreateDlqHandlerIT extends AbstractIntegrationTest {
         props.setContentType(MessageProperties.CONTENT_TYPE_JSON);
         // P4：冪等的來源從「讀 purchase_requests 的狀態」換成去重表，所以這個 header 是必要的，
         // 不再只是追蹤用的裝飾。
-        props.setHeader("outboxEventId", 4998L);
+        props.setHeader("eventId", "49980000-0000-0000-0000-000000000000");
         Message message = new Message(payload.getBytes(StandardCharsets.UTF_8), props);
         handler.handle(message);
 

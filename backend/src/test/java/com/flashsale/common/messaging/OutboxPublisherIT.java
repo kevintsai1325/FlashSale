@@ -44,7 +44,7 @@ class OutboxPublisherIT extends AbstractIntegrationTest {
         Message message = rabbitTemplate.receive(com.flashsale.common.config.RabbitConfig.CREATE_ORDER_QUEUE, 5_000);
         assertThat(message).isNotNull();
         assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).contains("hello");
-        assertThat(message.getMessageProperties().getHeaders()).containsKey("outboxEventId");
+        assertThat(message.getMessageProperties().getHeaders()).containsKey("eventId");
     }
 
     @Test
@@ -63,7 +63,7 @@ class OutboxPublisherIT extends AbstractIntegrationTest {
         Message message = rabbitTemplate.receive(com.flashsale.common.config.RabbitConfig.STOCK_RELEASE_QUEUE, 5_000);
         assertThat(message).isNotNull();
         assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).contains("valid");
-        assertThat(message.getMessageProperties().getHeaders()).containsKey("outboxEventId");
+        assertThat(message.getMessageProperties().getHeaders()).containsKey("eventId");
 
         Long unpublishedCount = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM outbox_events WHERE event_type = ? AND published_at IS NULL",

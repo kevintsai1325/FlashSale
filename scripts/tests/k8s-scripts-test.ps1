@@ -166,7 +166,7 @@ if (($Arguments -join ' ') -eq '--context rancher-desktop -n flashsale get pvc -
     if ($mode -eq 'missing-secret') { 'data-postgres-0 Bound' }
     elseif ($mode -eq 'empty-state') { Write-Error 'No resources found in flashsale namespace.' }
     elseif ($mode -eq 'wrong-pvc-count') { 'pvc-one Bound'; 'pvc-two Bound' }
-    else { 'pvc-one Bound'; 'pvc-two Bound'; 'pvc-three Bound' }
+    else { 'pvc-one Bound'; 'pvc-two Bound'; 'pvc-three Bound'; 'pvc-four Bound' }
     exit 0
 }
 if (($Arguments -join ' ') -eq '--context rancher-desktop -n flashsale get pvc -o name') {
@@ -469,8 +469,8 @@ try {
 
     Set-ShimMode 'wrong-pvc-count'
     $wrongPvcResult = Invoke-VerificationScript $verificationEnvironment
-    Assert-True ($wrongPvcResult.ExitCode -ne 0) 'verify.ps1 must fail when exactly three PVCs are not present.'
-    Assert-True ($wrongPvcResult.Output -match 'Expected three PVCs') 'PVC count failure must be actionable.'
+    Assert-True ($wrongPvcResult.ExitCode -ne 0) 'verify.ps1 must fail when exactly four PVCs are not present.'
+    Assert-True ($wrongPvcResult.Output -match 'Expected four PVCs') 'PVC count failure must be actionable.'
 
     Set-ShimMode 'reachable'
     $unhealthyEnvironment = $verificationEnvironment.Clone()
