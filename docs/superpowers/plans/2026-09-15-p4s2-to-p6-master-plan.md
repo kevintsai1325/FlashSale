@@ -290,3 +290,51 @@ Kafka 上一眼就看得出來：同一個 `orderId` 連續出現兩次，六筆
 - **消費端的去重還沒有人實作** —— 目前沒有任何 Kafka 消費者。`eventId` 已經在 header 裡，
   P5-2 的 analytics 是第一個要用它的。
 - **Kafka 是單 broker、複製因子 1。** 這是展示規模，不是可用性宣稱。
+
+---
+
+## P5 完成紀錄（2026-09-15）
+
+### 與計畫不同的順序
+
+計畫寫的是「P5-1 拆 order-service，P5-2 做 analytics」。**實際反過來做。**
+
+理由：儀表板的數字原本來自 platform 本地的訂單表，加上 P4 步驟 2 為了頂住而加的
+purchase-service 統計 API。如果先拆 order-service，那個儀表板會需要**再加一支**
+order-service 的統計 API，而它在 analytics 上線後就要刪掉。先做 analytics，
+儀表板在訂單搬走之前就已經不依賴本地的訂單表了，那支拋棄式的 API 從來不必存在。
+
+一般化的教訓：**拆分之前先把讀取路徑換掉。** 讀取端一旦不再依賴要搬走的表，
+搬移就只是搬移，不必為過渡期造臨時的橋。
+
+### 驗收結果（在 k3s 上實測）
+
+| # | 條件 | 結果 |
+|---|---|---|
+| 1 | 四個服務、四個資料庫 | 20 個 Pod 全部 Running、0 重啟；platform 只剩 7 張表 |
+| 2 | 程式碼中沒有跨庫查詢 | platform 的三處讀取改成跨服務呼叫；ArchUnit 模組清單與 Flyway 表清單同步縮短 |
+| 3 | 完整搶購流程 | 後台建活動（跨服務寫入）→ 下單 202 → 1 秒內 SUCCEEDED → 付款 PAID → 後台看得到 |
+| 4 | 混沌測試 | 二十筆進行中強砍 order-service，四個不變量全過（見 architecture.md） |
+| 5 | 儀表板改由 analytics 提供 | 聚合來自讀取模型、庫存來自擁有者；數字與 order_db 完全一致 |
+| 6 | `verify.ps1` 與無漂移 | 兩者皆通過 |
+
+### 這一步刪掉的東西比加的多
+
+- platform 的 RabbitMQ、Kafka、outbox、去重表、Redis Lua 全部移除 —— 它不再收發訊息。
+- P4 步驟 2 的 purchase-service 統計 API 與它的 client（當時就寫明會刪）。
+- order-service 搬過去才發現的死碼：它不做 Redis 預扣（那在 purchase-service），
+  所以 `reserve()`、那段 Lua、與半個 `PurchaseMetrics` 都是搬家時一起帶過來的空殼。
+
+**「搬過去之後才看得出是死碼」是拆分的副產品，也是它的價值之一**：在單體裡，
+那段程式碼被真正的呼叫者包圍，看起來完全合理。
+
+### 刻意留下的缺口
+
+- **`api_audit_logs` 只涵蓋 platform 的請求。** order-service 與 purchase-service 的
+  請求只有結構化日誌與 trace。在每個服務複製一張稽核表，只會讓後台的「稽核紀錄」
+  變成三個不相干的清單；正確的做法是把日誌送進集中式的存放（Loki／ELK），不在本計畫範圍。
+- **analytics 的投影以來源系統的 `orderId` 為主鍵。** 這次把 order 資料庫整個重建，
+  訂單 id 從 1 重新開始，與舊投影的 id 相撞 —— 結果是舊列被新資料覆寫，恰好正確，
+  但那是運氣。上游資料庫重建時，正確的做法是連同投影一起清空並重放。
+  更徹底的修法是改用 `orderNo`（本來就是 UUID）當主鍵，屆時 `OrderStatusChanged`
+  也要跟著帶上它。
