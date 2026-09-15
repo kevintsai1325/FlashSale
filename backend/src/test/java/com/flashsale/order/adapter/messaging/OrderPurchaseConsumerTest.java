@@ -48,6 +48,7 @@ class OrderPurchaseConsumerTest {
     @Mock PurchaseMetrics purchaseMetrics;
     @Mock ProductRepository productRepository;
     @Mock OutboxWriter outboxWriter;
+    @Mock com.flashsale.order.application.OrderEventPublisher orderEventPublisher;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private OrderPurchaseConsumer consumer;
@@ -55,7 +56,8 @@ class OrderPurchaseConsumerTest {
     @BeforeEach
     void setUp() {
         consumer = new OrderPurchaseConsumer(consumedMessageGuard, inventoryRepository, orderRepository,
-            orderStatusHistoryRepository, objectMapper, purchaseMetrics, productRepository, outboxWriter);
+            orderStatusHistoryRepository, objectMapper, purchaseMetrics, productRepository, outboxWriter,
+            orderEventPublisher);
     }
 
     private void stubHappyPath(AtomicReference<Order> savedOrder) {

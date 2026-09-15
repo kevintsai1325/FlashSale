@@ -1,5 +1,6 @@
 package com.flashsale.common.messaging;
 
+import com.flashsale.common.config.KafkaTopics;
 import com.flashsale.common.config.RabbitConfig;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.TraceContext;
@@ -10,6 +11,7 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.context.ApplicationContext;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,13 +27,16 @@ public class OutboxPublisher {
 
     private final OutboxEventJpaRepository repository;
     private final RabbitTemplate rabbitTemplate;
+    private final KafkaTemplate<String, String> kafkaTemplate;
     private final ApplicationContext applicationContext;
     private final Tracer tracer;
 
     public OutboxPublisher(OutboxEventJpaRepository repository, RabbitTemplate rabbitTemplate,
+                           KafkaTemplate<String, String> kafkaTemplate,
                            ApplicationContext applicationContext, Tracer tracer) {
         this.repository = repository;
         this.rabbitTemplate = rabbitTemplate;
+        this.kafkaTemplate = kafkaTemplate;
         this.applicationContext = applicationContext;
         this.tracer = tracer;
     }
@@ -59,11 +64,7 @@ public class OutboxPublisher {
 
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void publishEvent(OutboxEvent event) {
-        MessageProperties props = new MessageProperties();
-        props.setContentType(MessageProperties.CONTENT_TYPE_JSON);
-        props.setHeader("eventId", event.getEventId().toString());
-        Message message = new Message(event.getPayload().getBytes(StandardCharsets.UTF_8), props);
-        sendWithStoredParent(event, message);
+        sendWithStoredParent(event);
 
         // Refetch the event in this transaction's persistence context and mark it published
         OutboxEvent managedEvent = repository.findById(event.getId()).orElseThrow();
@@ -71,7 +72,7 @@ public class OutboxPublisher {
         repository.saveAndFlush(managedEvent);
     }
 
-    private void sendWithStoredParent(OutboxEvent event, Message message) {
+    private void sendWithStoredParent(OutboxEvent event) {
         StoredTraceContext stored = event.getTraceContext();
         Span span;
         if (stored == null) {
@@ -88,13 +89,45 @@ public class OutboxPublisher {
                 .start();
         }
         try (Tracer.SpanInScope ignored = tracer.withSpan(span)) {
-            rabbitTemplate.send(RabbitConfig.ORDER_EXCHANGE, routingKeyFor(event.getEventType()), message);
+            send(event);
         } catch (RuntimeException exception) {
             span.error(exception);
             throw exception;
         } finally {
             span.end();
         }
+    }
+
+    /**
+     * 同一張 outbox 表、同一套「至少一次」保證，兩種 transport。
+     *
+     * outbox 模式解的是「資料庫交易與訊息發佈的原子性」，那個問題與訊息送去哪裡無關 ——
+     * 所以這裡只是多一個分支，而不是為 Kafka 另做一套 outbox（那等於把同一個問題解兩次，
+     * 而且兩套的「至少一次」會有不同的漏洞）。
+     */
+    private void send(OutboxEvent event) {
+        switch (event.getEventType()) {
+            case EventTypes.ORDER_CREATED, EventTypes.ORDER_STATUS_CHANGED ->
+                kafkaTemplate.send(KafkaTopics.ORDER_EVENTS, requirePartitionKey(event), event.getPayload());
+            default -> rabbitTemplate.send(RabbitConfig.ORDER_EXCHANGE, routingKeyFor(event.getEventType()),
+                rabbitMessage(event));
+        }
+    }
+
+    private static String requirePartitionKey(OutboxEvent event) {
+        if (event.getPartitionKey() == null) {
+            // 沒有鍵的話 Kafka 會輪詢分區，同一場活動的事件會被打散、順序保證消失。
+            // 這是設計錯誤而不是可容忍的降級，所以直接失敗而不是預設成 null key。
+            throw new IllegalStateException("Kafka-bound event " + event.getId() + " carries no partition key");
+        }
+        return event.getPartitionKey();
+    }
+
+    private Message rabbitMessage(OutboxEvent event) {
+        MessageProperties props = new MessageProperties();
+        props.setContentType(MessageProperties.CONTENT_TYPE_JSON);
+        props.setHeader("eventId", event.getEventId().toString());
+        return new Message(event.getPayload().getBytes(StandardCharsets.UTF_8), props);
     }
 
     private String routingKeyFor(String eventType) {

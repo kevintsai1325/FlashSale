@@ -16,14 +16,17 @@ public class OrderCompensationService {
     private final OrderRepository orderRepository;
     private final InventoryRepository inventoryRepository;
     private final OutboxWriter outboxWriter;
+    private final OrderEventPublisher orderEventPublisher;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
 
     public OrderCompensationService(OrderRepository orderRepository,
                                      InventoryRepository inventoryRepository, OutboxWriter outboxWriter,
+                                     OrderEventPublisher orderEventPublisher,
                                      OrderStatusHistoryRepository orderStatusHistoryRepository) {
         this.orderRepository = orderRepository;
         this.inventoryRepository = inventoryRepository;
         this.outboxWriter = outboxWriter;
+        this.orderEventPublisher = orderEventPublisher;
         this.orderStatusHistoryRepository = orderStatusHistoryRepository;
     }
 
@@ -51,6 +54,7 @@ public class OrderCompensationService {
     private void compensate(Order order) {
         orderRepository.save(order);
         orderStatusHistoryRepository.record(order.getId(), OrderStatus.PENDING_PAYMENT, order.getStatus());
+        orderEventPublisher.statusChanged(order, OrderStatus.PENDING_PAYMENT);
         // 拆庫前這裡是從 orderId 反查 purchase_requests 拿 flashSaleId。那張表已經是
         // purchase-service 的資料，所以改讀訂單自己記下的值（V4 migration 加的欄位）。
         Long flashSaleId = order.getFlashSaleId();

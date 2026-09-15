@@ -6,6 +6,7 @@ import com.flashsale.purchase.exception.ConflictException;
 import com.flashsale.purchase.messaging.CreateOrderRequestedEvent;
 import com.flashsale.purchase.messaging.EventTypes;
 import com.flashsale.purchase.messaging.OutboxWriter;
+import com.flashsale.purchase.messaging.PurchaseRequestCreatedEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,19 +57,35 @@ public class CreatePurchaseRequestService {
         }
 
         if (purchaseRequestRepository.existsSucceededForUserAndFlashSale(userId, flashSaleId)) {
-            return purchaseRequestRepository.save(PurchaseRequest.reject(userId, flashSaleId, idempotencyKey));
+            return publishCreated(purchaseRequestRepository.save(PurchaseRequest.reject(userId, flashSaleId, idempotencyKey)));
         }
 
         StockReservationResult reservation = inventoryStockGateway.reserve(flashSaleId, quantity);
         if (reservation == StockReservationResult.INSUFFICIENT_STOCK) {
-            return purchaseRequestRepository.save(PurchaseRequest.soldOut(userId, flashSaleId, idempotencyKey));
+            return publishCreated(purchaseRequestRepository.save(PurchaseRequest.soldOut(userId, flashSaleId, idempotencyKey)));
         }
 
-        PurchaseRequest request = purchaseRequestRepository.save(PurchaseRequest.pending(userId, flashSaleId, idempotencyKey));
+        PurchaseRequest request = publishCreated(
+            purchaseRequestRepository.save(PurchaseRequest.pending(userId, flashSaleId, idempotencyKey)));
 
-        outboxWriter.write("PurchaseRequest", request.getId().toString(), EventTypes.CREATE_ORDER_REQUESTED,
+        outboxWriter.write("PurchaseRequest", request.getRequestId().toString(), EventTypes.CREATE_ORDER_REQUESTED,
             new CreateOrderRequestedEvent(request.getRequestId(), userId, flashSaleId, flashSale.productId(), quantity, flashSale.salePrice()));
 
+        return request;
+    }
+
+    /**
+     * 每一次搶購嘗試都發一個領域事件，包含被限購擋下與售罄的。下游要算的是
+     * 「多少人來搶、多少人買到」，被擋下的那些正是分母 —— 只發成功的事件，轉換率永遠是 100%。
+     *
+     * 與上面那個 CreateOrderRequested 的差別：那是送給 backend 的命令（RabbitMQ），
+     * 這是說給所有人聽的事實（Kafka），而且只有 PENDING 那條路徑會有前者。
+     */
+    private PurchaseRequest publishCreated(PurchaseRequest request) {
+        outboxWriter.write("PurchaseRequest", request.getRequestId().toString(), EventTypes.PURCHASE_REQUEST_CREATED,
+            new PurchaseRequestCreatedEvent(request.getRequestId(), request.getUserId(), request.getFlashSaleId(),
+                request.getStatus().name(), request.getCreatedAt()),
+            String.valueOf(request.getFlashSaleId()));
         return request;
     }
 }

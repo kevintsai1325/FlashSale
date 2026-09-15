@@ -32,6 +32,11 @@ public class OutboxEvent {
     @Column(name = "event_id", nullable = false, unique = true)
     private UUID eventId;
 
+    // Kafka 的分區鍵（走 RabbitMQ 的事件為 null）。由寫入端指定，不是從 payload 撈出來的 ——
+    // 見 V7__outbox_partition_key.sql 的說明。
+    @Column(name = "partition_key")
+    private String partitionKey;
+
     @Column(name = "aggregate_type", nullable = false)
     private String aggregateType;
 
@@ -58,9 +63,10 @@ public class OutboxEvent {
     protected OutboxEvent() {}
 
     public static OutboxEvent create(String aggregateType, String aggregateId, String eventType,
-                                      String payloadJson, StoredTraceContext traceContext) {
+                                      String payloadJson, StoredTraceContext traceContext, String partitionKey) {
         OutboxEvent event = new OutboxEvent();
         event.eventId = UUID.randomUUID();
+        event.partitionKey = partitionKey;
         event.aggregateType = aggregateType;
         event.aggregateId = aggregateId;
         event.eventType = eventType;
@@ -76,6 +82,7 @@ public class OutboxEvent {
 
     public Long getId() { return id; }
     public UUID getEventId() { return eventId; }
+    public String getPartitionKey() { return partitionKey; }
     public String getEventType() { return eventType; }
     public String getPayload() { return payload; }
     public Instant getPublishedAt() { return publishedAt; }

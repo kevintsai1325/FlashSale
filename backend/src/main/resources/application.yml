@@ -22,6 +22,20 @@ spring:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: ${SPRING_DATA_REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # acks=all + 冪等 producer：outbox 已經保證「至少一次」，這裡要的是不要更差。
+      # acks=1 在 leader 掛掉時會靜默掉訊息，而 outbox 那邊已經標記成已發佈，永遠補不回來。
+      acks: all
+      properties:
+        enable.idempotence: true
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST:localhost}
     port: ${SPRING_RABBITMQ_PORT:5672}

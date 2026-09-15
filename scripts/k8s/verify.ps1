@@ -46,7 +46,7 @@ public static class FlashSaleBaselineCertTrust {
 
 Assert-KubernetesPreflight -KubectlCommand $KubectlCommand | Out-Null
 
-foreach ($name in @('postgres', 'postgres-purchase', 'redis', 'rabbitmq')) {
+foreach ($name in @('postgres', 'postgres-purchase', 'redis', 'rabbitmq', 'kafka')) {
     Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'rollout', 'status', "statefulset/$name", '--timeout=240s') -Operation "waiting for statefulset/$name" | Out-Null
 }
 foreach ($name in @('mailpit', 'zipkin', 'backend', 'purchase-service', 'frontend', 'nginx')) {
@@ -63,7 +63,7 @@ function Get-DesiredReplicas {
 }
 
 $expectedAppPods = 0
-foreach ($name in @('postgres', 'postgres-purchase', 'redis', 'rabbitmq')) { $expectedAppPods += Get-DesiredReplicas -Kind 'statefulset' -Name $name }
+foreach ($name in @('postgres', 'postgres-purchase', 'redis', 'rabbitmq', 'kafka')) { $expectedAppPods += Get-DesiredReplicas -Kind 'statefulset' -Name $name }
 foreach ($name in @('mailpit', 'zipkin', 'backend', 'purchase-service', 'frontend', 'nginx')) { $expectedAppPods += Get-DesiredReplicas -Kind 'deployment' -Name $name }
 
 $backendDesired = Get-DesiredReplicas -Kind 'deployment' -Name 'backend'
@@ -95,7 +95,7 @@ foreach ($pod in @($allPodsJson.items)) {
 if ($restarts -ne 0) { throw "Expected zero container restarts, got $restarts" }
 
 $pvcCount = @(Invoke-BaselineKubectl -Arguments @('-n', $namespace, 'get', 'pvc', '--no-headers') -Operation 'checking persistent volume claims').Count
-if ($pvcCount -ne 4) { throw "Expected four PVCs, got $pvcCount" }
+if ($pvcCount -ne 5) { throw "Expected five PVCs, got $pvcCount" }
 
 if ($null -eq $HttpRequest) { $HttpRequest = ${function:Invoke-InsecureHttpsGet} }
 $healthResponse = & $HttpRequest 'https://localhost:8443/actuator/health/readiness'

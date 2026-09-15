@@ -52,7 +52,8 @@ class OrderCreateDlqHandlerIT extends AbstractIntegrationTest {
         // purchase-service。補償的結果改成一個終態事件送回去。
         Integer resolvedFailedCount = jdbcTemplate.queryForObject(
             "select count(*) from outbox_events where event_type = 'PurchaseResolved' " +
-            "and payload::text like '%\"purchaseRequestId\": 998%' and payload::text like '%\"status\": \"FAILED\"%'",
+            "and payload::text like '%\"purchaseRequestId\": \"99800000-0000-0000-0000-000000000000\"%' " +
+            "and payload::text like '%\"status\": \"FAILED\"%'",
             Integer.class);
         assertThat(resolvedFailedCount).isEqualTo(1);
 

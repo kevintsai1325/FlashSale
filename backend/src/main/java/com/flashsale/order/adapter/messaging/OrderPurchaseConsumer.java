@@ -10,6 +10,7 @@ import com.flashsale.common.messaging.OutboxWriter;
 import com.flashsale.common.metrics.PurchaseMetrics;
 import com.flashsale.inventory.application.InventoryRepository;
 import com.flashsale.inventory.domain.Inventory;
+import com.flashsale.order.application.OrderEventPublisher;
 import com.flashsale.order.application.OrderRepository;
 import com.flashsale.order.application.OrderStatusHistoryRepository;
 import com.flashsale.order.application.event.CreateOrderRequestedEvent;
@@ -34,13 +35,15 @@ public class OrderPurchaseConsumer {
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
     private final ProductRepository productRepository;
     private final OutboxWriter outboxWriter;
+    private final OrderEventPublisher orderEventPublisher;
     private final ObjectMapper objectMapper;
     private final PurchaseMetrics purchaseMetrics;
 
     public OrderPurchaseConsumer(ConsumedMessageGuard consumedMessageGuard, InventoryRepository inventoryRepository,
                                   OrderRepository orderRepository, OrderStatusHistoryRepository orderStatusHistoryRepository,
                                   ObjectMapper objectMapper, PurchaseMetrics purchaseMetrics,
-                                  ProductRepository productRepository, OutboxWriter outboxWriter) {
+                                  ProductRepository productRepository, OutboxWriter outboxWriter,
+                                  OrderEventPublisher orderEventPublisher) {
         this.consumedMessageGuard = consumedMessageGuard;
         this.inventoryRepository = inventoryRepository;
         this.orderRepository = orderRepository;
@@ -49,6 +52,7 @@ public class OrderPurchaseConsumer {
         this.purchaseMetrics = purchaseMetrics;
         this.productRepository = productRepository;
         this.outboxWriter = outboxWriter;
+        this.orderEventPublisher = orderEventPublisher;
     }
 
     @RabbitListener(queues = RabbitConfig.CREATE_ORDER_QUEUE)
@@ -82,6 +86,10 @@ public class OrderPurchaseConsumer {
         // 所以「訂單建立了但搶購請求還停在 PENDING」不會是一個持久的狀態。
         outboxWriter.write("PurchaseRequest", event.purchaseRequestId().toString(), EventTypes.PURCHASE_RESOLVED,
             new PurchaseResolvedEvent(event.purchaseRequestId(), "SUCCEEDED", savedOrder.getId()));
+
+        // 領域事件（Kafka）。與上面那個終態回呼（RabbitMQ）是兩件不同的事：
+        // 那個是說給 purchase-service 聽的命令式回覆，這個是說給所有人聽的「發生了什麼」。
+        orderEventPublisher.orderCreated(savedOrder, product.getName(), event.quantity(), event.unitPrice());
 
         purchaseMetrics.orderCreated();
     }

@@ -51,8 +51,8 @@ class OutboxPublisherIT extends AbstractIntegrationTest {
     void validEventPublishedDespiteInvalidEventInBatch() {
         // Insert invalid event (unknown event type) directly via JDBC to simulate corruption scenario
         jdbcTemplate.update(
-            "INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at) " +
-            "VALUES (?, ?, ?, ?::jsonb, now())",
+            "INSERT INTO outbox_events (event_id, aggregate_type, aggregate_id, event_type, payload, created_at) " +
+            "VALUES (gen_random_uuid(), ?, ?, ?, ?::jsonb, now())",
             "Test", "bad", "UnknownEventType", "{\"error\": \"bad event\"}"
         );
 

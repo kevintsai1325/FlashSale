@@ -138,6 +138,77 @@ spec:
     - metadata: {name: data}
       spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 2Gi}}}
 ---
+# P4 步驟 3：Kafka 作為**領域事件**的匯流排。RabbitMQ 不動，兩者職責不同（見 architecture.md）。
+#
+# 為什麼是手寫 KRaft StatefulSet 而不是 Strimzi：
+# Strimzi 是 K8s 上 Kafka 的事實標準，但它的價值集中在多 broker 的維運自動化
+# （rebalance、滾動升級、憑證輪替），而單節點 k3s 上那些價值展示不出來。
+# 代價是要多一組 CRD、一個 operator 與它的非同步 reconcile —— 後者會讓
+# 「kubectl diff 對 k8s/base 無漂移」這個既有的驗證手段失效。
+# 升級路徑：要多 broker 或宣告式管理 topic 時，整段換成 Strimzi 的 Kafka CR。
+#
+# KRaft（沒有 ZooKeeper）是 Kafka 3.3+ 的預設架構，4.0 起 ZooKeeper 已移除。
+# CLUSTER_ID 必須固定：它寫進 log.dirs 的 meta.properties，重啟時不一致會拒絕啟動。
+apiVersion: v1
+kind: Service
+metadata: {name: kafka-headless, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  clusterIP: None
+  selector: {app: kafka}
+  ports: [{name: kafka, port: 9092, targetPort: 9092}, {name: controller, port: 9093, targetPort: 9093}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: kafka, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  selector: {app: kafka}
+  ports: [{name: kafka, port: 9092, targetPort: 9092}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: kafka, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  serviceName: kafka-headless
+  replicas: 1
+  selector: {matchLabels: {app: kafka}}
+  template:
+    metadata: {labels: {app: kafka}}
+    spec:
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.0
+          env:
+            - {name: KAFKA_NODE_ID, value: "1"}
+            - {name: KAFKA_PROCESS_ROLES, value: "broker,controller"}
+            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@kafka-0.kafka-headless.flashsale.svc.cluster.local:9093"}
+            - {name: KAFKA_LISTENERS, value: "PLAINTEXT://:9092,CONTROLLER://:9093"}
+            - {name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://kafka.flashsale.svc.cluster.local:9092"}
+            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"}
+            - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: "CONTROLLER"}
+            - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: "PLAINTEXT"}
+            # 單節點，複製因子只能是 1。這是展示叢集，不是可用性宣稱。
+            - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1"}
+            - {name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS, value: "0"}
+            # 事件保留 7 天。Kafka 相對於 RabbitMQ 的關鍵差別就在這裡：訊息被消費之後仍然在，
+            # 所以 analytics 與 Flink 可以重放、可以各自從自己的 offset 讀。
+            - {name: KAFKA_LOG_RETENTION_HOURS, value: "168"}
+            - {name: KAFKA_LOG_DIRS, value: "/var/lib/kafka/data"}
+            - {name: CLUSTER_ID, value: "flashsale-kraft-0001"}
+            - {name: KAFKA_HEAP_OPTS, value: "-Xms256m -Xmx512m"}
+          ports: [{containerPort: 9092}, {containerPort: 9093}]
+          # tcpSocket 而不是 kafka-broker-api-versions.sh：後者每次探測都要起一個 JVM，
+          # 在單節點上那個成本會跟應用程式搶 CPU，而 P3 已經示範過探測誤判會造成什麼。
+          startupProbe: {tcpSocket: {port: 9092}, failureThreshold: 40, periodSeconds: 5, timeoutSeconds: 3}
+          readinessProbe: {tcpSocket: {port: 9092}, initialDelaySeconds: 10, periodSeconds: 10, timeoutSeconds: 3}
+          livenessProbe: {tcpSocket: {port: 9092}, initialDelaySeconds: 30, periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 250m, memory: 768Mi}, limits: {cpu: "2", memory: 1536Mi}}
+          volumeMounts: [{name: data, mountPath: /var/lib/kafka}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 5Gi}}}
+---
 apiVersion: v1
 kind: Service
 metadata: {name: rabbitmq-headless, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}

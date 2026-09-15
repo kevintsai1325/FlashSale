@@ -5,6 +5,8 @@ import com.flashsale.purchase.application.PurchaseRequestRepository;
 import com.flashsale.purchase.config.RabbitConfig;
 import com.flashsale.purchase.domain.PurchaseRequest;
 import com.flashsale.purchase.domain.PurchaseRequestStatus;
+
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
@@ -27,10 +29,13 @@ public class PurchaseResolvedConsumer {
     private static final Logger logger = LoggerFactory.getLogger(PurchaseResolvedConsumer.class);
 
     private final PurchaseRequestRepository purchaseRequestRepository;
+    private final OutboxWriter outboxWriter;
     private final ObjectMapper objectMapper;
 
-    public PurchaseResolvedConsumer(PurchaseRequestRepository purchaseRequestRepository, ObjectMapper objectMapper) {
+    public PurchaseResolvedConsumer(PurchaseRequestRepository purchaseRequestRepository,
+                                     OutboxWriter outboxWriter, ObjectMapper objectMapper) {
         this.purchaseRequestRepository = purchaseRequestRepository;
+        this.outboxWriter = outboxWriter;
         this.objectMapper = objectMapper;
     }
 
@@ -60,5 +65,12 @@ public class PurchaseResolvedConsumer {
             request.markFailed();
         }
         purchaseRequestRepository.save(request);
+
+        // 終態確定了才發領域事件，而且與狀態更新在同一個交易裡（outbox 的意義）。
+        // 重複投遞會在上面的終態檢查就返回，所以這個事件一筆請求只會有一個。
+        outboxWriter.write("PurchaseRequest", request.getRequestId().toString(), EventTypes.PURCHASE_REQUEST_RESOLVED,
+            new PurchaseRequestResolvedEvent(request.getRequestId(), request.getUserId(), request.getFlashSaleId(),
+                request.getStatus().name(), request.getOrderId(), Instant.now()),
+            String.valueOf(request.getFlashSaleId()));
     }
 }

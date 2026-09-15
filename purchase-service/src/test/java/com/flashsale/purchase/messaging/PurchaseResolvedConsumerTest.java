@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PurchaseResolvedConsumerTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final OutboxWriter outboxWriter = org.mockito.Mockito.mock(OutboxWriter.class);
 
     private static final UUID REQUEST_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
@@ -49,7 +50,7 @@ class PurchaseResolvedConsumerTest {
     void marksSucceededWithTheOrderId() throws Exception {
         PurchaseRequest request = pendingRequest();
         AtomicInteger saves = new AtomicInteger();
-        PurchaseResolvedConsumer consumer = new PurchaseResolvedConsumer(repositoryFor(request, saves), objectMapper);
+        PurchaseResolvedConsumer consumer = new PurchaseResolvedConsumer(repositoryFor(request, saves), outboxWriter, objectMapper);
 
         consumer.handle(messageFor(new PurchaseResolvedEvent(REQUEST_ID, "SUCCEEDED", 5001L)));
 
@@ -62,7 +63,7 @@ class PurchaseResolvedConsumerTest {
     void marksFailedWhenCompensationReportsFailure() throws Exception {
         PurchaseRequest request = pendingRequest();
         AtomicInteger saves = new AtomicInteger();
-        PurchaseResolvedConsumer consumer = new PurchaseResolvedConsumer(repositoryFor(request, saves), objectMapper);
+        PurchaseResolvedConsumer consumer = new PurchaseResolvedConsumer(repositoryFor(request, saves), outboxWriter, objectMapper);
 
         consumer.handle(messageFor(new PurchaseResolvedEvent(REQUEST_ID, "FAILED", null)));
 
@@ -74,7 +75,7 @@ class PurchaseResolvedConsumerTest {
     void ignoresARedeliveryOnceTheRequestIsAlreadyTerminal() throws Exception {
         PurchaseRequest request = pendingRequest();
         AtomicInteger saves = new AtomicInteger();
-        PurchaseResolvedConsumer consumer = new PurchaseResolvedConsumer(repositoryFor(request, saves), objectMapper);
+        PurchaseResolvedConsumer consumer = new PurchaseResolvedConsumer(repositoryFor(request, saves), outboxWriter, objectMapper);
 
         consumer.handle(messageFor(new PurchaseResolvedEvent(REQUEST_ID, "SUCCEEDED", 5001L)));
         consumer.handle(messageFor(new PurchaseResolvedEvent(REQUEST_ID, "SUCCEEDED", 5001L)));

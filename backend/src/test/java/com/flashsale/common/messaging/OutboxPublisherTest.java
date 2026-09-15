@@ -37,10 +37,11 @@ class OutboxPublisherTest {
         when(spanBuilder.start()).thenReturn(span);
         when(tracer.withSpan(span)).thenReturn(mock(Tracer.SpanInScope.class));
         OutboxEvent event = OutboxEvent.create("Order", "1", EventTypes.CREATE_ORDER_REQUESTED,
-            "{}", new StoredTraceContext(1, "trace-id", "span-id", true));
+            "{}", new StoredTraceContext(1, "trace-id", "span-id", true), null);
         when(repository.findById(isNull())).thenReturn(Optional.of(event));
         OutboxPublisher publisher = new OutboxPublisher(
-            repository, rabbitTemplate, mock(ApplicationContext.class), tracer);
+            repository, rabbitTemplate, mock(org.springframework.kafka.core.KafkaTemplate.class),
+            mock(ApplicationContext.class), tracer);
 
         publisher.publishEvent(event);
 

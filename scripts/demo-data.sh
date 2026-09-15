@@ -53,7 +53,7 @@ require_local_docker_engine() {
 
 require_healthy_stack() {
   local service container_id health
-  local services=(postgres postgres-purchase redis rabbitmq mailpit zipkin backend purchase-service frontend nginx)
+  local services=(postgres postgres-purchase redis rabbitmq kafka mailpit zipkin backend purchase-service frontend nginx)
 
   for service in "${services[@]}"; do
     container_id="$(compose ps -q "$service")"
@@ -320,12 +320,12 @@ list_purchase_cleanup_counts() {
   predicate="$(purchase_request_predicate "$1" "$2")"
   psql_purchase_exec -At <<SQL
 WITH demo_requests AS (
-    SELECT id FROM purchase_requests WHERE ${predicate}
+    SELECT id, request_id FROM purchase_requests WHERE ${predicate}
 )
 SELECT 'purchase.purchase_requests=' || (SELECT count(*) FROM demo_requests)
 UNION ALL SELECT 'purchase.outbox_events=' || (SELECT count(*) FROM outbox_events
     WHERE $(demo_prefix_predicate aggregate_id)
-       OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (SELECT id::text FROM demo_requests)));
+       OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (SELECT request_id::text FROM demo_requests)));
 SQL
 }
 
@@ -336,11 +336,11 @@ delete_purchase_demo_data() {
 BEGIN;
 
 CREATE TEMP TABLE demo_request_ids ON COMMIT DROP AS
-SELECT id FROM purchase_requests WHERE ${predicate};
+SELECT id, request_id FROM purchase_requests WHERE ${predicate};
 
 DELETE FROM outbox_events
 WHERE $(demo_prefix_predicate aggregate_id)
-   OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (SELECT id::text FROM demo_request_ids));
+   OR (aggregate_type = 'PurchaseRequest' AND aggregate_id IN (SELECT request_id::text FROM demo_request_ids));
 DELETE FROM purchase_requests WHERE id IN (SELECT id FROM demo_request_ids);
 
 COMMIT;

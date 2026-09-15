@@ -166,7 +166,7 @@ if (($Arguments -join ' ') -eq '--context rancher-desktop -n flashsale get pvc -
     if ($mode -eq 'missing-secret') { 'data-postgres-0 Bound' }
     elseif ($mode -eq 'empty-state') { Write-Error 'No resources found in flashsale namespace.' }
     elseif ($mode -eq 'wrong-pvc-count') { 'pvc-one Bound'; 'pvc-two Bound' }
-    else { 'pvc-one Bound'; 'pvc-two Bound'; 'pvc-three Bound'; 'pvc-four Bound' }
+    else { 'pvc-one Bound'; 'pvc-two Bound'; 'pvc-three Bound'; 'pvc-four Bound'; 'pvc-five Bound' }
     exit 0
 }
 if (($Arguments -join ' ') -eq '--context rancher-desktop -n flashsale get pvc -o name') {
@@ -214,10 +214,10 @@ if (($Arguments.Count -ge 9) -and (($Arguments[0..8] -join ' ') -eq '--context r
     function New-PodItem($name, $phase, $ready) {
         @{ metadata = @{ name = $name }; status = @{ phase = $phase; conditions = @(@{ type = 'Ready'; status = $ready }) } }
     }
-    if ($mode -eq 'wrong-pod-count') { $items = @(1..9 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
-    elseif ($mode -eq 'pod-not-ready') { $items = @(1..9 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) + @(New-PodItem 'pod-10' 'Pending' 'False') }
-    elseif ($mode -eq 'multi-replica') { $items = @(1..12 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
-    else { $items = @(1..10 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
+    if ($mode -eq 'wrong-pod-count') { $items = @(1..10 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
+    elseif ($mode -eq 'pod-not-ready') { $items = @(1..10 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) + @(New-PodItem 'pod-11' 'Pending' 'False') }
+    elseif ($mode -eq 'multi-replica') { $items = @(1..13 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
+    else { $items = @(1..11 | ForEach-Object { New-PodItem "pod-$_" 'Running' 'True' }) }
     @{ items = $items } | ConvertTo-Json -Depth 8 -Compress
     exit 0
 }
@@ -364,7 +364,7 @@ try {
     Assert-True (($deployLines -join "`n") -notmatch 'test-postgres-password|test-rabbitmq-password|test-private-key|test-public-key') 'kubectl arguments/logs must not expose decoded secrets.'
     Assert-True ($deployResult.Output -notmatch 'test-postgres-password|test-rabbitmq-password|test-private-key|test-public-key') 'deploy output must not expose decoded secrets.'
     Assert-True (@($deployLines | Where-Object { $_ -match 'rollout\trestart\tdeployment/(backend|purchase-service|frontend|nginx)' }).Count -eq 4) 'Deploy must restart backend, purchase-service, frontend, and nginx after application apply.'
-    Assert-True (@($deployLines | Where-Object { $_ -match 'rollout\tstatus\t(statefulset/(postgres|postgres-purchase|redis|rabbitmq)|deployment/(mailpit|zipkin))' }).Count -eq 6) 'Deploy must wait for all six dependencies before applying the application stage.'
+    Assert-True (@($deployLines | Where-Object { $_ -match 'rollout\tstatus\t(statefulset/(postgres|postgres-purchase|redis|rabbitmq|kafka)|deployment/(mailpit|zipkin))' }).Count -eq 7) 'Deploy must wait for all seven dependencies before applying the application stage.'
 
     if ($null -ne $alternatePowerShellCommand) {
         Set-ShimMode 'reachable'
@@ -432,7 +432,7 @@ try {
     Assert-True ($verifyResult.ExitCode -eq 0) "verify.ps1 must pass all deterministic workload and endpoint checks. Output: $($verifyResult.Output) Log: $((Get-LogLines $kubectlLog) -join ' || ')"
     $verifyLines = Get-LogLines $kubectlLog
     Assert-True (@($verifyLines | Where-Object { $_ -notmatch '^(config\tcurrent-context|--context\trancher-desktop)' }).Count -eq 0) 'Every kubectl operation after current-context must explicitly select rancher-desktop.'
-    Assert-True (@($verifyLines | Where-Object { $_ -match 'rollout\tstatus' }).Count -eq 10) 'verify.ps1 must wait for exactly ten workloads.'
+    Assert-True (@($verifyLines | Where-Object { $_ -match 'rollout\tstatus' }).Count -eq 11) 'verify.ps1 must wait for exactly eleven workloads.'
     Assert-True (@(Get-LogLines $httpLog).Count -eq 2) 'verify.ps1 must execute both HTTPS endpoint checks.'
 
     Set-ShimMode 'rollout-failure'
@@ -450,7 +450,7 @@ try {
     Set-ShimMode 'wrong-pod-count'
     $wrongPodCountResult = Invoke-VerificationScript $verificationEnvironment
     Assert-True ($wrongPodCountResult.ExitCode -ne 0) 'verify.ps1 must fail when the running Pod count does not match the declared replica counts.'
-    Assert-True ($wrongPodCountResult.Output -match 'Expected 10 application Pods') 'Wrong Pod count failure must be actionable.'
+    Assert-True ($wrongPodCountResult.Output -match 'Expected 11 application Pods') 'Wrong Pod count failure must be actionable.'
 
     Set-ShimMode 'pod-not-ready'
     $podNotReadyResult = Invoke-VerificationScript $verificationEnvironment
@@ -469,8 +469,8 @@ try {
 
     Set-ShimMode 'wrong-pvc-count'
     $wrongPvcResult = Invoke-VerificationScript $verificationEnvironment
-    Assert-True ($wrongPvcResult.ExitCode -ne 0) 'verify.ps1 must fail when exactly four PVCs are not present.'
-    Assert-True ($wrongPvcResult.Output -match 'Expected four PVCs') 'PVC count failure must be actionable.'
+    Assert-True ($wrongPvcResult.ExitCode -ne 0) 'verify.ps1 must fail when exactly five PVCs are not present.'
+    Assert-True ($wrongPvcResult.Output -match 'Expected five PVCs') 'PVC count failure must be actionable.'
 
     Set-ShimMode 'reachable'
     $unhealthyEnvironment = $verificationEnvironment.Clone()

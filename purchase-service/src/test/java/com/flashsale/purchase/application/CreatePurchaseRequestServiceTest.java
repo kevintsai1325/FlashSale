@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -68,6 +69,8 @@ class CreatePurchaseRequestServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(PurchaseRequestStatus.PENDING);
         verify(outboxWriter).write(eq("PurchaseRequest"), any(), eq("CreateOrderRequested"), any());
+        // 領域事件（Kafka）與建單命令（RabbitMQ）是兩件事，成功路徑上兩個都要發。
+        verify(outboxWriter).write(eq("PurchaseRequest"), any(), eq("PurchaseRequestCreated"), any(), eq("10"));
     }
 
     @Test
@@ -112,7 +115,10 @@ class CreatePurchaseRequestServiceTest {
         PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-2", 1);
 
         assertThat(result.getStatus()).isEqualTo(PurchaseRequestStatus.SOLD_OUT);
-        verifyNoInteractions(outboxWriter);
+        // 售罄也要發領域事件：下游算轉換率時，沒搶到的那些正是分母。
+        // 但**不能**發建單命令 —— 沒有預扣成功就建單會超賣。
+        verify(outboxWriter).write(eq("PurchaseRequest"), any(), eq("PurchaseRequestCreated"), any(), eq("10"));
+        verify(outboxWriter, never()).write(any(), any(), eq("CreateOrderRequested"), any());
     }
 
     @Test
@@ -140,7 +146,9 @@ class CreatePurchaseRequestServiceTest {
         PurchaseRequest result = service.createPurchaseRequest(1L, 10L, "idem-4", 1);
 
         assertThat(result.getStatus()).isEqualTo(PurchaseRequestStatus.REJECTED);
-        verifyNoInteractions(inventoryStockGateway, outboxWriter);
+        verifyNoInteractions(inventoryStockGateway);
+        verify(outboxWriter).write(eq("PurchaseRequest"), any(), eq("PurchaseRequestCreated"), any(), eq("10"));
+        verify(outboxWriter, never()).write(any(), any(), eq("CreateOrderRequested"), any());
     }
 
     @Test

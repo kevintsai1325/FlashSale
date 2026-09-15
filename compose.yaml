@@ -44,6 +44,35 @@ services:
       timeout: 5s
       retries: 10
 
+  # P4 步驟 3：領域事件的匯流排（KRaft 單節點，無 ZooKeeper）。RabbitMQ 保留給命令。
+  kafka:
+    image: apache/kafka:3.9.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      CLUSTER_ID: flashsale-kraft-0001
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    volumes:
+      - kafka_data:/var/lib/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
+
   mailpit:
     image: axllent/mailpit:latest
     healthcheck:
@@ -83,6 +112,7 @@ services:
       SPRING_RABBITMQ_USERNAME: guest
       SPRING_RABBITMQ_PASSWORD: guest
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       APP_HEALTH_MAILPIT_URL: http://mailpit:8025/api/v1/info
       APP_HEALTH_ZIPKIN_URL: http://zipkin:9411/health
       APP_HEALTH_FRONTEND_URL: http://frontend/internal-health
@@ -96,6 +126,8 @@ services:
       redis:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
       zipkin:
         condition: service_started
@@ -123,12 +155,15 @@ services:
       SPRING_RABBITMQ_PASSWORD: guest
       APP_FLASH_SALE_BASE_URL: http://backend:8080
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       postgres-purchase:
         condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
       backend:
         condition: service_started
@@ -168,3 +203,4 @@ services:
 volumes:
   postgres_data:
   postgres_purchase_data:
+  kafka_data:

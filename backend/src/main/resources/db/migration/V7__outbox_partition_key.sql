@@ -1,0 +1,11 @@
+-- Kafka 的分區鍵。
+--
+-- RabbitMQ 的 routing key 可以從 event type 推導出來（一種事件固定去一個佇列），
+-- 但 Kafka 的分區鍵不行：它是**領域上的**選擇 —— 本專案一律用 flashSaleId，
+-- 因為 Kafka 只保證單一分區內的順序，而需要順序的是「同一場活動的事件流」
+-- （Flink 要算每場活動的視窗聚合）。用 orderId 或 userId 當鍵會把同一場活動打散到所有分區。
+--
+-- 所以它由寫入端明確指定，存在這一欄，而不是讓發佈器去 payload 裡撈某個欄位 ——
+-- 後者會讓 transport 的行為悄悄依賴 payload 的形狀。
+-- 走 RabbitMQ 的事件這一欄是 NULL。
+ALTER TABLE outbox_events ADD COLUMN partition_key VARCHAR(100);

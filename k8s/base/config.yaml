@@ -22,6 +22,7 @@ data:
   APP_FLASH_SALE_BASE_URL: http://backend:8080
   # 反向：backend 問 purchase-service 要後台儀表板的搶購統計。
   APP_PURCHASE_SERVICE_BASE_URL: http://purchase-service:8080
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
   MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
   APP_HEALTH_MAILPIT_URL: http://mailpit:8025/api/v1/info
   APP_HEALTH_ZIPKIN_URL: http://zipkin:9411/health

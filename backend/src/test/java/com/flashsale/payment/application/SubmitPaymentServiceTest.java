@@ -27,6 +27,7 @@ class SubmitPaymentServiceTest {
     @Mock OrderCompensationService compensationService;
     @Mock PaymentRecordRepository paymentRecordRepository;
     @Mock OrderStatusHistoryRepository orderStatusHistoryRepository;
+    @Mock com.flashsale.order.application.OrderEventPublisher orderEventPublisher;
 
     SubmitPaymentService service;
 
@@ -36,7 +37,8 @@ class SubmitPaymentServiceTest {
 
     @Test
     void successfulPaymentMarksOrderPaid() {
-        service = new SubmitPaymentService(orderRepository, compensationService, paymentRecordRepository, orderStatusHistoryRepository);
+        service = new SubmitPaymentService(orderRepository, compensationService, paymentRecordRepository, orderStatusHistoryRepository,
+            orderEventPublisher);
         Order order = pendingOrderOwnedBy(1L);
         when(orderRepository.findById(5L)).thenReturn(Optional.of(order));
         when(paymentRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -50,7 +52,8 @@ class SubmitPaymentServiceTest {
 
     @Test
     void failedPaymentTriggersCompensation() {
-        service = new SubmitPaymentService(orderRepository, compensationService, paymentRecordRepository, orderStatusHistoryRepository);
+        service = new SubmitPaymentService(orderRepository, compensationService, paymentRecordRepository, orderStatusHistoryRepository,
+            orderEventPublisher);
         Order order = pendingOrderOwnedBy(1L);
         when(orderRepository.findById(5L)).thenReturn(Optional.of(order));
         when(paymentRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -63,7 +66,8 @@ class SubmitPaymentServiceTest {
 
     @Test
     void anotherUsersOrderIsNotFound() {
-        service = new SubmitPaymentService(orderRepository, compensationService, paymentRecordRepository, orderStatusHistoryRepository);
+        service = new SubmitPaymentService(orderRepository, compensationService, paymentRecordRepository, orderStatusHistoryRepository,
+            orderEventPublisher);
         when(orderRepository.findById(5L)).thenReturn(Optional.of(pendingOrderOwnedBy(1L)));
 
         assertThatThrownBy(() -> service.submit(5L, 2L, PaymentResult.SUCCESS))

@@ -2,6 +2,7 @@ package com.flashsale.payment.application;
 
 import com.flashsale.common.exception.NotFoundException;
 import com.flashsale.order.application.OrderCompensationService;
+import com.flashsale.order.application.OrderEventPublisher;
 import com.flashsale.order.application.OrderRepository;
 import com.flashsale.order.application.OrderStatusHistoryRepository;
 import com.flashsale.order.domain.Order;
@@ -18,14 +19,17 @@ public class SubmitPaymentService {
     private final OrderCompensationService compensationService;
     private final PaymentRecordRepository paymentRecordRepository;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
+    private final OrderEventPublisher orderEventPublisher;
 
     public SubmitPaymentService(OrderRepository orderRepository, OrderCompensationService compensationService,
                                  PaymentRecordRepository paymentRecordRepository,
-                                 OrderStatusHistoryRepository orderStatusHistoryRepository) {
+                                 OrderStatusHistoryRepository orderStatusHistoryRepository,
+                                 OrderEventPublisher orderEventPublisher) {
         this.orderRepository = orderRepository;
         this.compensationService = compensationService;
         this.paymentRecordRepository = paymentRecordRepository;
         this.orderStatusHistoryRepository = orderStatusHistoryRepository;
+        this.orderEventPublisher = orderEventPublisher;
     }
 
     @Transactional
@@ -40,6 +44,7 @@ public class SubmitPaymentService {
             order.pay();
             orderRepository.save(order);
             orderStatusHistoryRepository.record(order.getId(), OrderStatus.PENDING_PAYMENT, OrderStatus.PAID);
+            orderEventPublisher.statusChanged(order, OrderStatus.PENDING_PAYMENT);
         } else {
             compensationService.failPayment(order);
         }

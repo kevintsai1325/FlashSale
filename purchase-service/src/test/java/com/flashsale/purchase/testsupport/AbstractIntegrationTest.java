@@ -15,7 +15,9 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * purchase-service 的整合測試共用底座。P4 步驟 1 時這裡是空的 —— 那時這個服務沒有自己的
@@ -38,11 +40,15 @@ public abstract class AbstractIntegrationTest {
     protected static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
     protected static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
     protected static final RabbitMQContainer RABBITMQ = new RabbitMQContainer("rabbitmq:3.13-management-alpine");
+    // P4 步驟 3：領域事件走 Kafka。沒有它的話，Kafka-bound 的 outbox 列會發佈失敗、
+    // 永遠停在未發佈 —— 而「outbox 全部發佈完成」是既有的驗收條件之一。
+    protected static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.1"));
 
     static {
         POSTGRES.start();
         REDIS.start();
         RABBITMQ.start();
+        KAFKA.start();
     }
 
     @DynamicPropertySource
@@ -56,6 +62,7 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.rabbitmq.port", RABBITMQ::getAmqpPort);
         registry.add("spring.rabbitmq.username", RABBITMQ::getAdminUsername);
         registry.add("spring.rabbitmq.password", RABBITMQ::getAdminPassword);
+        registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
     }
 
     @MockBean protected CachingFlashSaleClient flashSaleClient;

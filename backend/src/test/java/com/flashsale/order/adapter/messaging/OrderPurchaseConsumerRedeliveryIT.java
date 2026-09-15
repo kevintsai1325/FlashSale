@@ -52,7 +52,8 @@ class OrderPurchaseConsumerRedeliveryIT extends AbstractIntegrationTest {
         // 重投遞必須只產生一個終態事件——多一個就代表 purchase-service 會被通知兩次。
         Integer resolvedCount = jdbcTemplate.queryForObject(
             "select count(*) from outbox_events where event_type = 'PurchaseResolved' " +
-            "and payload::text like '%\"purchaseRequestId\": 999%' and payload::text like '%\"status\": \"SUCCEEDED\"%'",
+            "and payload::text like '%\"purchaseRequestId\": \"99900000-0000-0000-0000-000000000000\"%' " +
+            "and payload::text like '%\"status\": \"SUCCEEDED\"%'",
             Integer.class);
         assertThat(resolvedCount).as("a redelivered message must not report the terminal state twice").isEqualTo(1);
 

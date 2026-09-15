@@ -118,7 +118,7 @@ Apply-SecretJson -Json $runtimeSecret -Description 'runtime secrets'
 Apply-SecretJson -Json $tlsSecret -Description 'the TLS secret'
 
 Apply-Stage -Stage 'dependency'
-foreach ($resource in @('statefulset/postgres', 'statefulset/postgres-purchase', 'statefulset/redis', 'statefulset/rabbitmq', 'deployment/mailpit', 'deployment/zipkin')) { Wait-ForRollout $resource }
+foreach ($resource in @('statefulset/postgres', 'statefulset/postgres-purchase', 'statefulset/redis', 'statefulset/rabbitmq', 'statefulset/kafka', 'deployment/mailpit', 'deployment/zipkin')) { Wait-ForRollout $resource }
 
 Apply-Stage -Stage 'application'
 foreach ($name in @('backend', 'purchase-service', 'frontend', 'nginx')) {
