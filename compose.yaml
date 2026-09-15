@@ -28,6 +28,20 @@ services:
       timeout: 5s
       retries: 10
 
+  postgres-analytics:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: analytics
+      POSTGRES_USER: flashsale
+      POSTGRES_PASSWORD: flashsale
+    volumes:
+      - postgres_analytics_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flashsale"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     healthcheck:
@@ -117,7 +131,7 @@ services:
       APP_HEALTH_ZIPKIN_URL: http://zipkin:9411/health
       APP_HEALTH_FRONTEND_URL: http://frontend/internal-health
       APP_HEALTH_NGINX_URL: http://nginx:8080/internal-health
-      APP_PURCHASE_SERVICE_BASE_URL: http://purchase-service:8080
+      APP_ANALYTICS_BASE_URL: http://analytics-service:8080
     depends_on:
       postgres:
         condition: service_healthy
@@ -173,6 +187,27 @@ services:
       timeout: 5s
       retries: 10
 
+  # P5：後台儀表板的聚合來源。只讀 Kafka、只寫自己的讀取模型。
+  analytics-service:
+    build: ./analytics-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-analytics:5432/analytics
+      SPRING_DATASOURCE_USERNAME: flashsale
+      SPRING_DATASOURCE_PASSWORD: flashsale
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+    depends_on:
+      postgres-analytics:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   frontend:
     build: ./frontend
     depends_on:
@@ -203,4 +238,5 @@ services:
 volumes:
   postgres_data:
   postgres_purchase_data:
+  postgres_analytics_data:
   kafka_data:

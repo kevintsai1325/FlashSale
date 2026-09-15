@@ -52,6 +52,24 @@ jobs:
       - name: Run purchase-service tests
         run: ./gradlew test
 
+  analytics-service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: analytics-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Ensure gradlew is executable
+        run: chmod +x gradlew
+      - name: Run analytics-service tests
+        run: ./gradlew test
+
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 10

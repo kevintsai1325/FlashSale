@@ -1,0 +1,19 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+# 這個服務只驗證 token（給 /actuator/metrics 用），測試不簽 token，但屬性必須存在，
+# 否則 JwtKeyConfig 起不來、整個 context 啟動失敗。與其他服務用同一把測試公鑰。
+JWT_PUBLIC_KEY: |
+  -----BEGIN PUBLIC KEY-----
+  MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA9lTL2QOmOPWl898hVrv5
+  y0XXHpsqaKsaL0zxbhC9qewOJLeK1v/+jKXV5hDnopfKwW75hZOf6tXfM5Xx31KY
+  qgUdUX5wLZpwJaQOpgQvZAQ7Wtws8qfqGcb3R5EMAYaKq4UZgoezllmTyWxvOOcr
+  fhJmfSMFdSmVXokdnCo4quhnegKl1NT/hZcojUAwca2XPZaRuqBU5hx545wTtn8v
+  GgVYmkw0qaNTgJTaMYGDCpfvu6ynUjUDQCoQ49taGcHILy4ahs7fk3/I0DZBat+P
+  7aqxsMQvA51UR8KT85fcw1QfSBgLgcrsPyAZ5eXEyWeYJivKo+LIEDBFFiEqGvgk
+  /QIDAQAB
+  -----END PUBLIC KEY-----

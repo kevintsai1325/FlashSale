@@ -63,12 +63,12 @@ spring:
 app:
   audit:
     retention-days: 30
-  purchase-service:
-    # 後台儀表板的搶購統計來源。不經 Nginx，走叢集內部的 Service 名稱。
+  analytics:
+    # 後台儀表板的聚合來源。不經 Nginx，走叢集內部的 Service 名稱。
     # 逾時比搶購熱路徑寬鬆：後台頁面的使用者願意等，而失敗只會讓那一區塊顯示 0。
-    base-url: ${APP_PURCHASE_SERVICE_BASE_URL:http://localhost:8081}
-    connect-timeout-ms: ${APP_PURCHASE_SERVICE_CONNECT_TIMEOUT_MS:500}
-    read-timeout-ms: ${APP_PURCHASE_SERVICE_READ_TIMEOUT_MS:2000}
+    base-url: ${APP_ANALYTICS_BASE_URL:http://localhost:8082}
+    connect-timeout-ms: ${APP_ANALYTICS_CONNECT_TIMEOUT_MS:500}
+    read-timeout-ms: ${APP_ANALYTICS_READ_TIMEOUT_MS:2000}
   health:
     mailpit-url: ${APP_HEALTH_MAILPIT_URL:}
     zipkin-url: ${APP_HEALTH_ZIPKIN_URL:}

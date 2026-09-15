@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: analytics-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/analytics}
+    username: ${SPRING_DATASOURCE_USERNAME:flashsale}
+    password: ${SPRING_DATASOURCE_PASSWORD:flashsale}
+    hikari:
+      # 10 就夠：兩個 Kafka listener 加上偶爾的儀表板查詢。
+      maximum-pool-size: 10
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # earliest：這個服務可以被刪掉重建，重建時要從頭重放，而不是只看新事件。
+      # 這正是把事件放在 Kafka 而不是 RabbitMQ 的理由。
+      auto-offset-reset: earliest
+      # 手動提交（由 listener container 在處理成功後提交），配合 @Transactional 的寫入 ——
+      # 自動提交會在處理失敗時仍然前進 offset，事件就永遠補不回來。
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
+      observation-enabled: true
+
+app:
+  kafka:
+    order-events-topic: flashsale.order-events
+    purchase-events-topic: flashsale.purchase-events
+    # 消費者群組。改名等於從頭重放一次（offset 從 earliest 開始）。
+    group-id: ${APP_KAFKA_GROUP_ID:analytics-service}
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+      roles: ADMIN
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
+  health:
+    readinessstate:
+      enabled: true
+    livenessstate:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${MANAGEMENT_ZIPKIN_TRACING_ENDPOINT:http://localhost:9411/api/v2/spans}

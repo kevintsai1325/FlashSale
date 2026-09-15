@@ -118,15 +118,15 @@ Apply-SecretJson -Json $runtimeSecret -Description 'runtime secrets'
 Apply-SecretJson -Json $tlsSecret -Description 'the TLS secret'
 
 Apply-Stage -Stage 'dependency'
-foreach ($resource in @('statefulset/postgres', 'statefulset/postgres-purchase', 'statefulset/redis', 'statefulset/rabbitmq', 'statefulset/kafka', 'deployment/mailpit', 'deployment/zipkin')) { Wait-ForRollout $resource }
+foreach ($resource in @('statefulset/postgres', 'statefulset/postgres-purchase', 'statefulset/postgres-analytics', 'statefulset/redis', 'statefulset/rabbitmq', 'statefulset/kafka', 'deployment/mailpit', 'deployment/zipkin')) { Wait-ForRollout $resource }
 
 Apply-Stage -Stage 'application'
-foreach ($name in @('backend', 'purchase-service', 'frontend', 'nginx')) {
+foreach ($name in @('backend', 'purchase-service', 'analytics-service', 'frontend', 'nginx')) {
     Invoke-KubectlChecked -Arguments @('--context', 'rancher-desktop', '-n', $namespace, 'rollout', 'restart', "deployment/$name") -Operation "restarting deployment/$name for local image or mounted TLS activation" | Out-Null
 }
-foreach ($name in @('backend', 'purchase-service', 'frontend', 'nginx')) { Wait-ForRollout "deployment/$name" }
+foreach ($name in @('backend', 'purchase-service', 'analytics-service', 'frontend', 'nginx')) { Wait-ForRollout "deployment/$name" }
 
-foreach ($name in @('backend', 'purchase-service', 'frontend', 'nginx')) {
+foreach ($name in @('backend', 'purchase-service', 'analytics-service', 'frontend', 'nginx')) {
     # 期望值取自 Deployment 宣告的副本數，不寫死成 1。這個檢查的目的是證明「跑起來的是本機建置的
     # 映像」，不是把工作負載釘在單一 Pod 上；水平擴展本來就是跑在 Kubernetes 上的理由。
     $expected = [int](Invoke-KubectlChecked -Arguments @('--context', 'rancher-desktop', '-n', $namespace, 'get', 'deployment', $name, '-o', 'jsonpath={.spec.replicas}') -Operation "reading the desired replica count for $name" | Out-String).Trim()

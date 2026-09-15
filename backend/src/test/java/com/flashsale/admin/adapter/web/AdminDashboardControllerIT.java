@@ -1,9 +1,8 @@
 package com.flashsale.admin.adapter.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.flashsale.admin.adapter.http.PurchaseStatsClient;
-import com.flashsale.admin.adapter.http.PurchaseStatsClient.BucketCount;
-import com.flashsale.admin.adapter.http.PurchaseStatsClient.PurchaseStats;
+import com.flashsale.admin.adapter.http.AnalyticsClient;
+import com.flashsale.admin.adapter.http.AnalyticsClient.TrendPoint;
 import com.flashsale.testsupport.AbstractIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,10 +37,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * existed since Week 1 with nothing behind it, so a plain {@code USER}-role JWT must be denied
  * on both endpoints.
  *
- * <p>P4 步驟 2 起，搶購請求的數字來自 purchase-service，那個服務在這個測試環境裡不存在，
- * 所以 {@link PurchaseStatsClient} 是 mock 的。**這個測試守的是「把別人的統計與本地的訂單、
- * 庫存併起來」這件事，不是那一次跨服務呼叫本身。** 呼叫本身的行為（逾時、失敗降級）
- * 由 {@code PurchaseStatsClient} 自己的單元測試守。
+ * <p>P5 起，聚合數字（搶購請求、訂單、已付款金額、趨勢）來自 analytics-service，
+ * 那個服務在這個測試環境裡不存在，所以 {@link AnalyticsClient} 是 mock 的。
+ * **這個測試守的是「把聚合與本地的庫存併起來、並補齊缺席的訂單狀態」這件事，
+ * 不是那一次跨服務呼叫本身。** 呼叫的降級行為由 {@code AnalyticsClientTest} 守。
  */
 class AdminDashboardControllerIT extends AbstractIntegrationTest {
 
@@ -49,26 +48,32 @@ class AdminDashboardControllerIT extends AbstractIntegrationTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired JdbcTemplate jdbcTemplate;
 
-    @MockBean PurchaseStatsClient purchaseStatsClient;
+    @MockBean AnalyticsClient analyticsClient;
 
-    // mock 依呼叫端給的錨點算桶，與真的 purchase-service 做的事一樣——
+    // mock 依呼叫端給的錨點算桶，與真的 analytics-service 做的事一樣——
     // 回傳固定的桶起點會在測試跨越分鐘邊界時偶發性地對不上。
     @BeforeEach
-    void stubPurchaseStats() {
-        when(purchaseStatsClient.fetch(any())).thenAnswer(invocation -> {
+    void stubAnalytics() {
+        when(analyticsClient.summary()).thenReturn(new AnalyticsClient.DashboardSummary(
+            7, 3,
+            Map.of("PENDING_PAYMENT", 1L, "PAID", 3L, "CANCELLED", 1L, "EXPIRED", 1L),
+            new java.math.BigDecimal("60.00")));
+        when(analyticsClient.trends(any())).thenAnswer(invocation -> {
             Instant asOf = invocation.getArgument(0);
-            return new PurchaseStats(7, 3,
-                buckets(asOf, ChronoUnit.MINUTES, 60, Map.of(0, 5L)),
-                buckets(asOf, ChronoUnit.HOURS, 24, Map.of(0, 5L, 2, 1L)));
+            return new AnalyticsClient.DashboardTrends(
+                buckets(asOf, ChronoUnit.MINUTES, 60, Map.of(0, 5L), Map.of(0, 4L)),
+                buckets(asOf, ChronoUnit.HOURS, 24, Map.of(0, 5L, 2, 1L), Map.of(0, 4L, 2, 1L)));
         });
     }
 
-    /** {@code countsByAgo} 的鍵是「幾個單位以前」，對應測試資料裡那些 now / 2 hours ago 的列。 */
-    private static List<BucketCount> buckets(Instant asOf, ChronoUnit unit, int count, Map<Integer, Long> countsByAgo) {
+    /** {@code countsByAgo} 的鍵是「幾個單位以前」。 */
+    private static List<TrendPoint> buckets(Instant asOf, ChronoUnit unit, int count,
+                                             Map<Integer, Long> requestsByAgo, Map<Integer, Long> ordersByAgo) {
         Instant floored = asOf.truncatedTo(unit);
-        List<BucketCount> result = new ArrayList<>(count);
+        List<TrendPoint> result = new ArrayList<>(count);
         for (int ago = count - 1; ago >= 0; ago--) {
-            result.add(new BucketCount(floored.minus(ago, unit), countsByAgo.getOrDefault(ago, 0L)));
+            result.add(new TrendPoint(floored.minus(ago, unit),
+                requestsByAgo.getOrDefault(ago, 0L), ordersByAgo.getOrDefault(ago, 0L)));
         }
         return result;
     }
@@ -120,16 +125,8 @@ class AdminDashboardControllerIT extends AbstractIntegrationTest {
             "insert into inventory (flash_sale_id, total_quantity, available_quantity, reserved_quantity, sold_quantity, version) " +
             "values (502, 20, 20, 0, 0, 0)");
 
-        // 搶購請求的數字由 stubPurchaseStats() 供應：全時段 7 筆、3 筆成功，
-        // 一小時窗內 5 筆、24 小時窗內 6 筆（多的那一筆在兩小時前）。
-
-        // orders: 6 total, 3 PAID totalling 60.00. Same time-window split as above.
-        insertOrder("ORD-DASH-1", "dash-shopper@example.com", "10.00", "PENDING_PAYMENT", "now()");
-        insertOrder("ORD-DASH-2", "dash-shopper@example.com", "10.00", "PAID", "now()");
-        insertOrder("ORD-DASH-3", "dash-shopper@example.com", "20.00", "PAID", "now() - interval '2 hours'");
-        insertOrder("ORD-DASH-4", "dash-shopper@example.com", "30.00", "PAID", "now() - interval '2 days'");
-        insertOrder("ORD-DASH-5", "dash-shopper@example.com", "10.00", "CANCELLED", "now()");
-        insertOrder("ORD-DASH-6", "dash-shopper@example.com", "10.00", "EXPIRED", "now()");
+        // 搶購請求與訂單的數字全部由 stubAnalytics() 供應：那些聚合已經不在這個資料庫裡。
+        // 本地只剩庫存 —— 它不是事件的聚合，而是「當下的狀態」，由擁有者直接回答。
 
         mockMvc.perform(get("/api/admin/dashboard/summary").header("Authorization", "Bearer " + adminToken))
             .andExpect(status().isOk())
@@ -158,10 +155,10 @@ class AdminDashboardControllerIT extends AbstractIntegrationTest {
         long last24HoursPurchaseRequests = sumField(trends.get("last24Hours"), "purchaseRequestCount");
         long last24HoursOrders = sumField(trends.get("last24Hours"), "orderCount");
 
-        // lastHour excludes ORD-DASH-3/4 (2h/2d old); 搶購請求那一半來自 stub。
+        // 兩條趨勢線都來自同一份讀取模型，所以它們的桶起點必然對齊 ——
+        // 這正是把聚合搬到 analytics 之後拿到的東西。
         assertThat(lastHourPurchaseRequests).isEqualTo(5);
         assertThat(lastHourOrders).isEqualTo(4);
-        // last24Hours excludes only ORD-DASH-4 (2 days old, outside the 24h window).
         assertThat(last24HoursPurchaseRequests).isEqualTo(6);
         assertThat(last24HoursOrders).isEqualTo(5);
     }
@@ -175,13 +172,6 @@ class AdminDashboardControllerIT extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/api/admin/dashboard/trends").header("Authorization", "Bearer " + userToken))
             .andExpect(status().isForbidden());
-    }
-
-    private void insertOrder(String orderNo, String email, String amount, String status, String createdAtExpr) {
-        jdbcTemplate.update(
-            "insert into orders (order_no, user_id, total_amount, status, created_at) " +
-            "values (?, (select id from users where email = ?), ?, ?, " + createdAtExpr + ")",
-            orderNo, email, new java.math.BigDecimal(amount), status);
     }
 
     private long sumField(com.fasterxml.jackson.databind.JsonNode bucketArray, String field) {

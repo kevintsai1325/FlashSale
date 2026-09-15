@@ -99,6 +99,51 @@ spec:
     - metadata: {name: data}
       spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 5Gi}}}
 ---
+# P5：analytics-service 的讀取模型。**這個資料庫裡沒有一筆權威資料** ——
+# 全部是從 Kafka 事件算出來的投影，刪掉之後把 consumer group 的 offset 倒回去就能重建。
+# 因此它的儲存空間與資源都刻意給得比別人小。
+apiVersion: v1
+kind: Service
+metadata: {name: postgres-analytics-headless, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  clusterIP: None
+  selector: {app: postgres-analytics}
+  ports: [{name: postgres, port: 5432, targetPort: 5432}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: postgres-analytics, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  selector: {app: postgres-analytics}
+  ports: [{name: postgres, port: 5432, targetPort: 5432}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: postgres-analytics, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
+spec:
+  serviceName: postgres-analytics-headless
+  replicas: 1
+  selector: {matchLabels: {app: postgres-analytics}}
+  template:
+    metadata: {labels: {app: postgres-analytics}}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - {name: POSTGRES_DB, value: analytics}
+            - {name: POSTGRES_USER, value: flashsale}
+            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: flashsale-secrets, key: POSTGRES_PASSWORD}}}
+          ports: [{containerPort: 5432}]
+          startupProbe: {exec: {command: [pg_isready, -U, flashsale]}, failureThreshold: 30, periodSeconds: 5, timeoutSeconds: 3}
+          readinessProbe: {exec: {command: [pg_isready, -U, flashsale]}, initialDelaySeconds: 5, periodSeconds: 5}
+          livenessProbe: {exec: {command: [pg_isready, -U, flashsale]}, initialDelaySeconds: 20, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: "1", memory: 1Gi}}
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 5Gi}}}
+---
 apiVersion: v1
 kind: Service
 metadata: {name: redis-headless, namespace: flashsale, labels: {flashsale.dev/stage: dependency}}
