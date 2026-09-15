@@ -1,6 +1,6 @@
 # FlashSale
 
-限量商品搶購系統(作品集專案)。Spring Boot 3.3(Java 21)+ React 19,以 Docker Compose 與本機 k3s 兩種形式交付 9 個服務,
+限量商品搶購系統(作品集專案)。Spring Boot 3.3(Java 21)+ React 19,以 Docker Compose 與本機 k3s 兩種形式交付 17 個服務,
 用「Redis Lua 原子預扣 + Transactional Outbox + RabbitMQ 非同步建單」承接搶購瞬間的併發,
 目標是**不超賣、不漏賣,而且每一步都留得下證據**。
 
@@ -51,69 +51,108 @@
 ## 系統全貌
 
 對外只開兩個埠:Nginx 的 `8443`(HTTPS,唯一正式入口)與 Zipkin 的 `9411`(本機除錯用)。
-backend、frontend、PostgreSQL、Redis、RabbitMQ、Mailpit 都沒有 host port。
+其餘 15 個服務都沒有 host port。
 
 ```mermaid
 flowchart LR
-    Client["瀏覽器 / curl"] -->|HTTPS 8443| Nginx["Nginx<br/>TLS 終止、限流、安全標頭"]
-    Nginx -->|其餘路徑| Frontend["Frontend<br/>React 19 + Vite"]
+    Client["瀏覽器 / curl"] -->|HTTPS 8443| Nginx["nginx<br/>TLS 終止、限流、安全標頭"]
+    Nginx -->|其餘路徑| Frontend["frontend<br/>React 19 + Vite"]
     Nginx -->|"搶購與輪詢兩個端點"| Purchase["purchase-service<br/>搶購入口"]
-    Nginx -->|"/api/、/swagger-ui/、/v3/api-docs、白名單 actuator"| Backend["Backend<br/>Spring Boot 3.3 / Java 21"]
-    Purchase -->|"活動資料(內部 API)"| Backend
-    Backend --> Postgres[("PostgreSQL 16<br/>庫存與訂單的真實來源")]
-    Backend --> Redis[("Redis 7<br/>庫存預扣計數器")]
-    Backend -->|outbox 發佈| Rabbit["RabbitMQ 3.13<br/>order.exchange"]
-    Rabbit -->|非同步消費| Backend
-    Backend --> Mailpit["Mailpit<br/>本機收信匣"]
-    Backend -->|spans| Zipkin["Zipkin<br/>9411"]
+    Nginx -->|"^/api/orders"| Order["order-service<br/>訂單、庫存、付款"]
+    Nginx -->|"^/api/realtime/"| Analytics["analytics-service<br/>讀取模型、大屏推送"]
+    Nginx -->|"/api/ 其餘、swagger、白名單 actuator"| Backend["backend (platform)<br/>身分、商品、活動、通知、後台"]
+
+    Purchase -->|活動資料| Backend
+    Purchase -->|庫存灌種| Order
+    Order -->|進行中的活動| Backend
+    Backend -->|庫存與訂單| Order
+    Backend -->|儀表板聚合| Analytics
+
+    Backend --> PgPlatform[("postgres")]
+    Purchase --> PgPurchase[("postgres-purchase")]
+    Order --> PgOrder[("postgres-order")]
+    Analytics --> PgAnalytics[("postgres-analytics")]
+    Purchase --> Redis[("redis<br/>預扣計數器")]
+    Order --> Redis
+    Backend --> Redis
+
+    Purchase -->|"order.create"| Rabbit["rabbitmq<br/>命令"]
+    Rabbit --> Order
+    Order -->|"purchase.resolved"| Rabbit
+    Rabbit --> Purchase
+
+    Purchase -->|"purchase-events"| Kafka["kafka(KRaft)<br/>領域事件"]
+    Order -->|"order-events"| Kafka
+    Kafka --> Analytics
+    Kafka --> Flink["flink-jobmanager + flink-taskmanager<br/>秒級聚合"]
+    Flink -->|"realtime-metrics"| Kafka
+    Analytics -->|"SSE"| Frontend
+
+    Backend --> Mailpit["mailpit<br/>本機收信匣"]
+    Backend -->|spans| Zipkin["zipkin<br/>9411"]
+    Purchase -->|spans| Zipkin
+    Order -->|spans| Zipkin
+    Analytics -->|spans| Zipkin
     Developer["本機開發者"] -->|HTTP 9411| Zipkin
 ```
 
-搶購的 HTTP 入口自 P4 起由獨立的 `purchase-service` 承接,並且自 P4 步驟 2 起連的是
-**自己的 PostgreSQL instance**(不是同一個 instance 的第二個 database)。
-**這次拆分沒有解決任何效能問題** —— 多一次跨行程呼叫、再加上跨庫之後對不起來的統計,
+業務邏輯分在四個服務裡,**每個服務有自己的 PostgreSQL instance**(不是同一個 instance
+的第二個 database),所以跨服務的 JOIN 在物理上寫不出來:platform 留下身分、商品、活動、
+通知與後台;`purchase-service` 是搶購入口;`order-service` 擁有訂單、庫存與付款;
+`analytics-service` 是從事件算出來的唯讀讀取模型。命令走 RabbitMQ、領域事件走 Kafka,
+兩者刻意並存。
+
+**這些拆分都沒有解決任何效能問題** —— 多了跨行程呼叫、再加上跨庫之後對不起來的統計,
 只會更慢也更難查;它換到的是服務邊界、獨立部署,以及一組必須明確回答的失效問題
 (下游掛掉時搶購怎麼壞、跨庫的參照完整性由誰保證)。代價與答案寫在
 [架構深入說明](docs/portfolio/architecture.md#服務拆分的代價p4)。
 
-其餘業務仍在 backend 這個模組化單體(modular monolith)裡,依領域切成 `identity`、`catalog`、`flashsale`、`inventory`、
-`order`、`payment`、`notification`、`admin` 與共用的 `common`,每個模組再分 `domain` / `application` /
-`adapter` 三層,邊界由 ArchUnit 測試強制而不是靠自律。細節見[架構深入說明](docs/portfolio/architecture.md)。
+platform 內部仍是模組化單體(modular monolith),依領域切成 `identity`、`catalog`、
+`flashsale`、`notification`、`admin` 與共用的 `common`(`inventory`、`order`、`payment`
+已整批搬去 `order-service`),每個模組再分 `domain` / `application` / `adapter` 三層,
+邊界由 ArchUnit 測試強制而不是靠自律。細節見[架構深入說明](docs/portfolio/architecture.md)。
 
 ## 核心搶購資料流
 
 搶購 API 是「接受後非同步完成」:HTTP 端只做「能不能買」與 Redis 預扣,真正建立訂單發生在 RabbitMQ consumer,
-使用者拿到 `202 Accepted` 與一個 `requestId` 後再輪詢終態。
+使用者拿到 `202 Accepted` 與一個 `requestId` 後再輪詢終態。**這條路徑橫跨三個服務與兩個資料庫**,
+所以建完單之後還要把結果送回搶購入口——拆庫之後,「誰有權寫這一列」就是那條回送訊息存在的全部理由。
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant C as 用戶端
     participant N as Nginx
-    participant B as Backend
+    participant PS as purchase-service
+    participant BE as backend
     participant R as Redis
-    participant P as PostgreSQL
+    participant PP as postgres-purchase
     participant Q as RabbitMQ
+    participant OS as order-service
+    participant PO as postgres-order
 
     C->>N: POST /api/flash-sales/{id}/purchase-requests + Idempotency-Key
-    N->>B: 反向代理,套用 purchase_limit 限流
-    B->>P: 查冪等鍵、活動狀態、每人限購、是否已成功購買
-    B->>R: EVAL reserve-stock.lua
+    N->>PS: 反向代理,套用 purchase_limit 限流
+    PS->>BE: 取活動資料(內部 API,快取 2 秒)
+    PS->>PP: 查冪等鍵、每人限購、是否已成功購買
+    PS->>R: EVAL reserve-stock.lua
     alt 預扣成功
-        R-->>B: 回傳剩餘庫存
-        B->>P: 同一交易寫入 purchase_requests PENDING 與 outbox_events
-        B-->>C: 202 Accepted,status=PENDING
+        R-->>PS: 回傳剩餘庫存
+        PS->>PP: 同一交易寫入 purchase_requests PENDING 與 outbox_events
+        PS-->>C: 202 Accepted,status=PENDING
     else 庫存不足
-        R-->>B: 回傳 -1
-        B->>P: 寫入 purchase_requests SOLD_OUT
-        B-->>C: 202 Accepted,status=SOLD_OUT
+        R-->>PS: 回傳 -1
+        PS->>PP: 寫入 purchase_requests SOLD_OUT
+        PS-->>C: 202 Accepted,status=SOLD_OUT
     end
-    B->>Q: OutboxPublisher 每 500ms 撈一批未發佈事件送出 order.create
-    Q->>B: OrderPurchaseConsumer 消費 order.create.queue
-    B->>P: 去重、鎖庫存列、扣 Postgres 庫存、建立訂單、標記 SUCCEEDED
+    PS->>Q: OutboxPublisher 每 500ms 整批撈出、送出、標記(同一個交易)
+    Q->>OS: OrderPurchaseConsumer 消費 order.create.queue
+    OS->>PO: 去重、鎖庫存列、扣庫存、建立訂單
+    OS->>Q: 回送 purchase.resolved
+    Q->>PS: PurchaseResolvedConsumer 標記 SUCCEEDED 與 orderId
     C->>N: GET /api/purchase-requests/{requestId}
-    N->>B: 反向代理
-    B-->>C: 回傳終態與 orderId
+    N->>PS: 反向代理
+    PS-->>C: 回傳終態與 orderId
 ```
 
 為什麼這樣切、代價是什麼,寫在[工程取捨](docs/portfolio/trade-offs.md)。
@@ -130,7 +169,7 @@ cp .env.example .env
 chmod +x nginx/certs/generate-cert.sh
 ./nginx/certs/generate-cert.sh
 
-# 3. 啟動 8 個服務並等待全部 healthy
+# 3. 啟動 17 個服務並等待全部 healthy
 docker compose up --build -d
 docker compose ps
 ```
@@ -141,7 +180,7 @@ API 文件在 `https://localhost:8443/swagger-ui/index.html`。
 ## Demo 資料
 
 `scripts/demo-data.sh` 會建立一組固定識別碼的示範資料(一個一般使用者、一個管理者、一個商品與一場搶購活動),
-密碼由你自己指定,不寫死在版控裡;它會先確認 8 個服務都 healthy、Compose 專案與 Docker context 都是本機的正規目標,
+密碼由你自己指定,不寫死在版控裡;它會先確認 17 個服務都 healthy、Compose 專案與 Docker context 都是本機的正規目標,
 確認之後才動手。
 
 ```bash

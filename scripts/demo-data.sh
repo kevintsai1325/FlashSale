@@ -14,6 +14,12 @@ readonly DEMO_BASE_URL DEMO_COMPOSE_FILE DEMO_ENV_FILE REPO_ROOT
 
 COMPOSE=(docker compose -f "${REPO_ROOT}/compose.yaml" --env-file "${REPO_ROOT}/.env")
 
+# 這張清單要跟 compose.yaml 一致。只寫一份：原本健康檢查與身分檢查
+# 各存一份，P4、P5、P6 加服務時只更新了前者，後者靜靜地漏檢了七個服務。
+COMPOSE_SERVICES=(postgres postgres-purchase postgres-order postgres-analytics redis rabbitmq kafka
+  mailpit zipkin backend purchase-service order-service analytics-service
+  flink-jobmanager flink-taskmanager frontend nginx)
+
 compose() {
   "${COMPOSE[@]}" "$@"
 }
@@ -66,7 +72,7 @@ require_local_docker_engine() {
 
 require_healthy_stack() {
   local service container_id health
-  local services=(postgres postgres-purchase postgres-order postgres-analytics redis rabbitmq kafka mailpit zipkin backend purchase-service order-service analytics-service frontend nginx)
+  local services=("${COMPOSE_SERVICES[@]}")
 
   for service in "${services[@]}"; do
     container_id="$(compose ps -q "$service")"
@@ -74,19 +80,22 @@ require_healthy_stack() {
       printf 'service is not running: %s\n' "$service" >&2
       return 1
     fi
-    health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")"
-    if [[ "$health" != 'healthy' ]]; then
+    health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck:{{.State.Status}}{{end}}' "$container_id")"
+    # flink-jobmanager 與 flink-taskmanager 在 compose.yaml 裡沒有 healthcheck，
+    # 對它們能問的只有「行程還在不在」。把這件事寫進判斷式，而不是把它們從清單裡拿掉 ——
+    # 拿掉就會多出第二份會漂移的清單，而那正是這段程式碼上一次出錯的原因。
+    if [[ "$health" != 'healthy' && "$health" != 'no-healthcheck:running' ]]; then
       printf 'service is not healthy: %s (%s)\n' "$service" "$health" >&2
       return 1
     fi
   done
 
-  printf 'All 8 Compose services are healthy.\n'
+  printf 'All %s Compose services are healthy.\n' "${#services[@]}"
 }
 
 require_stack_identity() {
   local service container_id labels project config_file working_dir env_file expected_root
-  local services=(postgres redis rabbitmq mailpit zipkin backend frontend nginx)
+  local services=("${COMPOSE_SERVICES[@]}")
 
   expected_root="$REPO_ROOT"
   if command -v cygpath >/dev/null 2>&1; then

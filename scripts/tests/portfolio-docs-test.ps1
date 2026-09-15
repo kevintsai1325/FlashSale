@@ -457,17 +457,42 @@ if (Test-Path -LiteralPath $apiExamplesPath) {
     }
 }
 
+function Get-FirstMermaidBlock {
+    param([string]$Text)
+    $block = New-Object 'System.Text.StringBuilder'
+    $inMermaid = $false
+    foreach ($line in ($Text -split "`r?`n")) {
+        if (-not $inMermaid) {
+            if ($line.Trim() -eq '```mermaid') {
+                $inMermaid = $true
+            }
+            continue
+        }
+        if ($line.TrimEnd() -match '^\s*```') {
+            break
+        }
+        $block.AppendLine($line) | Out-Null
+    }
+    return $block.ToString()
+}
+
 # 9.5 架構總圖必須列出每一個部署中的 workload
 #
-# 這條規則的由來：P5 與 P6 各加了服務，但 architecture.md 的「系統全貌」總圖停在 P4-1，
+# 這條規則的由來：P5 與 P6 各加了服務，但「系統全貌」的總圖停在 P4-1，
 # 連過兩個階段都沒被抓到——因為當時沒有任何斷言在看那張圖。
 # 路由有斷言（第 4 節）所以一直準，圖沒有所以爛掉。**守門只守它斷言的東西。**
+#
+# README 與 architecture.md 兩份都要檢查：第一次補這條斷言時只蓋了 architecture.md，
+# 結果 README 的同一張圖仍然是過期的——一份沒被斷言蓋到的副本，就是下一次的漂移點。
 #
 # 方向是單向的：k8s 有的，圖上必須提到。反過來（圖上畫了但叢集沒有）不檢查，
 # 因為從 mermaid 可靠地反解出節點名稱要寫一個小 parser，而實際發生過的漂移是前者。
 $k8sBaseDir = Join-Path $repoRoot 'k8s\base'
-$architecturePath = Join-Path $portfolioDir 'architecture.md'
-if ((Test-Path -LiteralPath $k8sBaseDir) -and (Test-Path -LiteralPath $architecturePath)) {
+$overviewDocuments = [ordered]@{
+    'architecture.md' = (Join-Path $portfolioDir 'architecture.md')
+    'README.md'       = (Join-Path $repoRoot 'README.md')
+}
+if (Test-Path -LiteralPath $k8sBaseDir) {
     $workloads = New-Object 'System.Collections.Generic.HashSet[string]'
     foreach ($manifest in @(Get-ChildItem -LiteralPath $k8sBaseDir -Filter '*.yaml')) {
         $manifestText = Read-TextFile -Path $manifest.FullName
@@ -487,33 +512,24 @@ if ((Test-Path -LiteralPath $k8sBaseDir) -and (Test-Path -LiteralPath $architect
         }
     }
     if ($workloads.Count -lt 1) {
-        Add-Failure 'architecture.md: no Deployment/StatefulSet found under k8s/base - the diagram guard would pass vacuously'
+        Add-Failure 'no Deployment/StatefulSet found under k8s/base - the diagram guard would pass vacuously'
     }
 
-    # 只看第一個 mermaid 區塊：那是「系統全貌」的總圖，其餘是各節的局部圖。
-    $architectureText = Read-TextFile -Path $architecturePath
-    $overviewDiagram = New-Object 'System.Text.StringBuilder'
-    $inMermaid = $false
-    foreach ($line in ($architectureText -split "`r?`n")) {
-        if (-not $inMermaid) {
-            if ($line.Trim() -eq '```mermaid') {
-                $inMermaid = $true
-            }
+    foreach ($overviewName in $overviewDocuments.Keys) {
+        $overviewPath = $overviewDocuments[$overviewName]
+        if (-not (Test-Path -LiteralPath $overviewPath)) {
             continue
         }
-        if ($line.TrimEnd() -match '^\s*```') {
-            break
+        # 只看第一個 mermaid 區塊：那是「系統全貌」的總圖，其餘是各節的局部圖。
+        $overviewText = Get-FirstMermaidBlock -Text (Read-TextFile -Path $overviewPath)
+        if ([string]::IsNullOrWhiteSpace($overviewText)) {
+            Add-Failure ('{0}: could not find the system overview mermaid diagram' -f $overviewName)
+            continue
         }
-        $overviewDiagram.AppendLine($line) | Out-Null
-    }
-    $overviewText = $overviewDiagram.ToString()
-    if ([string]::IsNullOrWhiteSpace($overviewText)) {
-        Add-Failure 'architecture.md: could not find the system overview mermaid diagram'
-    } else {
         $overviewLowered = $overviewText.ToLowerInvariant()
         foreach ($workload in $workloads) {
             if (-not $overviewLowered.Contains($workload.ToLowerInvariant())) {
-                Add-Failure ('architecture.md: the system overview diagram never mentions the deployed workload {0}' -f $workload)
+                Add-Failure ('{0}: the system overview diagram never mentions the deployed workload {1}' -f $overviewName, $workload)
             }
         }
     }
@@ -566,8 +582,17 @@ if (-not (Test-Path -LiteralPath $readmePath)) {
     }
 
     # 10.4 真實服務數與健康度項目數
-    if (-not $readmeText.Contains('8 個服務')) {
-        Add-Failure 'README.md: missing the real Compose service count (8 個服務)'
+    #
+    # 服務數從 compose.yaml 數出來，不寫死在這裡。原本寫死成 8，
+    # 於是 P4/P5/P6 把 stack 從 8 個長到 17 個時，這條斷言反而變成
+    # 「守著一個已經錯掉的數字」——它會擋住正確的更新，而不是擋住漂移。
+    $composeText = Read-TextFile -Path (Join-Path $repoRoot 'compose.yaml')
+    $composeBody = [regex]::Replace($composeText, '(?s)^.*?(?m:^services:\s*$)', '')
+    $composeServiceCount = [regex]::Matches($composeBody, '(?m)^  [a-z][A-Za-z0-9-]*:\s*$').Count
+    if ($composeServiceCount -lt 1) {
+        Add-Failure 'compose.yaml: could not count services - the README service-count guard would pass vacuously'
+    } elseif (-not $readmeText.Contains(('{0} 個服務' -f $composeServiceCount))) {
+        Add-Failure ('README.md: missing the real Compose service count ({0} 個服務)' -f $composeServiceCount)
     }
     if (-not $readmeText.Contains('8 項健康度')) {
         Add-Failure 'README.md: missing the real system-health item count (8 項健康度)'
