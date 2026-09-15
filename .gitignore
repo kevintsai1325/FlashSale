@@ -4,6 +4,8 @@ nginx/certs/*.crt
 nginx/certs/*.key
 backend/build/
 purchase-service/build/
+order-service/build/
+analytics-service/build/
 purchase-service/.gradle/
 backend/.gradle/
 frontend/node_modules/
